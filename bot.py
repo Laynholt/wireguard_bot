@@ -438,7 +438,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                 context.user_data['wireguard_users'] = []
                 return
             
-            elif command in ():
+            elif command in ('unbind_telegram_id', 'get_users_by_id'):
                 await __delete_message(update, context)
                 await cancel_command(update, context)
                 return
