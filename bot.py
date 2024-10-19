@@ -2,7 +2,7 @@ import logging
 import asyncio
 from typing import Optional
 
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButtonRequestUsers# type: ignore
+from telegram import Update, UsersShared, ReplyKeyboardRemove# type: ignore
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters# type: ignore
 from telegram.error import TelegramError# type: ignore
 
@@ -91,9 +91,8 @@ async def menu_command(update: Update, context: CallbackContext) -> None:
     logger.info(f"Отправляю ответ на команду [menu] -> Tid [{telegram_id}].")
     await update.message.reply_text(
         'Выберите команду.',
-        reply_markup=ReplyKeyboardMarkup(
-            keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU,
-            one_time_keyboard=True
+        reply_markup=(
+            keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
         )
     )
 
@@ -139,6 +138,7 @@ async def get_telegram_users_command(update: Update, context: CallbackContext) -
 
 # Команда /add_user
 @wrappers.admin_required
+@wrappers.command_lock
 async def add_user_command(update: Update, context: CallbackContext) -> None:
     #TODO
     await update.message.reply_text((
@@ -146,10 +146,12 @@ async def add_user_command(update: Update, context: CallbackContext) -> None:
             'Чтобы отменить ввод, используйте команду /cancel.'
         ))#, reply_markup=ReplyKeyboardRemove())
     context.user_data['command'] = 'add_user'
+    context.user_data['wireguard_users'] = []
 
 
 # Команда /remove_user
 @wrappers.admin_required
+@wrappers.command_lock
 async def remove_user_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text((
             'Пожалуйста, введите имена пользователей, разделяя их пробелом.\n\n'
@@ -160,6 +162,7 @@ async def remove_user_command(update: Update, context: CallbackContext) -> None:
 
 # Команда /com_uncom_user
 @wrappers.admin_required
+@wrappers.command_lock
 async def com_uncom_user_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text((
             'Пожалуйста, введите имена пользователей, разделяя их пробелом.\n\n'
@@ -170,6 +173,7 @@ async def com_uncom_user_command(update: Update, context: CallbackContext) -> No
 
 # Команда /bind_user
 @wrappers.admin_required
+@wrappers.command_lock
 async def bind_user_command(update: Update, context: CallbackContext) -> None:
     #TODO
     await update.message.reply_text((
@@ -177,10 +181,12 @@ async def bind_user_command(update: Update, context: CallbackContext) -> None:
             'Чтобы отменить ввод, используйте команду /cancel.'
         ))#, reply_markup=ReplyKeyboardRemove())
     context.user_data['command'] = 'bind_user'
+    context.user_data['wireguard_users'] = []
 
 
 # Команда /unbind_user
 @wrappers.admin_required
+@wrappers.command_lock
 async def unbind_user_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text((
             'Пожалуйста, введите имена пользователей, разделяя их пробелом.\n\n'
@@ -191,6 +197,7 @@ async def unbind_user_command(update: Update, context: CallbackContext) -> None:
 
 # Команда /send_message
 @wrappers.admin_required
+@wrappers.command_lock
 async def send_message_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text((
             'Введите текст для рассылки.\n\n'
@@ -210,8 +217,8 @@ async def cancel_command(update: Update, context: CallbackContext) -> None:
 
 # Команда /unbind_telegram_id
 @wrappers.admin_required
+@wrappers.command_lock
 async def unbind_telegram_id_command(update: Update, context: CallbackContext) -> None:    
-    #TODO
     await update.message.reply_text((
             'Пожалуйста, введите Telegram ID пользователей, разделяя их пробелом.\n\n'
             'Чтобы отменить ввод, используйте команду /cancel.'
@@ -221,8 +228,8 @@ async def unbind_telegram_id_command(update: Update, context: CallbackContext) -
 
 # Команда /get_users_by_id
 @wrappers.admin_required
+@wrappers.command_lock
 async def get_bound_users_by_telegram_id_command(update: Update, context: CallbackContext) -> None:
-    #TODO
     await update.message.reply_text((
             'Пожалуйста, введите Telegram ID пользователей, разделяя их пробелом.\n\n'
             'Чтобы отменить ввод, используйте команду /cancel.'
@@ -403,12 +410,26 @@ async def unknown_command(update: Update, context: CallbackContext) -> None:
 
 
 # Обработка сообщений с именами пользователей
-async def handle_usernames(update: Update, context: CallbackContext) -> None:
+async def handle_text(update: Update, context: CallbackContext) -> None:
+    clear_command_flag = True
     try:
         command = context.user_data.get('command')
         if not command:
             await update.message.reply_text('Пожалуйста, выберите команду из меню. (/menu)')
             return
+        
+        if update.message.text.lower() == 'закрыть':
+            if command in ('add_user', 'bind_user'):
+                await __delete_message(update, context)
+
+                await update.message.reply_text((
+                        f'Связование пользователей [{", ".join(
+                            [f"<code>{user_name}</code>" for user_name in sorted(context.user_data["wireguard_users"])])}] отменено.'
+                        ),
+                        reply_markup=keyboards.ADMIN_MENU
+                )
+                context.user_data['wireguard_users'] = []
+                return
 
         if update.message.text.lower() == '/cancel':
             await cancel_command(update, context)
@@ -418,14 +439,13 @@ async def handle_usernames(update: Update, context: CallbackContext) -> None:
             await __send_message_to_all(update, context)
             return
 
-
         need_restart_wireguard = False
         entries = update.message.text.split()
         for entry in entries:
             ret_val = None
             
             if command == 'add_user':
-                ret_val = await __add_user(update, entry)
+                ret_val = await __add_user(update, context, entry)
 
             elif command == 'remove_user':
                 ret_val = await __rem_user(update, entry)
@@ -434,20 +454,15 @@ async def handle_usernames(update: Update, context: CallbackContext) -> None:
                 ret_val = await __com_user(update, entry)
             
             elif command == 'bind_user':
-                await __bind_user(update, context, entry)
+                ret_val = await __create_list_of_bindings(update, context, entry)
 
             elif command == 'unbind_user':
                 await __unbind_user(update, entry)
 
-            elif command == 'unbind_telegram_id':
-                await __unbind_telegram_id(update, context, entry)
-
-            elif command == 'get_users_by_id':
-                await __get_bound_users_by_tid(update, context, entry)
-
 
             if ret_val is not None:
                 await update.message.reply_text(ret_val.description)
+                logger.error(ret_val.description) if ret_val.status is False else logger.info(ret_val.description)
 
                 if ret_val.status is True:
                     need_restart_wireguard = True
@@ -456,13 +471,32 @@ async def handle_usernames(update: Update, context: CallbackContext) -> None:
             wireguard_utils.log_and_restart_wireguard()
             need_restart_wireguard = False
 
+        
+        if command in ('add_user', 'bind_user'):
+            if len(context.user_data['wireguard_users']):
+                await update.message.reply_text(
+                    "Нажмите на кнопку выбора пользователя, чтобы выбрать пользователя Telegram"
+                    " для связывания с переданными конфигами Wireguard.\n\n"
+                    "Для отмены связывания, нажмите кнопку <Закрыть>.", reply_markup=keyboards.BIND_MENU)
+                clear_command_flag = False
+
     except Exception as e:
         logger.error(f'Неожиданная ошибка: {e}')
         await update.message.reply_text('Произошла неожиданная ошибка. Пожалуйста, попробуйте еще раз позже.')
 
     finally:
-        # Очистка команды после выполнения
-        context.user_data['command'] = None
+        if clear_command_flag:
+            # Очистка команды после выполнения
+            context.user_data['command'] = None
+
+
+async def __delete_message(update: Update, context: CallbackContext) -> None:
+    # Получаем идентификатор сообщения, чтобы его удалить
+    message_id = update.message.message_id
+    chat_id = update.message.chat_id
+    
+    # Удаляем сообщение пользователя
+    await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
 
 
 async def __send_message_to_all(update: Update, context: CallbackContext) -> None:
@@ -487,7 +521,16 @@ async def __validate_username(update: Update, user_name: str) -> bool:
     return True
 
 
-async def __add_user(update: Update, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
+async def __validate_telegram_id(update: Update, telegram_id: int) -> bool:
+    if not telegram_utils.validate_telegram_id(telegram_id):
+        await update.message.reply_text(
+            f'Неверный формат для Telegram ID [{telegram_id}].\nTelegram ID должен быть целым числом.'
+        )
+        return False
+    return True
+
+
+async def __add_user(update: Update, context: CallbackContext, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
     if not __validate_username(update, user_name):
         return None
     # Здесь вызывается метод WireGuard для добавления пользователя
@@ -498,6 +541,7 @@ async def __add_user(update: Update, user_name: str) -> Optional[wireguard_utils
         if zip_ret_val.status is True:
             await update.message.reply_document(document=open(zip_ret_val.description, 'rb'))
             wireguard.remove_zipfile(user_name)
+            context.user_data['wireguard_users'].append(user_name)
     return ret_val
 
 
@@ -523,41 +567,15 @@ async def __com_user(update: Update, user_name: str) -> Optional[wireguard_utils
     return wireguard.comment_or_uncomment_user(user_name)
 
 
-async def __bind_user(update: Update, context: CallbackContext, entry: str) -> None:
-    try:
-        user_name, telegram_id = entry.split(":")
-        if not __validate_username(update, user_name):
-            return None
-        if not telegram_utils.validate_telegram_id(telegram_id):
-            await update.message.reply_text(f'Неверный формат для Telegram ID [{telegram_id}].'
-                                            f'\nTelegram ID должен быть целым числом.')
-            return
+async def __create_list_of_bindings(update: Update, context: CallbackContext, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
+    if not __validate_username(update, user_name):
+        return None
 
-        ret_val = wireguard.check_user_exists(user_name)
-        if ret_val.status is True:
-            ret_val = None
-            
-            if not __check_database_state(update):
-                return
-            
-            if not database.user_exists(user_name):
-                if database.add_user(int(telegram_id), user_name):
-                    logger.info(f'Пользователь [{user_name}] успешно привязан к Telegram ID [{telegram_id}].')
-                    await update.message.reply_text(f'Пользователь [{user_name}] успешно'
-                                                    f' привязан к Telegram ID [{telegram_id}].')
-                else:
-                    logger.error(f'Не удалось привязать пользователя [{user_name}].')
-                    await update.message.reply_text(f'Произошла ошибка при сохранении данных'
-                                                    f' [{user_name}] в базу. Операция была отменена.')
-            else:
-                _telegram_id = database.get_telegram_id_by_user(user_name)[0]
-                _telegram_name = telegram_utils.get_username_by_id(_telegram_id, context)
-                logger.info(f'Пользователь [{user_name}] уже прикреплен к [{_telegram_name} ({_telegram_id})] в базе данных.')
-                await update.message.reply_text(f'Пользователь [{user_name}] уже прикреплен к'
-                                                f' [{_telegram_name} ({_telegram_id})] в базе данных.')
-    except ValueError:
-        await update.message.reply_text(f'Неверный формат для [{entry}].'
-                                        f' Используйте Имя_пользователя:Telegram_ID.')
+    ret_val = wireguard.check_user_exists(user_name)
+    if ret_val.status is True:
+        ret_val = None
+        context.user_data['wireguard_users'].append(user_name)
+    return ret_val
 
 
 async def __unbind_user(update: Update, user_name: str) -> None:
@@ -578,11 +596,65 @@ async def __unbind_user(update: Update, user_name: str) -> None:
         await update.message.reply_text(f'Пользователь [{user_name}] не привязан ни к одному Telegram ID в базе данных.')
 
 
+async def handle_user_request(update: Update, context: CallbackContext) -> None:
+    try:
+        # Удаляем сообщение о переданном пользователе
+        await __delete_message(update, context)
+        
+        command = context.user_data.get('command')
+        if not command:
+            await update.message.reply_text('Пожалуйста, выберите команду из меню. (/menu)')
+            return
+        
+        for shared_user in update.message.users_shared.users:
+            if command in ('add_user', 'bind_user'):
+                await __bind_users(update, context, shared_user)
+                await update.message.reply_text('', reply_markup=keyboards.ADMIN_MENU)
+
+            elif command == 'unbind_telegram_id':
+                await __unbind_telegram_id(update, context, shared_user.user_id)
+
+            elif command == 'get_users_by_id':
+                await __get_bound_users_by_tid(update, context, shared_user.user_id)
+
+
+    except Exception as e:
+        logger.error(f'Неожиданная ошибка: {e}')
+        await update.message.reply_text('Произошла неожиданная ошибка. Пожалуйста, попробуйте еще раз позже.')
+
+    finally:
+        # Очистка команды после выполнения
+        context.user_data['command'] = None
+        context.user_data['wireguard_users'] = []
+
+
+async def __bind_users(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
+    if not __check_database_state(update):
+        return
+    
+    telegram_id = telegram_user.user_id
+    telegram_name = telegram_user.username
+
+    for user_name in context.user_data['wireguard_users']:
+        if not database.user_exists(user_name):
+            if database.add_user(telegram_id, user_name):
+                logger.info(f'Пользователь [{user_name}] успешно привязан к [@{telegram_name} ({telegram_id})].')
+                await update.message.reply_text(f'Пользователь [{user_name}] успешно'
+                                                f' привязан к [@{telegram_name} ({telegram_id})].')
+            else:
+                logger.error(f'Не удалось привязать пользователя [{user_name}].')
+                await update.message.reply_text(f'Произошла ошибка при сохранении данных'
+                                                f' [{user_name}] в базу. Операция была отменена.')
+        else:
+            _telegram_id = database.get_telegram_id_by_user(user_name)[0]
+            _telegram_name = telegram_utils.get_username_by_id(_telegram_id, context)
+            logger.info(f'Пользователь [{user_name}] уже прикреплен к [{_telegram_name} ({_telegram_id})] в базе данных.')
+            await update.message.reply_text(f'Пользователь [{user_name}] уже прикреплен к'
+                                            f' [{_telegram_name} ({_telegram_id})] в базе данных.')
+
+
 async def __unbind_telegram_id(update: Update, context: CallbackContext, telegram_id: int) -> None:
-    if not telegram_utils.validate_telegram_id(telegram_id):
-        await update.message.reply_text(
-            f'Неверный формат для Telegram ID [{telegram_id}].\nTelegram ID должен быть целым числом.'
-        )
+    if not __validate_telegram_id(update, telegram_id):
         return
 
     if not __check_database_state(update):
@@ -604,8 +676,7 @@ async def __unbind_telegram_id(update: Update, context: CallbackContext, telegra
 
 
 async def __get_bound_users_by_tid(update: Update, context: CallbackContext, telegram_id: int) -> None:
-    if not telegram_utils.validate_telegram_id(telegram_id):
-        await update.message.reply_text(f'Неверный формат для Telegram ID [{telegram_id}].\nTelegram ID должен быть целым числом.')
+    if not __validate_telegram_id(update, telegram_id):
         return
 
     if not __check_database_state(update):
@@ -624,7 +695,6 @@ async def __get_bound_users_by_tid(update: Update, context: CallbackContext, tel
         await update.message.reply_text(
             f'Ни один из пользователей Wireguard не прикреплен к [{telegram_name} ({telegram_id})] в базе данных.'
         )
-
 
 
 # Основная функция для запуска бота
@@ -662,7 +732,9 @@ def main() -> None:
     application.add_handler(CommandHandler("send_message", send_message_command))
 
     # Обработка сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_usernames))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+     # Обработчик для сообщений с запросом данных пользователя
+    application.add_handler(MessageHandler(filters.StatusUpdate.USER_SHARED, handle_user_request))
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     # Запуск бота
