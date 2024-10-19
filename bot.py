@@ -134,6 +134,7 @@ async def get_telegram_users_command(update: Update, context: CallbackContext) -
 
     else:
         await update.message.reply_text(f'У бота пока нет активных Telegram пользователей.')
+    await __end_command(update)
 
 
 # Команда /add_user
@@ -288,6 +289,7 @@ async def show_users_state_command(update: Update, context: CallbackContext) -> 
     logger.info(f'Отправляю информацию об активных и отключенных пользователях -> Tid [{from_telegram_id}].')
     # Отправляем сообщение (или несколько, если оно длинное)
     await telegram_utils.send_long_message(update, "".join(message_parts), parse_mode='HTML')
+    await __end_command(update)
     
 
 # Команда /show_all_bindings
@@ -349,6 +351,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     logger.info(f'Отправляю информацию о привязанных и непривязанных пользователях -> Tid [{from_telegram_id}].')
     # Отправляем сообщение (или несколько, если оно длинное)
     await telegram_utils.send_long_message(update, "".join(message_parts), parse_mode='HTML')
+    await __end_command(update)
 
 
 async def __get_configuration(update: Update, context: CallbackContext, command: str) -> None:
@@ -425,6 +428,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                                                     if update.effective_user.id in config.telegram_admin_ids
                                                         else keyboards.USER_MENU 
                                             ))
+            clear_command_flag = False
             return
         
         if update.message.text.lower() == 'закрыть':
@@ -435,8 +439,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                 await update.message.reply_text((
                             f'Связование пользователей ['
                             f'{", ".join([f"<code>{user_name}</code>" for user_name in sorted(user_names)])}] отменено.'
-                        ),
-                        reply_markup=keyboards.ADMIN_MENU
+                        )
                 )
                 context.user_data['wireguard_users'] = []
                 return
@@ -444,10 +447,12 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             elif command in ('unbind_telegram_id', 'get_users_by_id'):
                 await __delete_message(update, context)
                 await cancel_command(update, context)
+                clear_command_flag = False
                 return
 
         if update.message.text.lower() == '/cancel':
             await cancel_command(update, context)
+            clear_command_flag = False
             return
 
         if command == 'send_message':
@@ -503,6 +508,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
         if clear_command_flag:
             # Очистка команды после выполнения
             context.user_data['command'] = None
+            await __end_command(update)
 
 
 async def __delete_message(update: Update, context: CallbackContext) -> None:
@@ -649,10 +655,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
             context.user_data['command'] = None
             context.user_data['wireguard_users'] = []
 
-            await update.message.reply_text(
-                'Команда завершина. Выбрать новую команду можно из меню (/menu).',
-                reply_markup=keyboards.ADMIN_MENU
-            )
+            await __end_command(update)
 
 
 async def __bind_users(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
@@ -721,6 +724,13 @@ async def __get_bound_users_by_tid(update: Update, context: CallbackContext, tel
     else:
         await update.message.reply_text(
             f'Ни один из пользователей Wireguard не прикреплен к [{telegram_name} ({telegram_id})] в базе данных.'
+        )
+
+
+async def __end_command(update: Update) -> None:
+    await update.message.reply_text(
+            'Команда завершина. Выбрать новую команду можно из меню (/menu).',
+            reply_markup=keyboards.ADMIN_MENU
         )
 
 
