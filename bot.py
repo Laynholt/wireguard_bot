@@ -422,9 +422,10 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             if command in ('add_user', 'bind_user'):
                 await __delete_message(update, context)
 
+                user_names = context.user_data["wireguard_users"]
                 await update.message.reply_text((
-                        f'Связование пользователей [{", ".join(
-                            [f"<code>{user_name}</code>" for user_name in sorted(context.user_data["wireguard_users"])])}] отменено.'
+                            f'Связование пользователей ['
+                            f'{", ".join([f"<code>{user_name}</code>" for user_name in sorted(user_names)])}] отменено.'
                         ),
                         reply_markup=keyboards.ADMIN_MENU
                 )
