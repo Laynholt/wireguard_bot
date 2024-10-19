@@ -272,13 +272,13 @@ async def show_users_state_command(update: Update, context: CallbackContext) -> 
     message_parts.append(f"<b>🔹 Активные пользователи [{len(active_usernames)}] 🔹</b>\n")
     for index, user_name in enumerate(active_usernames, start=1):
         telegram_id = linked_dict.get(user_name, "Нет привязки")
-        telegram_name = active_telegram_names_dict.get(telegram_id, "Нет имени пользователя")
+        telegram_name = active_telegram_names_dict.get(telegram_id, None) or "Нет имени пользователя"
         message_parts.append(f"{index}. <code>{user_name}</code> - {telegram_name} ({telegram_id})\n")
 
     message_parts.append(f"\n<b>🔹 Отключенные пользователи [{len(inactive_usernames)}] 🔹</b>\n")
     for index, user_name in enumerate(inactive_usernames, start=1):
         telegram_id = linked_dict.get(user_name, "Нет привязки")
-        telegram_name = inactive_telegram_names_dict.get(telegram_id, "Нет имени пользователя")
+        telegram_name = inactive_telegram_names_dict.get(telegram_id, None) or "Нет имени пользователя"
         message_parts.append(f"{index}. <code>{user_name}</code> - {telegram_name} ({telegram_id})\n")
 
     logger.info(f'Отправляю информацию об активных и отключенных пользователях -> Tid [{from_telegram_id}].')
@@ -322,7 +322,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     message_parts.append(f"<b>🔹🔐 Привязанные пользователи [{len(linked_dict)}] 🔹</b>\n")
     for index, (telegram_id, user_names) in enumerate(linked_dict.items(), start=1):
         user_names_formatted = ', '.join([f"<code>{user_name}</code>" for user_name in sorted(user_names)])
-        telegram_name = linked_telegram_names_dict.get(telegram_id, "Нет имени пользователя")
+        telegram_name = linked_telegram_names_dict.get(telegram_id, None) or "Нет имени пользователя"
         message_parts.append(f"{index}. {telegram_name} ({telegram_id}): {user_names_formatted}\n")
 
     # Определение непривязанных Telegram ID
@@ -331,7 +331,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
         unlinked_telegram_names_dict = await telegram_utils.get_usernames_in_bulk(unlinked_telegram_ids, context, semaphore)
         message_parts.append(f"\n<b>🔹❌ Непривязанные Telegram Id [{len(unlinked_telegram_ids)}] 🔹</b>\n")
         for index, telegram_id in enumerate(unlinked_telegram_ids, start=1):
-            telegram_name = unlinked_telegram_names_dict.get(telegram_id, "Нет имени пользователя")
+            telegram_name = unlinked_telegram_names_dict.get(telegram_id, None) or "Нет имени пользователя"
             message_parts.append(f"{index}. {telegram_name} ({telegram_id})\n")
 
     # Определение непривязанных user_name
