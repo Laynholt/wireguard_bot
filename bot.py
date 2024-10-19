@@ -619,7 +619,6 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
         for shared_user in update.message.users_shared.users:
             if command in ('add_user', 'bind_user'):
                 await __bind_users(update, context, shared_user)
-                await update.message.reply_text('', reply_markup=keyboards.ADMIN_MENU)
 
             elif command == 'unbind_telegram_id':
                 await __unbind_telegram_id(update, context, shared_user.user_id)
@@ -636,6 +635,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
         # Очистка команды после выполнения
         context.user_data['command'] = None
         context.user_data['wireguard_users'] = []
+        await update.message.reply_text('', reply_markup=keyboards.ADMIN_MENU)
 
 
 async def __bind_users(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
