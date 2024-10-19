@@ -635,7 +635,11 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
         # Очистка команды после выполнения
         context.user_data['command'] = None
         context.user_data['wireguard_users'] = []
-        await update.message.reply_text('', reply_markup=keyboards.ADMIN_MENU)
+
+         # Получаем идентификатор сообщения, чтобы его удалить
+        message_id = update.message.message_id
+        chat_id = update.message.chat_id
+        await context.bot.edit_message(chat_id=chat_id, message_id=message_id, reply_markup=keyboards.ADMIN_MENU)
 
 
 async def __bind_users(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
