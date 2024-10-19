@@ -48,7 +48,7 @@ async def __ensure_user_exists(telegram_id: int, update: Update) -> bool:
     Returns:
         bool: True, если пользователь существует или был добавлен. False, если база данных не загружена.
     """
-    if not __check_database_state(update):
+    if not await __check_database_state(update):
         return False
 
     if not database.is_telegram_user_exists(telegram_id):
@@ -553,7 +553,7 @@ async def __rem_user(update: Update, user_name: str) -> Optional[wireguard_utils
     ret_val = wireguard.remove_user(user_name)
 
     if ret_val.status is True:
-        if __check_database_state(update):
+        if await __check_database_state(update):
             if not database.delete_user(user_name):
                 logger.error(f'Не удалось удалить информацию о пользователе [{user_name}] из базы данных.')
                 await update.message.reply_text(f'Не удалось удалить информацию о пользователе'
@@ -583,7 +583,7 @@ async def __unbind_user(update: Update, user_name: str) -> None:
     if not __validate_username(update, user_name):
         return
 
-    if not __check_database_state(update):
+    if not await __check_database_state(update):
         return
     
     if database.user_exists(user_name):
@@ -630,7 +630,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
 
 
 async def __bind_users(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
-    if not __check_database_state(update):
+    if not await __check_database_state(update):
         return
     
     telegram_id = telegram_user.user_id
@@ -658,7 +658,7 @@ async def __unbind_telegram_id(update: Update, context: CallbackContext, telegra
     if not __validate_telegram_id(update, telegram_id):
         return
 
-    if not __check_database_state(update):
+    if not await __check_database_state(update):
         return
 
     telegram_name = telegram_utils.get_username_by_id(telegram_id, context)
@@ -680,7 +680,7 @@ async def __get_bound_users_by_tid(update: Update, context: CallbackContext, tel
     if not __validate_telegram_id(update, telegram_id):
         return
 
-    if not __check_database_state(update):
+    if not await __check_database_state(update):
         return
 
     telegram_name = telegram_utils.get_username_by_id(telegram_id, context)
