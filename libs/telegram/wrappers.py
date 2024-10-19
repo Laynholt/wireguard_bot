@@ -28,7 +28,8 @@ def admin_required(func):
 def command_lock(func):
     @wraps(func)
     async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
-        if context.user_data['command'] is not None:
+        current_command = context.user_data.get('command', None)
+        if current_command is not None:
             logger.info(
                 f'Попытка выполнить команду [{update.message.text.lower()}] в процессе '
                 f'выполения другой [{context.user_data["command"]}].'

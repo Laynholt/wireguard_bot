@@ -220,9 +220,9 @@ async def cancel_command(update: Update, context: CallbackContext) -> None:
 @wrappers.command_lock
 async def unbind_telegram_id_command(update: Update, context: CallbackContext) -> None:    
     await update.message.reply_text((
-            'Пожалуйста, введите Telegram ID пользователей, разделяя их пробелом.\n\n'
-            'Чтобы отменить ввод, используйте команду /cancel.'
-        ))#, reply_markup=ReplyKeyboardRemove())
+            'Пожалуйста, выберите пользователя Telegram, которого хотите отвязать.\n\n'
+            'Для отмены действия нажмите кнопку <Закрыть>.'
+        ), reply_markup=keyboards.BIND_MENU)
     context.user_data['command'] = 'unbind_telegram_id'
 
 
@@ -231,9 +231,9 @@ async def unbind_telegram_id_command(update: Update, context: CallbackContext) -
 @wrappers.command_lock
 async def get_bound_users_by_telegram_id_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text((
-            'Пожалуйста, введите Telegram ID пользователей, разделяя их пробелом.\n\n'
-            'Чтобы отменить ввод, используйте команду /cancel.'
-        ))#, reply_markup=ReplyKeyboardRemove())
+            'Пожалуйста, выберите пользователя Telegram, привязки которого хотите увидеть.\n\n'
+            'Для отмены действия нажмите кнопку <Закрыть>.'
+        ), reply_markup=keyboards.BIND_MENU)
     context.user_data['command'] = 'get_users_by_id' 
 
 
