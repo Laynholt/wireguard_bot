@@ -612,6 +612,7 @@ async def __unbind_user(update: Update, user_name: str) -> None:
 
 
 async def handle_user_request(update: Update, context: CallbackContext) -> None:
+    clear_command_flag = True
     try:
         # Удаляем сообщение о переданном пользователе
         await __delete_message(update, context)
@@ -624,6 +625,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
                                         if update.effective_user.id in config.telegram_admin_ids
                                             else keyboards.USER_MENU 
                                 ))
+            clear_command_flag = False
             return
         
         for shared_user in update.message.users_shared.users:
@@ -642,14 +644,15 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text('Произошла неожиданная ошибка. Пожалуйста, попробуйте еще раз позже.')
 
     finally:
-        # Очистка команды после выполнения
-        context.user_data['command'] = None
-        context.user_data['wireguard_users'] = []
+        if clear_command_flag:
+            # Очистка команды после выполнения
+            context.user_data['command'] = None
+            context.user_data['wireguard_users'] = []
 
-        await update.message.reply_text(
-            'Команда завершина. Выбрать новую команду можно из меню (/menu).',
-            reply_markup=keyboards.ADMIN_MENU
-        )
+            await update.message.reply_text(
+                'Команда завершина. Выбрать новую команду можно из меню (/menu).',
+                reply_markup=keyboards.ADMIN_MENU
+            )
 
 
 async def __bind_users(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
