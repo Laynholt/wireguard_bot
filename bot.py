@@ -125,12 +125,12 @@ async def get_telegram_users_command(update: Update, context: CallbackContext) -
         # Оформляем заголовок с использованием HTML
         header = f"<b>📋 Telegram Id всех пользователей бота [{len(telegram_ids)}]</b>\n\n"
         user_lines = [
-            f"{index}. {telegram_username or 'Нет имени пользователя'} ({telegram_id})"
+            f"{index}. {telegram_username or 'Нет имени пользователя'} ({telegram_id})\n"
             for index, (telegram_id, telegram_username) in enumerate(telegram_usernames.items(), start=1)
         ]
 
         # Отправляем сообщение с разметкой HTML
-        await update.message.reply_text(header + "\n".join(user_lines) + "\n", parse_mode='HTML')
+        await update.message.reply_text(header + "".join(user_lines), parse_mode='HTML')
 
     else:
         await update.message.reply_text(f'У бота пока нет активных Telegram пользователей.')
@@ -287,7 +287,7 @@ async def show_users_state_command(update: Update, context: CallbackContext) -> 
 
     logger.info(f'Отправляю информацию об активных и отключенных пользователях -> Tid [{from_telegram_id}].')
     # Отправляем сообщение (или несколько, если оно длинное)
-    await telegram_utils.send_long_message(update, "\n".join(message_parts) + "\n", parse_mode='HTML')
+    await telegram_utils.send_long_message(update, "".join(message_parts), parse_mode='HTML')
     
 
 # Команда /show_all_bindings
