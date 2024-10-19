@@ -211,7 +211,9 @@ async def send_message_command(update: Update, context: CallbackContext) -> None
 async def cancel_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text((
             'Действие отменено. Можете начать сначала, выбрав команду из меню (/menu).'
-        ))#, reply_markup=ReplyKeyboardRemove())
+        ),
+        reply_markup=keyboards.ADMIN_MENU
+    )
     context.user_data['command'] = None
 
 
@@ -222,7 +224,9 @@ async def unbind_telegram_id_command(update: Update, context: CallbackContext) -
     await update.message.reply_text((
             'Пожалуйста, выберите пользователя Telegram, которого хотите отвязать.\n\n'
             'Для отмены действия нажмите кнопку <Закрыть>.'
-        ), reply_markup=keyboards.BIND_MENU)
+        ), 
+        reply_markup=keyboards.BIND_MENU
+    )
     context.user_data['command'] = 'unbind_telegram_id'
 
 
@@ -233,7 +237,9 @@ async def get_bound_users_by_telegram_id_command(update: Update, context: Callba
     await update.message.reply_text((
             'Пожалуйста, выберите пользователя Telegram, привязки которого хотите увидеть.\n\n'
             'Для отмены действия нажмите кнопку <Закрыть>.'
-        ), reply_markup=keyboards.BIND_MENU)
+        ),
+        reply_markup=keyboards.BIND_MENU
+    )
     context.user_data['command'] = 'get_users_by_id' 
 
 
@@ -430,6 +436,11 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                         reply_markup=keyboards.ADMIN_MENU
                 )
                 context.user_data['wireguard_users'] = []
+                return
+            
+            elif command in ():
+                await __delete_message(update, context)
+                await cancel_command(update, context)
                 return
 
         if update.message.text.lower() == '/cancel':
