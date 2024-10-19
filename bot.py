@@ -417,9 +417,14 @@ async def unknown_command(update: Update, context: CallbackContext) -> None:
 async def handle_text(update: Update, context: CallbackContext) -> None:
     clear_command_flag = True
     try:
-        command = context.user_data.get('command')
-        if not command:
-            await update.message.reply_text('Пожалуйста, выберите команду из меню. (/menu)')
+        command = context.user_data.get('command', None)
+        if command is None:
+            await update.message.reply_text('Пожалуйста, выберите команду из меню. (/menu)',
+                                            reply_markup=(
+                                                keyboards.ADMIN_MENU 
+                                                    if update.effective_user.id in config.telegram_admin_ids
+                                                        else keyboards.USER_MENU 
+                                            ))
             return
         
         if update.message.text.lower() == 'закрыть':
@@ -611,9 +616,14 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
         # Удаляем сообщение о переданном пользователе
         await __delete_message(update, context)
         
-        command = context.user_data.get('command')
-        if not command:
-            await update.message.reply_text('Пожалуйста, выберите команду из меню. (/menu)')
+        command = context.user_data.get('command', None)
+        if command is None:
+            await update.message.reply_text('Пожалуйста, выберите команду из меню. (/menu)',
+                                reply_markup=(
+                                    keyboards.ADMIN_MENU 
+                                        if update.effective_user.id in config.telegram_admin_ids
+                                            else keyboards.USER_MENU 
+                                ))
             return
         
         for shared_user in update.message.users_shared.users:
