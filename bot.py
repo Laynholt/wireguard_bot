@@ -109,6 +109,24 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
     await __end_command(update)
 
 
+# Команда /request_new_config
+async def request_new_config_command(update: Update, context: CallbackContext) -> None:
+    telegram_id = update.effective_user.id
+    telegram_name = await telegram_utils.get_username_by_id(telegram_id, context)
+
+    for admin_id in config.telegram_admin_ids:
+        try:
+            # Отправляем сообщение каждому пользователю
+            await context.bot.send_message(chat_id=admin_id, text=
+                                           f'Пользователь [{telegram_name} ({telegram_id})] запросил новый конфиг Wireguard.')
+            logger.info(
+                f"Сообщение о запросе нового конфига пользователем [{telegram_name} ({telegram_id})] отправлено админу {admin_id}.")
+        except TelegramError as e:
+            logger.error(f"Не удалось отправить сообщение админу {admin_id}: {e}.")
+
+    await __end_command(update)
+
+
 # Команда /get_telegram_users
 @wrappers.admin_required
 async def get_telegram_users_command(update: Update, context: CallbackContext) -> None:
@@ -241,7 +259,18 @@ async def get_bound_users_by_telegram_id_command(update: Update, context: Callba
         ),
         reply_markup=keyboards.BIND_MENU
     )
-    context.user_data['command'] = 'get_users_by_id' 
+    context.user_data['command'] = 'get_users_by_id'
+
+
+@wrappers.admin_required
+@wrappers.command_lock
+async def send_config_command(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text((
+            'Пожалуйста, введите имена пользователей Wireguard, разделяя их пробелом.\n\n'
+            'Чтобы отменить ввод, используйте команду /cancel.'
+        ))
+    context.user_data['command'] = 'send_config'
+    context.user_data['wireguard_users'] = []
 
 
 # Команда /show_users_state
@@ -498,7 +527,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             elif command == 'com_uncom_user':
                 ret_val = await __com_user(update, entry)
             
-            elif command == 'bind_user':
+            elif command in ('bind_user', 'send_config'):
                 ret_val = await __create_list_of_bindings(update, context, entry)
 
             elif command == 'unbind_user':
@@ -526,6 +555,14 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                     "Нажмите на кнопку выбора пользователя, чтобы выбрать пользователя Telegram"
                     " для связывания с переданными конфигами Wireguard.\n\n"
                     "Для отмены связывания, нажмите кнопку Закрыть.", reply_markup=keyboards.BIND_MENU)
+                clear_command_flag = False
+        
+        elif command == 'send_config':
+            if len(context.user_data['wireguard_users']):
+                await update.message.reply_text(
+                    "Нажмите на кнопку выбора пользователя, чтобы выбрать пользователя Telegram"
+                    " , которым передать выбранные конфиги Wireguard.\n\n"
+                    "Для отмены нажмите кнопку Закрыть.", reply_markup=keyboards.SEND_MENU)
                 clear_command_flag = False
 
     except Exception as e:
@@ -723,6 +760,9 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
                 context.user_data['command'] = None
                 clear_command_flag = False
 
+            elif command == 'send_config':
+                await __send_config(update, context, shared_user.user_id)
+
 
     except Exception as e:
         logger.error(f'Неожиданная ошибка: {e}')
@@ -806,6 +846,41 @@ async def __get_bound_users_by_tid(update: Update, context: CallbackContext, tel
         )
 
 
+async def __send_config(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
+    if not await __check_database_state(update):
+        return
+    
+    telegram_id = telegram_user.user_id
+    telegram_name = telegram_user.username
+
+    for user_name in context.user_data['wireguard_users']:
+        if not wireguard.check_user_exists(user_name).status:
+            logger.error(f'Конфиг [{user_name}] не найден.')
+            await update.message.reply_text(f'Конфигурация [{user_name}] не найдена.')
+            return
+
+        if wireguard.is_username_commented(user_name):
+            logger.info(f'Конфиг [{user_name}] на данный момент закомментирован.')
+            await update.message.reply_text(f'Конфигурация [{user_name}] на данный момент заблокирована.')
+            return
+        
+        logger.info(f'Создаю и отправляю Zip-архив и Qr-код пользователя Wireguard [{user_name}] пользователю [{telegram_name} ({telegram_id})].')
+        zip_ret_val = wireguard.create_zipfile(user_name)
+        try:
+            if zip_ret_val.status is True:
+                # Отправляем сообщение каждому пользователю
+                await context.bot.send_message(chat_id=telegram_id, text=f'Ваш новый конфиг Wireguard.')
+                await context.bot.send_document(chat_id=telegram_id, document=open(zip_ret_val.description, 'rb'))
+                wireguard.remove_zipfile(user_name)
+
+                png_path = wireguard.get_qrcode_path(user_name)
+                if png_path.status is True:
+                    await context.bot.send_document(chat_id=telegram_id, photo=open(png_path.description, 'rb'))
+
+        except TelegramError as e:
+            logger.error(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
+    
+
 async def __end_command(update: Update) -> None:
     await update.message.reply_text(
             'Команда завершина. Выбрать новую команду можно из меню (/menu).',
@@ -841,6 +916,8 @@ def main() -> None:
     # Команды конфигурации
     application.add_handler(CommandHandler("get_config", get_config_command))
     application.add_handler(CommandHandler("get_qrcode", get_qrcode_command))
+    application.add_handler(CommandHandler("request_new_config", request_new_config_command))
+    application.add_handler(CommandHandler("send_config", send_config_command))
     
     # Команды для телеграма
     application.add_handler(CommandHandler("get_telegram_id", get_telegram_id_command))
