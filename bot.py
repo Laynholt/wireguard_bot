@@ -222,7 +222,7 @@ async def cancel_command(update: Update, context: CallbackContext) -> None:
 async def unbind_telegram_id_command(update: Update, context: CallbackContext) -> None:    
     await update.message.reply_text((
             'Пожалуйста, выберите пользователя Telegram, которого хотите отвязать.\n\n'
-            'Для отмены действия нажмите кнопку <Закрыть>.'
+            'Для отмены действия нажмите кнопку Закрыть.'
         ), 
         reply_markup=keyboards.BIND_MENU
     )
@@ -235,7 +235,7 @@ async def unbind_telegram_id_command(update: Update, context: CallbackContext) -
 async def get_bound_users_by_telegram_id_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text((
             'Пожалуйста, выберите пользователя Telegram, привязки которого хотите увидеть.\n\n'
-            'Для отмены действия нажмите кнопку <Закрыть>.'
+            'Для отмены действия нажмите кнопку Закрыть.'
         ),
         reply_markup=keyboards.BIND_MENU
     )
@@ -354,17 +354,18 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     await __end_command(update)
 
 
-async def __get_configuration(update: Update, context: CallbackContext, command: str) -> None:
-    telegram_id = update.effective_user.id
+async def __get_configuration(update: Update, context: CallbackContext, command: str, telegram_id: int) -> None:
+    requester_telegram_id = update.effective_user.id
 
     if not database.db_loaded:
         logger.error('Ошибка! Не база данных не загружена!')
         await update.message.reply_text('Не удалось получить данные из базы данных. Пожалуйста, свяжитесь с администратором.')
         return
     
-    if not database.is_telegram_user_exists(telegram_id):
-        logger.info(f'Добавляю пользователя Tid [{telegram_id}] в базу данных.')
-        database.add_telegram_user(telegram_id)
+    if requester_telegram_id == telegram_id:
+        if not database.is_telegram_user_exists(telegram_id):
+            logger.info(f'Добавляю пользователя Tid [{telegram_id}] в базу данных.')
+            database.add_telegram_user(telegram_id)
 
     user_names = database.get_users_by_telegram_id(telegram_id)
 
@@ -374,46 +375,73 @@ async def __get_configuration(update: Update, context: CallbackContext, command:
         return
     
     for user_name in user_names:
-        if not wireguard.check_user_exists(user_name).status:
-            logger.error(f'Конфиг [{user_name}] для привязанного Tid [{telegram_id}] не найдет. Удаляю привязку.')
-            await update.message.reply_text(f'Ваша конфигурация [{user_name}] была удалена. Пожалуйста, свяжитесь с администратором для создания новой.')
-            database.delete_user(user_name)
-            continue
-
-        if wireguard.is_username_commented(user_name):
-            logger.info(f'Конфиг [{user_name}] для привязанного Tid [{telegram_id}] на данный момент закомментирован.')
-            await update.message.reply_text(f'Ваша конфигурация [{user_name}] на данный момент заблокирована. Пожалуйста, свяжитесь с администратором.')
-            continue
-        
-        if command == 'get_config':
-            logger.info(f'Создаю и отправляю Zip-архив пользователя Wireguard [{user_name}] пользователю Tid [{telegram_id}].')
-            zip_ret_val = wireguard.create_zipfile(user_name)
-            if zip_ret_val.status is True:
-                await update.message.reply_text(f'Архив с файлом конфигурации и QR-кодом для пользователя [{user_name}]:')
-                await update.message.reply_document(document=open(zip_ret_val.description, 'rb'))
-                wireguard.remove_zipfile(user_name)
-        
-        elif command == 'get_qrcode':
-            logger.info(f'Создаю и отправляю Qr-код пользователя Wireguard [{user_name}] пользователю Tid [{telegram_id}].')
-            png_path = wireguard.get_qrcode_path(user_name)
-            if png_path.status is True:
-                await update.message.reply_text(f'QR-код для пользователя [{user_name}]:')
-                await update.message.reply_photo(photo=open(png_path.description, 'rb'))
-
+        await __get_user_configuration(update, command, user_name)
 
     await update.message.reply_text(
             'Команда завершина. Выбрать новую команду можно из меню (/menu).',
             reply_markup=keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
         )
 
+
+async def __get_user_configuration(update: Update, command: str, user_name: str) -> None:
+    requester_telegram_id = update.effective_user.id
+    
+    if not wireguard.check_user_exists(user_name).status:
+        logger.error(f'Конфиг [{user_name}] не найден. Удаляю привязку.')
+        await update.message.reply_text(f'Конфигурация [{user_name}] была удалена. Пожалуйста, свяжитесь с администратором для создания новой.')
+        database.delete_user(user_name)
+        return
+
+    if wireguard.is_username_commented(user_name):
+        logger.info(f'Конфиг [{user_name}] на данный момент закомментирован.')
+        await update.message.reply_text(f'Конфигурация [{user_name}] на данный момент заблокирована. Пожалуйста, свяжитесь с администратором.')
+        return
+    
+    if command == 'get_config':
+        logger.info(f'Создаю и отправляю Zip-архив пользователя Wireguard [{user_name}] пользователю Tid [{requester_telegram_id}].')
+        zip_ret_val = wireguard.create_zipfile(user_name)
+        if zip_ret_val.status is True:
+            await update.message.reply_text(f'Архив с файлом конфигурации и QR-кодом для пользователя [{user_name}]:')
+            await update.message.reply_document(document=open(zip_ret_val.description, 'rb'))
+            wireguard.remove_zipfile(user_name)
+    
+    elif command == 'get_qrcode':
+        logger.info(f'Создаю и отправляю Qr-код пользователя Wireguard [{user_name}] пользователю Tid [{requester_telegram_id}].')
+        png_path = wireguard.get_qrcode_path(user_name)
+        if png_path.status is True:
+            await update.message.reply_text(f'QR-код для пользователя [{user_name}]:')
+            await update.message.reply_photo(photo=open(png_path.description, 'rb'))
+
+
 # Команда /get_config
+@wrappers.command_lock
 async def get_config_command(update: Update, context: CallbackContext) -> None:
-    await __get_configuration(update, context, command='get_config')
+    telegram_id = update.effective_user.id
+    if telegram_id in config.telegram_admin_ids:
+        context.user_data['command'] = 'get_config'
+        await update.message.reply_text((
+            'Выберете, чьи файлы конфигурации вы хотите получить.\n\n'
+            'Для отмены действия нажмите кнопку Закрыть.'),
+            reply_markup=keyboards.CONFIG_MENU
+        )
+    
+    else:
+        await __get_configuration(update, context, command='get_config', telegram_id=telegram_id)
 
 
 # Команда /get_qrcode
+@wrappers.command_lock
 async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
-    await __get_configuration(update, context, command='get_qrcode')
+    telegram_id = update.effective_user.id
+    if telegram_id in config.telegram_admin_ids:
+        context.user_data['command'] = 'get_qrcode'
+        await update.message.reply_text((
+            'Выберете, чьи Qr-код файлы конфигурации вы хотите получить.\n\n'
+            'Для отмены действия нажмите кнопку Закрыть.'),
+            reply_markup=keyboards.CONFIG_MENU
+        )
+    else:
+        await __get_configuration(update, context, command='get_qrcode', telegram_id=telegram_id)
 
 
 # Обработка неизвестных команд
@@ -437,29 +465,20 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             return
         
         if update.message.text.lower() == 'закрыть':
-            if command in ('add_user', 'bind_user'):
-                await __delete_message(update, context)
-
-                user_names = context.user_data["wireguard_users"]
-                await update.message.reply_text((
-                        f'Связование пользователей ['
-                        f'{", ".join([f"<code>{user_name}</code>" for user_name in sorted(user_names)])}] отменено.'
-                    ),
-                    parse_mode='HTML'
-                )
-                context.user_data['wireguard_users'] = []
+            if __close_button_handler(update, context):
+                clear_command_flag = False
                 return
             
-            elif command in ('unbind_telegram_id', 'get_users_by_id'):
-                await __delete_message(update, context)
-                await cancel_command(update, context)
+        elif update.message.text.lower() in ('свой', 'пользователя wireguard'):
+            if __get_config_buttons_handler(update, context):
                 clear_command_flag = False
                 return
 
-        if update.message.text.lower() == '/cancel':
+        elif update.message.text.lower() == '/cancel':
             await cancel_command(update, context)
             clear_command_flag = False
             return
+
 
         if command == 'send_message':
             await __send_message_to_all(update, context)
@@ -485,6 +504,9 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             elif command == 'unbind_user':
                 await __unbind_user(update, entry)
 
+            elif command in ('get_qrcode', 'get_config'):
+                await __get_user_configuration(update, command, entry)
+
 
             if ret_val is not None:
                 await update.message.reply_text(ret_val.description)
@@ -503,7 +525,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                 await update.message.reply_text(
                     "Нажмите на кнопку выбора пользователя, чтобы выбрать пользователя Telegram"
                     " для связывания с переданными конфигами Wireguard.\n\n"
-                    "Для отмены связывания, нажмите кнопку <Закрыть>.", reply_markup=keyboards.BIND_MENU)
+                    "Для отмены связывания, нажмите кнопку Закрыть.", reply_markup=keyboards.BIND_MENU)
                 clear_command_flag = False
 
     except Exception as e:
@@ -515,6 +537,50 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             # Очистка команды после выполнения
             context.user_data['command'] = None
             await __end_command(update)
+
+
+async def __get_config_buttons_handler(update: Update, context: CallbackContext) -> bool:
+    command = context.user_data.get('command', None)
+
+    if command in ('get_qrcode', 'get_config'):
+        if update.message.text.lower() == 'свой':
+            await __get_configuration(update, context, command, update.effective_user.id)
+            context.user_data['command'] = None
+            return True
+
+        elif update.message.text.lower() == 'пользователя wireguard':
+            await update.message.reply_text((
+                'Пожалуйста, введите имена пользователей Wireguard, разделяя их пробелом.\n\n'
+                'Чтобы отменить ввод, используйте команду /cancel.'
+            ))
+            return True
+    return False
+
+
+async def __close_button_handler(update: Update, context: CallbackContext) -> bool:
+    command = context.user_data.get('command', None)
+    
+    if command in ('add_user', 'bind_user'):
+        await __delete_message(update, context)
+
+        user_names = context.user_data["wireguard_users"]
+        await update.message.reply_text((
+                f'Связование пользователей ['
+                f'{", ".join([f"<code>{user_name}</code>" for user_name in sorted(user_names)])}] отменено.'
+            ),
+            parse_mode='HTML'
+        )
+
+        context.user_data['command'] = None
+        context.user_data['wireguard_users'] = []
+        await __end_command(update)
+        return True
+    
+    elif command in ('unbind_telegram_id', 'get_users_by_id', 'get_qrcode', 'get_config'):
+        await __delete_message(update, context)
+        await cancel_command(update, context)
+        return True
+    return False
 
 
 async def __delete_message(update: Update, context: CallbackContext) -> None:
@@ -651,6 +717,11 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
 
             elif command == 'get_users_by_id':
                 await __get_bound_users_by_tid(update, context, shared_user.user_id)
+
+            elif command in ('get_qrcode', 'get_config'):
+                await __get_configuration(update, context, command, shared_user.user_id)
+                context.user_data['command'] = None
+                clear_command_flag = False
 
 
     except Exception as e:

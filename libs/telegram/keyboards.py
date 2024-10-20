@@ -32,3 +32,23 @@ BIND_MENU = ReplyKeyboardMarkup([
     ],
     one_time_keyboard=True
 )
+
+CONFIG_MENU = ReplyKeyboardMarkup([
+        [
+            KeyboardButton(
+                text="Пользователя Telegram",
+                request_users=KeyboardButtonRequestUsers(
+                    request_id=0,
+                    user_is_bot=False,
+                    request_username=True
+                )
+            ),
+            'Пользователя Wireguard'
+        ],
+        [
+            'Свой',
+            'Закрыть'
+        ]
+    ],
+    one_time_keyboard=True
+)
