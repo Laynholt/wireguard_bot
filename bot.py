@@ -877,6 +877,22 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
                 if png_path.status is True:
                     await context.bot.send_photo(chat_id=telegram_id, photo=open(png_path.description, 'rb'))
 
+                current_admin_id = update.effective_user.id
+                current_admin_name = await telegram_utils.get_username_by_id(current_admin_id, context)
+
+                for admin_id in config.telegram_admin_ids:
+                    try:
+                        if admin_id != current_admin_id:
+                            text = (
+                                    f'Администратор [{current_admin_name} ({current_admin_id})] отправил файлы конфигурации '
+                                    f'Wireguard [{user_name}] пользователю [{telegram_name} ({telegram_id})].'
+                                )
+                            await context.bot.send_message(chat_id=admin_id, text=text)
+                            logger.info(text)
+                    except TelegramError as e:
+                        logger.error(f"Не удалось отправить сообщение администратору {admin_id}: {e}.")
+                        await update.message.reply_text(f"Не удалось отправить сообщение администратору {admin_id}: {e}.")
+
         except TelegramError as e:
             logger.error(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
             await update.message.reply_text(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
