@@ -381,6 +381,7 @@ async def __get_configuration(update: Update, context: CallbackContext, command:
             'Команда завершина. Выбрать новую команду можно из меню (/menu).',
             reply_markup=keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
         )
+    await __end_command(update)
 
 
 async def __get_user_configuration(update: Update, command: str, user_name: str) -> None:
