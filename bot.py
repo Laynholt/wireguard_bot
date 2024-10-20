@@ -582,7 +582,7 @@ async def __rem_user(update: Update, user_name: str) -> Optional[wireguard_utils
 
 
 async def __com_user(update: Update, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
-    if not __validate_username(update, user_name):
+    if not await __validate_username(update, user_name):
         return None
     # Здесь вызывается метод WireGuard для комментирования/раскомментирования пользователя
     return wireguard.comment_or_uncomment_user(user_name)
