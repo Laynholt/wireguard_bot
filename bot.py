@@ -885,7 +885,7 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
                         if admin_id != current_admin_id:
                             text = (
                                     f'Администратор [{current_admin_name} ({current_admin_id})] отправил файлы конфигурации '
-                                    f'Wireguard [{user_name}] пользователю [{telegram_name} ({telegram_id})].'
+                                    f'Wireguard [{user_name}] пользователю [@{telegram_name} ({telegram_id})].'
                                 )
                             await context.bot.send_message(chat_id=admin_id, text=text)
                             logger.info(text)
