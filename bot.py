@@ -613,7 +613,7 @@ async def __close_button_handler(update: Update, context: CallbackContext) -> bo
         await __end_command(update)
         return True
     
-    elif command in ('unbind_telegram_id', 'get_users_by_id', 'get_qrcode', 'get_config'):
+    elif command in ('unbind_telegram_id', 'get_users_by_id', 'get_qrcode', 'get_config', 'send_config'):
         await __delete_message(update, context)
         await cancel_command(update, context)
         return True
@@ -761,7 +761,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
                 clear_command_flag = False
 
             elif command == 'send_config':
-                await __send_config(update, context, shared_user.user_id)
+                await __send_config(update, context, shared_user)
 
 
     except Exception as e:
