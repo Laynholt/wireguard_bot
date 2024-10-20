@@ -8,6 +8,7 @@ class Config(BaseModel):
     server_ip: str = Field(default="")
     server_port: str = Field(default="")
     dns_server_name: str = Field(default="")
+    is_dns_server_in_docker: bool = Field(default=False)
 
     # Параметры базы данных
     users_database_path: str = Field(default="")

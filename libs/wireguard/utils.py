@@ -65,7 +65,10 @@ def backup_config() -> None:
     """
     try:
         os.makedirs(f'{config.wireguard_folder}/config/wg_confs_backup', exist_ok=True)
-        run_command(f'cp {config.wireguard_folder}/config/wg_confs/wg0.conf {config.wireguard_folder}/config/wg_confs_backup/wg0.conf').return_with_print()
+        run_command(
+            f'cp {config.wireguard_folder}/config/wg_confs/wg0.conf'
+            f' {config.wireguard_folder}/config/wg_confs_backup/wg0.conf'
+        ).return_with_print()
         print('Резервная копия конфига создана.')
     except Exception as e:
         print(f'Ошибка при создании резервной копии: {e}')

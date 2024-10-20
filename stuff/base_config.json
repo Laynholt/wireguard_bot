@@ -3,6 +3,7 @@
     "server_ip": "",
     "server_port": "51820",
     "dns_server_name": "adguardhome",
+    "is_dns_server_in_docker": 1,
 
     "users_database_path": "stuff/wireguard_users.db",
 

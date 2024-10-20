@@ -2,6 +2,7 @@ import os
 import re
 import pwd
 import zipfile
+import ipaddress
 from enum import Enum
 
 from . import config
@@ -103,13 +104,20 @@ def __strip_bad_symbols(username: str) -> str:
 
 
 def __get_dsn_server_ip() -> str:
-    ret_val = utils.run_command(
-        "docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}'"
-    )
-    if not ret_val.status:
-        ret_val.return_with_print()
+    if config.is_dns_server_in_docker:
+        ret_val = utils.run_command(
+            "docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' " + config.dns_server_name
+        )
+        if not ret_val.status:
+            ret_val.return_with_print()
+            return f'{config.local_ip}1'
+        return ret_val.description
+
+    try:
+        ipaddress.ip_address(config.dns_server_name)
+        return config.dns_server_name
+    except ValueError:
         return f'{config.local_ip}1'
-    return ret_val.description
 
 
 def add_user(user_name: str) -> utils.FunctionResult:
@@ -232,7 +240,7 @@ def add_user(user_name: str) -> utils.FunctionResult:
 
         print(f'Вывожу конфиг пользователя {user_name}:\n')
         command = (
-            f'cat config/{user_name}/{user_name}.conf &&' 
+            f'cat {config.wireguard_folder}/config/{user_name}/{user_name}.conf &&' 
             f'docker exec -it wireguard bash -c "' 
             f'qrencode -t ansiutf8 < /config/{user_name}/{user_name}.conf ;' 
             f'rm /config/wg_confs/wg0.conf.bak"'
