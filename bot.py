@@ -354,7 +354,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     await __end_command(update)
 
 
-async def __get_configuration(update: Update, context: CallbackContext, command: str, telegram_id: int) -> None:
+async def __get_configuration(update: Update, command: str, telegram_id: int) -> None:
     requester_telegram_id = update.effective_user.id
 
     if not database.db_loaded:
@@ -371,7 +371,9 @@ async def __get_configuration(update: Update, context: CallbackContext, command:
 
     if not user_names:
         logger.info(f'Пользователь Tid [{telegram_id}] не привязан ни к одной конфигурации.')
-        await update.message.reply_text('Ваши конфигурации не найдены. Пожалуйста, свяжитесь с администратором.')
+        await update.message.reply_text('Ваши конфигурации не найдены. Пожалуйста, свяжитесь с администратором.',
+            reply_markup=keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
+        )
         return
     
     for user_name in user_names:
@@ -381,7 +383,6 @@ async def __get_configuration(update: Update, context: CallbackContext, command:
             'Команда завершина. Выбрать новую команду можно из меню (/menu).',
             reply_markup=keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
         )
-    await __end_command(update)
 
 
 async def __get_user_configuration(update: Update, command: str, user_name: str) -> None:
@@ -427,7 +428,7 @@ async def get_config_command(update: Update, context: CallbackContext) -> None:
         )
     
     else:
-        await __get_configuration(update, context, command='get_config', telegram_id=telegram_id)
+        await __get_configuration(update, command='get_config', telegram_id=telegram_id)
 
 
 # Команда /get_qrcode
@@ -442,7 +443,7 @@ async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
             reply_markup=keyboards.CONFIG_MENU
         )
     else:
-        await __get_configuration(update, context, command='get_qrcode', telegram_id=telegram_id)
+        await __get_configuration(update, command='get_qrcode', telegram_id=telegram_id)
 
 
 # Обработка неизвестных команд
@@ -545,7 +546,7 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
 
     if command in ('get_qrcode', 'get_config'):
         if update.message.text.lower() == 'свой':
-            await __get_configuration(update, context, command, update.effective_user.id)
+            await __get_configuration(update, command, update.effective_user.id)
             context.user_data['command'] = None
             return True
 
@@ -720,7 +721,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
                 await __get_bound_users_by_tid(update, context, shared_user.user_id)
 
             elif command in ('get_qrcode', 'get_config'):
-                await __get_configuration(update, context, command, shared_user.user_id)
+                await __get_configuration(update, command, shared_user.user_id)
                 context.user_data['command'] = None
                 clear_command_flag = False
 
