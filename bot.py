@@ -875,10 +875,11 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
 
                 png_path = wireguard.get_qrcode_path(user_name)
                 if png_path.status is True:
-                    await context.bot.send_document(chat_id=telegram_id, photo=open(png_path.description, 'rb'))
+                    await context.bot.send_photo(chat_id=telegram_id, photo=open(png_path.description, 'rb'))
 
         except TelegramError as e:
             logger.error(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
+            await update.message.reply_text(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
     
 
 async def __end_command(update: Update) -> None:
