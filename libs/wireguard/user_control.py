@@ -667,4 +667,4 @@ def is_username_commented(user_name: str) -> bool:
     Returns:
         bool: True - закомментирован, иначе False.
     """
-    return user_name[0] == '+' if user_name else False
+    return user_name in get_inactive_usernames()

@@ -401,6 +401,11 @@ async def __get_configuration(update: Update, context: CallbackContext, command:
                 await update.message.reply_photo(photo=open(png_path.description, 'rb'))
 
 
+    await update.message.reply_text(
+            'Команда завершина. Выбрать новую команду можно из меню (/menu).',
+            reply_markup=keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
+        )
+
 # Команда /get_config
 async def get_config_command(update: Update, context: CallbackContext) -> None:
     await __get_configuration(update, context, command='get_config')
@@ -579,6 +584,8 @@ async def __rem_user(update: Update, user_name: str) -> Optional[wireguard_utils
                 logger.error(f'Не удалось удалить информацию о пользователе [{user_name}] из базы данных.')
                 await update.message.reply_text(f'Не удалось удалить информацию о пользователе'
                                                 f' [{user_name}] из базы данных.')
+            else:
+                logger.info(f'Пользователь [{user_name}] удален из базы данных.')
     return ret_val
 
 
