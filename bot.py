@@ -80,6 +80,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         messages.ADMIN_HELP if telegram_id in config.telegram_admin_ids else messages.USER_HELP,
         parse_mode='HTML'
     )
+    await __end_command(update)
 
 
 # Команда /menu
@@ -105,6 +106,7 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
     
     logger.info(f"Отправляю ответ на команду [get_telegram_id] -> Tid [{telegram_id}].")
     await update.message.reply_text(f'Ваш id: {telegram_id}.')
+    await __end_command(update)
 
 
 # Команда /get_telegram_users
@@ -371,18 +373,14 @@ async def __get_configuration(update: Update, command: str, telegram_id: int) ->
 
     if not user_names:
         logger.info(f'Пользователь Tid [{telegram_id}] не привязан ни к одной конфигурации.')
-        await update.message.reply_text('Ваши конфигурации не найдены. Пожалуйста, свяжитесь с администратором.',
-            reply_markup=keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
-        )
+        await update.message.reply_text('Ваши конфигурации не найдены. Пожалуйста, свяжитесь с администратором для добавления новых.')
+        await __end_command(update)
         return
     
     for user_name in user_names:
         await __get_user_configuration(update, command, user_name)
 
-    await update.message.reply_text(
-            'Команда завершина. Выбрать новую команду можно из меню (/menu).',
-            reply_markup=keyboards.ADMIN_MENU if telegram_id in config.telegram_admin_ids else keyboards.USER_MENU
-        )
+    await __end_command(update)
 
 
 async def __get_user_configuration(update: Update, command: str, user_name: str) -> None:
@@ -811,7 +809,7 @@ async def __get_bound_users_by_tid(update: Update, context: CallbackContext, tel
 async def __end_command(update: Update) -> None:
     await update.message.reply_text(
             'Команда завершина. Выбрать новую команду можно из меню (/menu).',
-            reply_markup=keyboards.ADMIN_MENU
+            reply_markup=keyboards.ADMIN_MENU if update.effective_user.id in config.telegram_admin_ids else keyboards.USER_MENU
         )
 
 
