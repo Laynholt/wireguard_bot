@@ -465,12 +465,12 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             return
         
         if update.message.text.lower() == 'закрыть':
-            if __close_button_handler(update, context):
+            if await __close_button_handler(update, context):
                 clear_command_flag = False
                 return
             
         elif update.message.text.lower() in ('свой', 'пользователя wireguard'):
-            if __get_config_buttons_handler(update, context):
+            if await __get_config_buttons_handler(update, context):
                 clear_command_flag = False
                 return
 
