@@ -503,12 +503,10 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
         
         if update.message.text == keyboards.BUTTON_CLOSE.text:
             if await __close_button_handler(update, context):
-                clear_command_flag = False
                 return
             
         elif update.message.text in (keyboards.BUTTON_OWN_CONFIG.text, keyboards.BUTTON_WG_USER_CONFIG.text):
             if await __get_config_buttons_handler(update, context):
-                clear_command_flag = False
                 return
 
         elif update.message.text.lower() == '/cancel':
@@ -581,6 +579,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
         if clear_command_flag:
             # Очистка команды после выполнения
             context.user_data['command'] = None
+            context.user_data['wireguard_users'] = []
             await __end_command(update)
 
 
@@ -592,6 +591,7 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
 
         if update.message.text == keyboards.BUTTON_OWN_CONFIG.text:
             await __get_configuration(update, command, update.effective_user.id)
+            return True
 
         elif update.message.text.lower() == keyboards.BUTTON_WG_USER_CONFIG.text:
             await update.message.reply_text((
@@ -615,15 +615,11 @@ async def __close_button_handler(update: Update, context: CallbackContext) -> bo
             ),
             parse_mode='HTML'
         )
-
-        context.user_data['command'] = None
-        context.user_data['wireguard_users'] = []
-        await __end_command(update)
         return True
     
     elif command in ('unbind_telegram_id', 'get_users_by_id', 'get_qrcode', 'get_config', 'send_config'):
         await __delete_message(update, context)
-        await cancel_command(update, context)
+        await update.message.reply_text('Действие отменено.')
         return True
     return False
 
