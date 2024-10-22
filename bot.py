@@ -57,6 +57,13 @@ async def __ensure_user_exists(telegram_id: int, update: Update) -> bool:
     return True
 
 
+async def __end_command(update: Update) -> None:
+    await update.message.reply_text(
+            'Команда завершина. Выбрать новую команду можно из меню (/menu).',
+            reply_markup=keyboards.ADMIN_MENU if update.effective_user.id in config.telegram_admin_ids else keyboards.USER_MENU
+        )
+
+
 # Команда /start
 async def start_command(update: Update, context: CallbackContext) -> None:
     telegram_id = update.effective_user.id
@@ -409,8 +416,6 @@ async def __get_configuration(update: Update, command: str, telegram_id: int) ->
     for user_name in user_names:
         await __get_user_configuration(update, command, user_name)
 
-    await __end_command(update)
-
 
 async def __get_user_configuration(update: Update, command: str, user_name: str) -> None:
     requester_telegram_id = update.effective_user.id
@@ -426,6 +431,7 @@ async def __get_user_configuration(update: Update, command: str, user_name: str)
         await update.message.reply_text(f'Конфигурация [{user_name}] на данный момент заблокирована. Пожалуйста, свяжитесь с администратором.')
         return
     
+
     if command == 'get_config':
         logger.info(f'Создаю и отправляю Zip-архив пользователя Wireguard [{user_name}] пользователю Tid [{requester_telegram_id}].')
         zip_ret_val = wireguard.create_zipfile(user_name)
@@ -456,6 +462,7 @@ async def get_config_command(update: Update, context: CallbackContext) -> None:
     
     else:
         await __get_configuration(update, command='get_config', telegram_id=telegram_id)
+        await __end_command(update)
 
 
 # Команда /get_qrcode
@@ -471,6 +478,7 @@ async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
         )
     else:
         await __get_configuration(update, command='get_qrcode', telegram_id=telegram_id)
+        await __end_command(update)
 
 
 # Обработка неизвестных команд
@@ -493,12 +501,12 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             clear_command_flag = False
             return
         
-        if update.message.text.lower() == 'закрыть':
+        if update.message.text == keyboards.BUTTON_CLOSE.text:
             if await __close_button_handler(update, context):
                 clear_command_flag = False
                 return
             
-        elif update.message.text.lower() in ('свой', 'пользователя wireguard'):
+        elif update.message.text in (keyboards.BUTTON_OWN_CONFIG.text, keyboards.BUTTON_WG_USER_CONFIG.text):
             if await __get_config_buttons_handler(update, context):
                 clear_command_flag = False
                 return
@@ -528,7 +536,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                 ret_val = await __com_user(update, entry)
             
             elif command in ('bind_user', 'send_config'):
-                ret_val = await __create_list_of_bindings(update, context, entry)
+                ret_val = await __create_list_of_wireguard_users(update, context, entry)
 
             elif command == 'unbind_user':
                 await __unbind_user(update, entry)
@@ -580,12 +588,12 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
     command = context.user_data.get('command', None)
 
     if command in ('get_qrcode', 'get_config'):
-        if update.message.text.lower() == 'свой':
-            await __get_configuration(update, command, update.effective_user.id)
-            context.user_data['command'] = None
-            return True
+        await __delete_message(update, context)
 
-        elif update.message.text.lower() == 'пользователя wireguard':
+        if update.message.text == keyboards.BUTTON_OWN_CONFIG.text:
+            await __get_configuration(update, command, update.effective_user.id)
+
+        elif update.message.text.lower() == keyboards.BUTTON_WG_USER_CONFIG.text:
             await update.message.reply_text((
                 'Пожалуйста, введите имена пользователей Wireguard, разделяя их пробелом.\n\n'
                 'Чтобы отменить ввод, используйте команду /cancel.'
@@ -699,7 +707,7 @@ async def __com_user(update: Update, user_name: str) -> Optional[wireguard_utils
     return wireguard.comment_or_uncomment_user(user_name)
 
 
-async def __create_list_of_bindings(update: Update, context: CallbackContext, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
+async def __create_list_of_wireguard_users(update: Update, context: CallbackContext, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
     if not await __validate_username(update, user_name):
         return None
 
@@ -757,8 +765,6 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
 
             elif command in ('get_qrcode', 'get_config'):
                 await __get_configuration(update, command, shared_user.user_id)
-                context.user_data['command'] = None
-                clear_command_flag = False
 
             elif command == 'send_config':
                 await __send_config(update, context, shared_user)
@@ -896,13 +902,6 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
         except TelegramError as e:
             logger.error(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
             await update.message.reply_text(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
-    
-
-async def __end_command(update: Update) -> None:
-    await update.message.reply_text(
-            'Команда завершина. Выбрать новую команду можно из меню (/menu).',
-            reply_markup=keyboards.ADMIN_MENU if update.effective_user.id in config.telegram_admin_ids else keyboards.USER_MENU
-        )
 
 
 # Основная функция для запуска бота

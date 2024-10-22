@@ -1,4 +1,16 @@
 from telegram import ReplyKeyboardMarkup, KeyboardButton, KeyboardButtonRequestUsers # type: ignore
+from dataclasses import dataclass
+
+
+@dataclass
+class KeyboardText:
+    text: str
+
+
+BUTTON_CLOSE = KeyboardText(text='Закрыть')
+BUTTON_OWN_CONFIG = KeyboardText(text='Свои')
+BUTTON_WG_USER_CONFIG = KeyboardText(text='Пользователя Wireguard')
+
 
 ADMIN_MENU = ReplyKeyboardMarkup([
         ['/add_user', '/remove_user', '/com_uncom_user', '/show_users_state'],
@@ -27,7 +39,7 @@ BIND_MENU = ReplyKeyboardMarkup([
                     request_username=True
                 )
             ),
-            'Закрыть'
+            BUTTON_CLOSE.text
         ]
     ],
     one_time_keyboard=True
@@ -43,11 +55,11 @@ CONFIG_MENU = ReplyKeyboardMarkup([
                     request_username=True
                 )
             ),
-            'Пользователя Wireguard'
+            BUTTON_WG_USER_CONFIG.text
         ],
         [
-            'Свой',
-            'Закрыть'
+            BUTTON_OWN_CONFIG.text,
+            BUTTON_CLOSE.text
         ]
     ],
     one_time_keyboard=True
@@ -63,7 +75,7 @@ SEND_MENU = ReplyKeyboardMarkup([
                     request_username=True
                 )
             ),
-            'Закрыть'
+            BUTTON_CLOSE.text
         ]
     ],
     one_time_keyboard=True
