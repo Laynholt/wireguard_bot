@@ -2,6 +2,7 @@ import logging
 import asyncio
 from typing import Optional
 
+import httpx
 from telegram.request import HTTPXRequest  # Импорт для настройки таймаута # type: ignore
 from telegram import Update, UsersShared, ReplyKeyboardRemove# type: ignore
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters# type: ignore
@@ -919,10 +920,11 @@ def main() -> None:
     # Вставьте сюда свой токен, полученный у BotFather
     token = config.telegram_token
     
-    # Создаем кастомный запрос с таймаутом
-    request = HTTPXRequest(request_timeout=30)  # Устанавливаем таймаут здесь
+    # Создаем запрос HTTPX с установленным таймаутом
+    request = HTTPXRequest(httpx.Client(timeout=httpx.Timeout(30.0)))
 
-    application = ApplicationBuilder().token(token).request(request).build()  # Увеличение таймаута
+    # Создаем приложение с пользовательским запросом
+    application = ApplicationBuilder().token(token).request(request).build()
 
     # Базовые команды
     application.add_handler(CommandHandler("start", start_command))
