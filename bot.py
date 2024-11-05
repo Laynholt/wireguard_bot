@@ -4,7 +4,7 @@ from typing import Optional
 
 from telegram import Update, UsersShared, ReplyKeyboardRemove# type: ignore
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters# type: ignore
-from telegram.error import TelegramError# type: ignore
+from telegram.error import TelegramError, NetworkError, RetryAfter, TimedOut, BadRequest# type: ignore
 
 from libs.wireguard import config
 from libs.wireguard import user_control as wireguard
@@ -900,11 +900,24 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
             await update.message.reply_text(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
 
 
+async def error_handler(update: Update, context: CallbackContext) -> None:
+    try:
+        raise context.error
+    except NetworkError:
+        logger.error("Network error occurred. Retrying...")
+    except RetryAfter as e:
+        logger.error(f"Rate limit exceeded. Retry in {e.retry_after} seconds.")
+    except TimedOut:
+        logger.error("Request timed out. Retrying...")
+    except BadRequest as e:
+        logger.error(f"Bad request: {e}")
+
+
 # Основная функция для запуска бота
 def main() -> None:
     # Вставьте сюда свой токен, полученный у BotFather
     token = config.telegram_token
-    application = ApplicationBuilder().token(token).build()
+    application = ApplicationBuilder().token(token).request_timeout(30).build()  # Увеличение таймаута
 
     # Базовые команды
     application.add_handler(CommandHandler("start", start_command))
@@ -941,6 +954,9 @@ def main() -> None:
      # Обработчик для сообщений с запросом данных пользователя
     application.add_handler(MessageHandler(filters.StatusUpdate.USER_SHARED, handle_user_request))
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+
+    # Установка обработчика ошибок
+    application.add_error_handler(error_handler)
 
     # Запуск бота
     application.run_polling()
