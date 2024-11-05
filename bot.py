@@ -2,8 +2,6 @@ import logging
 import asyncio
 from typing import Optional
 
-import httpx
-from telegram.request import HTTPXRequest  # Импорт для настройки таймаута # type: ignore
 from telegram import Update, UsersShared, ReplyKeyboardRemove# type: ignore
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters# type: ignore
 from telegram.error import TelegramError, NetworkError, RetryAfter, TimedOut, BadRequest# type: ignore
@@ -920,11 +918,17 @@ def main() -> None:
     # Вставьте сюда свой токен, полученный у BotFather
     token = config.telegram_token
     
-    # Создаем запрос HTTPX с установленным таймаутом
-    request = HTTPXRequest(httpx.Client(timeout=httpx.Timeout(30.0)))
-
-    # Создаем приложение с пользовательским запросом
-    application = ApplicationBuilder().token(token).request(request).build()
+    # Создание Application с настройками таймаутов
+    application = (
+        ApplicationBuilder()
+        .token(token)
+        .read_timeout(7)                # Максимальное время ожидания ответа от сервера Telegram
+        .write_timeout(10)               # Максимальное время на запись данных (например, при загрузке файлов)
+        .connect_timeout(5)              # Максимальное время ожидания при установке соединения
+        .pool_timeout(1)                 # Максимальное время ожидания подключения из пула
+        .get_updates_read_timeout(30)    # Время ожидания при использовании Long Polling
+        .build()
+    )
 
     # Базовые команды
     application.add_handler(CommandHandler("start", start_command))
@@ -966,7 +970,7 @@ def main() -> None:
     application.add_error_handler(error_handler)
 
     # Запуск бота
-    application.run_polling()
+    application.run_polling(timeout=10)  # Таймаут для get_updates, чтобы быстрее реагировать на ошибки
 
 
 
