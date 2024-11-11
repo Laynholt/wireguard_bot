@@ -115,9 +115,9 @@ def __get_dsn_server_ip() -> str:
 
     try:
         ipaddress.ip_address(config.dns_server_name)
-        return config.dns_server_name.strip()
+        return config.dns_server_name
     except ValueError:
-        return f'{config.local_ip}1'.strip()
+        return f'{config.local_ip}1'
 
 
 def add_user(user_name: str) -> utils.FunctionResult:
