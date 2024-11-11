@@ -112,4 +112,4 @@ def log_and_restart_wireguard():
     """
     log_wireguard_status()  # Записываем лог с выводом show_info.py
     print('Перезагружаю Wireguard...')
-    run_command('docker compose restart wireguard').return_with_print()  # Перезагрузка WireGuard
+    run_command(f'docker compose -f {config.wireguard_folder}/docker-compose.yaml restart wireguard').return_with_print()  # Перезагрузка WireGuard
