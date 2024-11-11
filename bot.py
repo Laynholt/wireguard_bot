@@ -57,7 +57,11 @@ async def __ensure_user_exists(telegram_id: int, update: Update) -> bool:
     return True
 
 
-async def __end_command(update: Update) -> None:
+async def __end_command(update: Update, context: CallbackContext) -> None:
+    # Очистка команды после выполнения
+    context.user_data['command'] = None
+    context.user_data['wireguard_users'] = []    
+    
     await update.message.reply_text(
             'Команда завершина. Выбрать новую команду можно из меню (/menu).',
             reply_markup=keyboards.ADMIN_MENU if update.effective_user.id in config.telegram_admin_ids else keyboards.USER_MENU
@@ -87,7 +91,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         messages.ADMIN_HELP if telegram_id in config.telegram_admin_ids else messages.USER_HELP,
         parse_mode='HTML'
     )
-    await __end_command(update)
+    await __end_command(update, context)
 
 
 # Команда /menu
@@ -113,7 +117,7 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
     
     logger.info(f"Отправляю ответ на команду [get_telegram_id] -> Tid [{telegram_id}].")
     await update.message.reply_text(f'Ваш id: {telegram_id}.')
-    await __end_command(update)
+    await __end_command(update, context)
 
 
 # Команда /request_new_config
@@ -131,7 +135,7 @@ async def request_new_config_command(update: Update, context: CallbackContext) -
         except TelegramError as e:
             logger.error(f"Не удалось отправить сообщение админу {admin_id}: {e}.")
 
-    await __end_command(update)
+    await __end_command(update, context)
 
 
 # Команда /get_telegram_users
@@ -161,7 +165,7 @@ async def get_telegram_users_command(update: Update, context: CallbackContext) -
 
     else:
         await update.message.reply_text(f'У бота пока нет активных Telegram пользователей.')
-    await __end_command(update)
+    await __end_command(update, context)
 
 
 # Команда /add_user
@@ -327,7 +331,7 @@ async def show_users_state_command(update: Update, context: CallbackContext) -> 
     logger.info(f'Отправляю информацию об активных и отключенных пользователях -> Tid [{from_telegram_id}].')
     # Отправляем сообщение (или несколько, если оно длинное)
     await telegram_utils.send_long_message(update, "".join(message_parts), parse_mode='HTML')
-    await __end_command(update)
+    await __end_command(update, context)
     
 
 # Команда /show_all_bindings
@@ -389,7 +393,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     logger.info(f'Отправляю информацию о привязанных и непривязанных пользователях -> Tid [{from_telegram_id}].')
     # Отправляем сообщение (или несколько, если оно длинное)
     await telegram_utils.send_long_message(update, "".join(message_parts), parse_mode='HTML')
-    await __end_command(update)
+    await __end_command(update, context)
 
 
 async def __get_configuration(update: Update, command: str, telegram_id: int) -> None:
@@ -410,7 +414,6 @@ async def __get_configuration(update: Update, command: str, telegram_id: int) ->
     if not user_names:
         logger.info(f'Пользователь Tid [{telegram_id}] не привязан ни к одной конфигурации.')
         await update.message.reply_text('Ваши конфигурации не найдены. Пожалуйста, свяжитесь с администратором для добавления новых.')
-        await __end_command(update)
         return
     
     for user_name in user_names:
@@ -462,7 +465,7 @@ async def get_config_command(update: Update, context: CallbackContext) -> None:
     
     else:
         await __get_configuration(update, command='get_config', telegram_id=telegram_id)
-        await __end_command(update)
+        await __end_command(update, context)
 
 
 # Команда /get_qrcode
@@ -478,7 +481,7 @@ async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
         )
     else:
         await __get_configuration(update, command='get_qrcode', telegram_id=telegram_id)
-        await __end_command(update)
+        await __end_command(update, context)
 
 
 # Обработка неизвестных команд
@@ -578,10 +581,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
 
     finally:
         if clear_command_flag:
-            # Очистка команды после выполнения
-            context.user_data['command'] = None
-            context.user_data['wireguard_users'] = []
-            await __end_command(update)
+            await __end_command(update, context)
 
 
 async def __get_config_buttons_handler(update: Update, context: CallbackContext) -> bool:
@@ -592,6 +592,7 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
 
         if update.message.text == keyboards.BUTTON_OWN_CONFIG.text:
             await __get_configuration(update, command, update.effective_user.id)
+            await __end_command(update, context)
             return True
 
         elif update.message.text == keyboards.BUTTON_WG_USER_CONFIG.text:
@@ -773,11 +774,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
 
     finally:
         if clear_command_flag:
-            # Очистка команды после выполнения
-            context.user_data['command'] = None
-            context.user_data['wireguard_users'] = []
-
-            await __end_command(update)
+            await __end_command(update, context)
 
 
 async def __bind_users(update: Update, context: CallbackContext, telegram_user: UsersShared) -> None:
