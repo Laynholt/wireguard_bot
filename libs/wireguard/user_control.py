@@ -111,13 +111,13 @@ def __get_dsn_server_ip() -> str:
         if not ret_val.status:
             ret_val.return_with_print()
             return f'{config.local_ip}1'
-        return ret_val.description
+        return ret_val.description.strip()
 
     try:
         ipaddress.ip_address(config.dns_server_name)
-        return config.dns_server_name
+        return config.dns_server_name.strip()
     except ValueError:
-        return f'{config.local_ip}1'
+        return f'{config.local_ip}1'.strip()
 
 
 def add_user(user_name: str) -> utils.FunctionResult:

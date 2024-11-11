@@ -507,6 +507,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             
         elif update.message.text in (keyboards.BUTTON_OWN_CONFIG.text, keyboards.BUTTON_WG_USER_CONFIG.text):
             if await __get_config_buttons_handler(update, context):
+                clear_command_flag = False
                 return
 
         elif update.message.text.lower() == '/cancel':
