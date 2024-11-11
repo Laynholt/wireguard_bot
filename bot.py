@@ -594,7 +594,7 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
             await __get_configuration(update, command, update.effective_user.id)
             return True
 
-        elif update.message.text.lower() == keyboards.BUTTON_WG_USER_CONFIG.text:
+        elif update.message.text == keyboards.BUTTON_WG_USER_CONFIG.text:
             await update.message.reply_text((
                 'Пожалуйста, введите имена пользователей Wireguard, разделяя их пробелом.\n\n'
                 'Чтобы отменить ввод, используйте команду /cancel.'
