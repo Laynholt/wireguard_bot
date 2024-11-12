@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import threading
 from typing import Optional
 
 from telegram import Update, UsersShared, ReplyKeyboardRemove# type: ignore
@@ -555,9 +556,12 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                     need_restart_wireguard = True
         
         if need_restart_wireguard:
-            wireguard_utils.log_and_restart_wireguard()
+            # Запускаем log_and_restart_wireguard в отдельном потоке и делаем его демоном
+            restart_thread = threading.Thread(target=log_and_restart_wireguard, daemon=True)
+            restart_thread.start()
+    
+            # Устанавливаем флаг в False
             need_restart_wireguard = False
-
         
         if command in ('add_user', 'bind_user'):
             if len(context.user_data['wireguard_users']):
