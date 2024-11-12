@@ -63,7 +63,7 @@ async def __end_command(update: Update, context: CallbackContext) -> None:
     context.user_data['wireguard_users'] = []    
     
     await update.message.reply_text(
-            'Команда завершина. Выбрать новую команду можно из меню (/menu).',
+            'Команда завершена. Выбрать новую команду можно из меню (/menu).',
             reply_markup=keyboards.ADMIN_MENU if update.effective_user.id in config.telegram_admin_ids else keyboards.USER_MENU
         )
 
