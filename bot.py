@@ -892,7 +892,7 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
                                     f'Wireguard [{user_name}] пользователю [@{telegram_name} ({telegram_id})].'
                                 )
                             await context.bot.send_message(chat_id=admin_id, text=text)
-                            logger.info(text)
+                            logger.info(f'Сообщение для [{admin_id}]: {text}')
                     except TelegramError as e:
                         logger.error(f"Не удалось отправить сообщение администратору {admin_id}: {e}.")
                         await update.message.reply_text(f"Не удалось отправить сообщение администратору {admin_id}: {e}.")
