@@ -557,7 +557,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
         
         if need_restart_wireguard:
             # Запускаем log_and_restart_wireguard в отдельном потоке и делаем его демоном
-            restart_thread = threading.Thread(target=log_and_restart_wireguard, daemon=True)
+            restart_thread = threading.Thread(target=wireguard_utils.log_and_restart_wireguard, daemon=True)
             restart_thread.start()
     
             # Устанавливаем флаг в False
