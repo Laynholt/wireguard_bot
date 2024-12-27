@@ -42,28 +42,38 @@ def validate_telegram_id(telegram_id: Union[str, int]) -> bool:
     return telegram_id.isdigit() if isinstance(telegram_id, str) else False
 
 
-async def send_long_message(update: Update, message: str, max_length: int = config.telegram_max_message_length, parse_mode = None):
+async def send_long_message(
+    update: Update,
+    message: str,
+    max_length: int = config.telegram_max_message_length,
+    parse_mode: Optional[str] = None,
+) -> None:
     """
-    Отправляем сообщение (или несколько, если оно длинное).
+    Отправляет сообщение (или несколько), разбивая его на части, если оно превышает ограничение.
+
     Args:
         update (Update): Объект обновления Telegram.
-        message (str): Сообщение.
-        max_length (int, optional): Максимальная длина для разбивки.
-        parse_mode (str, optional): Форматирование разметки (например, Markdown).
+        message (str): Текст, который нужно отправить.
+        max_length (int, optional): Максимальное количество символов в одном сообщении.
+        parse_mode (Optional[str], optional): Тип парсинга сообщения (Markdown, HTML и т.д.).
     """
+    if not update.message:
+        return
+
     for i in range(0, len(message), max_length):
-        await update.message.reply_text(message[i:i + max_length], parse_mode=parse_mode)
+        await update.message.reply_text(message[i : i + max_length], parse_mode=parse_mode)
 
 
 async def get_username_by_id(telegram_id: int, context: CallbackContext) -> Optional[str]:
     """
     Возвращает @username пользователя по его Telegram ID.
-    
+
     Args:
-        telegram_id (int): Telegram ID пользователя.
+        telegram_id (int): Целочисленный Telegram ID пользователя.
+        context (CallbackContext): Контекст бота для доступа к Bot API.
 
     Returns:
-        str: @username пользователя, если он существует, или None, если пользователя нет или username отсутствует.
+        Optional[str]: Строка вида "@username" или None, если имя не задано или пользователь не найден.
     """
     try:
         # Получаем информацию о чате по Telegram ID
@@ -74,35 +84,53 @@ async def get_username_by_id(telegram_id: int, context: CallbackContext) -> Opti
         return None
 
 
-async def get_username_with_limit(telegram_id: int, context: CallbackContext, semaphore: asyncio.Semaphore):
+async def get_username_with_limit(
+    telegram_id: int,
+    context: CallbackContext,
+    semaphore: asyncio.Semaphore
+) -> Optional[str]:
     """
-    Получает username пользователя по telegram_id, ограничивая количество одновременных запросов.
+    Возвращает username пользователя, используя семафор для ограничения количества параллельных запросов.
 
     Args:
         telegram_id (int): Идентификатор пользователя Telegram.
-        context: Контекст, переданный в обработчик команд.
+        context (CallbackContext): Контекст бота для доступа к Bot API.
+        semaphore (asyncio.Semaphore): Объект семафора для ограничения числа одновременных запросов.
 
     Returns:
-        str: Username пользователя или None, если имя не найдено.
+        Optional[str]: Username вида "@имя" или None, если пользователь не найден/ошибка.
     """
     async with semaphore:  # Ограничиваем количество одновременно выполняемых запросов с помощью семафора
         # Выполняем запрос к Telegram API внутри семафора
         return await get_username_by_id(telegram_id, context)
 
 
-async def get_usernames_in_bulk(telegram_ids: Iterable[int], context: CallbackContext, semaphore: asyncio.Semaphore):
+async def get_usernames_in_bulk(
+    telegram_ids: Iterable[int],
+    context: CallbackContext,
+    semaphore: asyncio.Semaphore
+) -> dict[int, Optional[str]]:
     """
-    Получает username для списка пользователей, выполняя запросы параллельно с ограничением на количество одновременных запросов.
+    Параллельно (с использованием семафора) получает username для списка Telegram ID.
 
     Args:
-        telegram_ids (list): Список идентификаторов пользователей Telegram.
-        context: Контекст, переданный в обработчик команд.
+        telegram_ids (Iterable[int]): Итерабельный набор Telegram ID пользователей.
+        context (CallbackContext): Контекст бота для доступа к Bot API.
+        semaphore (asyncio.Semaphore): Семафор для ограничения параллельных запросов.
 
     Returns:
-        dict: Словарь, где ключ — telegram_id, а значение — username.
+        dict[int, Optional[str]]: Словарь вида {telegram_id: "@username" или None}.
     """
-    # Создаем задачи для асинхронного получения username с использованием ограничения на количество запросов
-    tasks = [get_username_with_limit(telegram_id, context, semaphore) for telegram_id in telegram_ids]
-    # Выполняем все задачи параллельно с помощью asyncio.gather, возвращая результаты как список
+    # Создаем задачи для асинхронного получения username 
+    # с использованием ограничения на количество запросов
+    tasks = [
+        get_username_with_limit(tid, context, semaphore)
+        for tid in telegram_ids
+    ]
+    # Выполняем все задачи параллельно с помощью asyncio.gather,
+    # возвращая результаты как список
     usernames = await asyncio.gather(*tasks)
-    return {telegram_id: username for telegram_id, username in zip(telegram_ids, usernames)}
+    return {
+        tid: username
+        for tid, username in zip(telegram_ids, usernames)
+    }

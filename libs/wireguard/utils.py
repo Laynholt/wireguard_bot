@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Callable, Optional
 
 from . import config
-    
+from . import stats
 
 class FunctionResult:
     """
@@ -89,20 +89,32 @@ def setup_logs_directory():
 
 def log_wireguard_status():
     """
-    Создает файл лога в папке 'logs' с текущей датой и временем.
-    Выполняет команду 'python wireguard/show_info.py --sort transfer_sent' 
-    и записывает результат в лог-файл.
+    Накопительно сохраняет статистику WireGuard в JSON-файл.
+
+    Функция:
+      1. Убеждается, что папка для логов (logs) существует.
+      2. Формирует путь к файлу конфигурации (wg0.conf).
+      3. Формирует путь к JSON-файлу для накопительной статистики (stats.json).
+      4. Вызывает функцию `accumulate_wireguard_stats`, которая:
+         - Читает прежние данные из stats.json.
+         - Парсит новый вывод WireGuard (docker exec wireguard wg show wg0).
+         - Суммирует трафик (transfer_received / transfer_sent).
+         - Обновляет поле latest_handshake.
+         - Перезаписывает обновлённые данные в stats.json.
+
+    Returns:
+        None
     """
     setup_logs_directory()  # Убедиться, что папка logs существует
     
-    # Получаем текущую дату и время в формате YYYY.mm.DD_HH-MM-SS
-    timestamp = datetime.now().strftime("%Y.%m.%d_%H-%M-%S")
-    log_file_path = os.path.join(f'{config.wireguard_folder}/config/logs', f"{timestamp}.log")
+    conf_file_path = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
+    log_file_path = os.path.join(f'{config.wireguard_folder}/config/logs', "stats.json")
 
-    # Выполняем команду и записываем результат в файл
-    run_command(f'python3 show_info.py --sort transfer_sent > {log_file_path}').return_with_print()
-    
-    print(f'Лог WireGuard сохранен в файл: {log_file_path}')
+    stats.accumulate_wireguard_stats(
+        conf_file_path=conf_file_path,
+        json_file_path=log_file_path,
+        sort_by="transfer_sent"
+    )
 
 
 def log_and_restart_wireguard():
