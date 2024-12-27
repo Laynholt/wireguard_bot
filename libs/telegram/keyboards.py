@@ -8,7 +8,7 @@ from telegram import (
 )
 
 # Импорт вашего перечисления команд
-from commands import BotCommands
+from .commands import BotCommands
 
 @dataclass
 class KeyboardText:

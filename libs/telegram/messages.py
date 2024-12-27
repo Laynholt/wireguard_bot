@@ -1,4 +1,4 @@
-from commands import BotCommands
+from .commands import BotCommands
 
 ADMIN_HELLO = (
     "👋 Добро пожаловать, администратор!\n\n"
