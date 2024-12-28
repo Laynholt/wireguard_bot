@@ -93,12 +93,12 @@ def parse_wg_conf(file_path: str) -> Dict[str, Any]:
             # то имя пользователя "прячется" после '#' (или '##')
             if next_line.startswith("#"):
                 # Срезаем один или два символа '#', если нужно
-                username = next_line.lstrip("#")
+                username = next_line.lstrip("#").strip()
             else:
                 username = "Unknown"
 
         elif line.startswith("PublicKey"):
-            public_key = line.split('=')[1] + '='
+            public_key = line.split('=')[1].strip() + '='
             if username and public_key:
                 peers[public_key] = {
                     "username": username,
