@@ -14,6 +14,7 @@ from telegram.ext import (
 from telegram.error import TelegramError, NetworkError, RetryAfter, TimedOut, BadRequest  # type: ignore
 
 from libs.wireguard import config
+from libs.wireguard import stats as wireguard_stats
 from libs.wireguard import user_control as wireguard
 from libs.wireguard import utils as wireguard_utils
 
@@ -656,7 +657,7 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
         return
 
     # Получаем полную статистику
-    all_wireguard_stats = wireguard.stats.accumulate_wireguard_stats(
+    all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
         conf_file_path=config.wireguard_config_filepath,
         json_file_path=config.wireguard_log_filepath,
         sort_by="transfer_sent",
@@ -719,7 +720,7 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     (Telegram ID и username). Если владелец не привязан, выводит соответствующую пометку.
     """
     # Сначала получаем всю статистику
-    all_wireguard_stats = wireguard.stats.accumulate_wireguard_stats(
+    all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
         conf_file_path=config.wireguard_config_filepath,
         json_file_path=config.wireguard_log_filepath,
         sort_by="transfer_sent",
