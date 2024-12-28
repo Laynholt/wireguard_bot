@@ -52,7 +52,7 @@ def __error_exit(user_name: str) -> None:
     """
     filename = config.wireguard_config_filepath
     command = (
-        f'docker exec -it wireguard bash -c "' 
+        f'docker exec wireguard bash -c "' 
         f'rm -r /config/{user_name}'
     )
     utils.run_command(command).return_with_print()
@@ -152,7 +152,7 @@ def add_user(user_name: str) -> utils.FunctionResult:
         print(f'Создаю ключи для [{user_name}]...')
 
         command = (
-            f'docker exec -i wireguard sh -c "' 
+            f'docker exec wireguard bash -c "' 
             f'mkdir -m 777 /config/{user_name} && ' 
             f'wg genkey | tee /config/{user_name}/privatekey-{user_name} | ' 
             f'wg pubkey | tee /config/{user_name}/publickey-{user_name} && ' 
@@ -231,7 +231,7 @@ def add_user(user_name: str) -> utils.FunctionResult:
                                       error_handler=lambda: __error_exit(user_name))
         
         command = (
-            f'docker exec -it wireguard bash -c "' 
+            f'docker exec wireguard bash -c "' 
             f'qrencode -t png -o /config/{user_name}/{user_name}.png -r /config/{user_name}/{user_name}.conf"'
         )
         utils.run_command(command).return_with_print()
@@ -241,7 +241,7 @@ def add_user(user_name: str) -> utils.FunctionResult:
         print(f'Вывожу конфиг пользователя {user_name}:\n')
         command = (
             f'cat {config.wireguard_folder}/config/{user_name}/{user_name}.conf &&' 
-            f'docker exec -it wireguard bash -c "' 
+            f'docker exec wireguard bash -c "' 
             f'qrencode -t ansiutf8 < /config/{user_name}/{user_name}.conf ;' 
             f'rm /config/wg_confs/wg0.conf.bak"'
         )
@@ -255,7 +255,7 @@ def add_user(user_name: str) -> utils.FunctionResult:
         gid = user_info.pw_gid
 
         utils.run_command(
-            f'docker exec -it wireguard bash -c "'
+            f'docker exec wireguard bash -c "'
             f'chmod 700 /config/{user_name} && '
             f'chown -R {uid}:{gid} /config/{user_name}"'
         ).return_with_print()
@@ -507,7 +507,7 @@ def print_user_qrcode(user_name: str) -> utils.FunctionResult:
                               description=f"Пользователь с именем [{user_name}] был некорректно создан и не имеет конфигурационного файла!")
     
     command = (
-        f'docker exec -it wireguard bash -c "'
+        f'docker exec wireguard bash -c "'
         f'qrencode -t ansiutf8 < /config/{user_name}/{user_name}.conf"'
     )
     utils.run_command(command).return_with_print()
