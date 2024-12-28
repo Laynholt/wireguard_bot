@@ -1,12 +1,14 @@
 import os
 import re
 import pwd
+from typing import List
 import zipfile
 import ipaddress
 from enum import Enum
 
 from . import config
 from . import utils
+from . import stats
 
 
 class UserModifyType(Enum):
@@ -333,6 +335,32 @@ def __remove_user_from_config(user_name: str) -> utils.FunctionResult:
                                   description=f'Не удалось открыть файл [{filename}] для редактирования.')
 
 
+def __remove_user_from_logs(user_name: str) -> utils.FunctionResult:
+    """
+    Удаляет информацию о пользователе из файла логов WireGuard.
+
+    Args:
+        user_name (str): Имя пользователя, чьи данные должны быть удалены из файла логов WireGuard.
+
+    Returns:
+        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
+    """
+    # Загружаем логи
+    logs_data = stats.read_previous_results_json(config.wireguard_log_filepath)
+    
+    # Удаляем пользователя из логов
+    if user_name in logs_data:
+        del logs_data[user_name]
+        
+        # Перезаписываем лог
+        stats.write_results_json(config.wireguard_log_filepath, logs_data)
+        return utils.FunctionResult(status=False,
+                                    description=f'Пользователь [{user_name}] успешно удален из логов.')
+    else:
+        return utils.FunctionResult(status=False,
+                                    description=f'Пользователь [{user_name}] отсутствует в файле логов.')
+        
+
 def __change_folder_state(user_name: str, action_type: ActionType) -> utils.FunctionResult:
     """
     Меняет состояние папки конфигурации пользователя (добавляет или удаляет префикс '+').
@@ -447,6 +475,7 @@ def __modify_user(user_name: str, modify_type: UserModifyType) -> utils.Function
     if modify_type == UserModifyType.REMOVE:
         print(f'Удаляю [{user_name}] из конфига сервера...')
         ret_val = __remove_user_from_config(user_name).return_with_print()
+        __remove_user_from_logs(user_name).return_with_print()
     elif modify_type == UserModifyType.COMMENT_UNCOMMENT:
         text = 'Комментирую' if com_uncom_var == ActionType.COMMENT else 'Раскомментирую'
         print(f'{text} [{user_name}] в конфиге сервера...')
@@ -624,7 +653,7 @@ def get_qrcode_path(user_name: str) -> utils.FunctionResult:
     return utils.FunctionResult(status=False, description=f'Не удалось найти файл Qr-кода для [{user_name}].').return_with_print(add_to_print=f'[{50*"-"}]\n')
 
 
-def get_usernames() -> list:
+def get_usernames() -> List[str]:
     """
     Возвращем имена конфигов всех пользователей Wireguard.
 
@@ -634,7 +663,7 @@ def get_usernames() -> list:
     return [__strip_bad_symbols(user_name) for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names]
 
 
-def get_active_usernames() -> list:
+def get_active_usernames() -> List[str]:
     """
     Возвращем имена конфигов активных пользователей Wireguard.
 
@@ -644,7 +673,7 @@ def get_active_usernames() -> list:
     return [user_name for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names and '+' not in user_name]
 
 
-def get_inactive_usernames() -> list:
+def get_inactive_usernames() -> List[str]:
     """
     Возвращем имена конфигов отключенных пользователей Wireguard.
 
