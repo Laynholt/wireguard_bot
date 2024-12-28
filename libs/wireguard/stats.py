@@ -49,26 +49,6 @@ class WgPeerList(BaseModel):
         """
         return any(peer.username == username for peer in self.peers)
     
-    def sort_peers(self, sort_by: SortBy) -> None:
-        """
-        Inline-сортировка по одному из двух критериев: 
-        1) ALLOWED_IPS
-        2) TRANSFER_SENT
-        """
-        if sort_by == SortBy.ALLOWED_IPS:
-            def sort_key_ips(peer: WgPeer):
-                if peer.data.allowed_ips:
-                    return ipaddress.ip_network(peer.data.allowed_ips.split("/")[0])
-                return ipaddress.ip_network("0.0.0.0/32")
-
-            self.peers.sort(key=sort_key_ips)
-
-        elif sort_by == SortBy.TRANSFER_SENT:
-            self.peers.sort(
-                key=lambda p: _convert_transfer_to_bytes(p.data.transfer_sent or "0 B"),
-                reverse=True
-            )
-    
 
 def parse_wg_conf(file_path: str) -> Dict[str, Any]:
     """
@@ -183,7 +163,7 @@ def __process_peer_block(block: List[str], peers: Dict[str, Any]) -> Union[WgPee
     ) 
 
 
-def _convert_transfer_to_bytes(transfer: Optional[str]) -> int:
+def __convert_transfer_to_bytes(transfer: Optional[str]) -> int:
     """
     Преобразует строку (например, "6.23 GiB") в байты.
 
@@ -200,7 +180,7 @@ def _convert_transfer_to_bytes(transfer: Optional[str]) -> int:
     return int(float(size_str) * units[unit])
 
 
-def _convert_bytes_to_human_readable(num_bytes: int) -> str:
+def __convert_bytes_to_human_readable(num_bytes: int) -> str:
     """
     Преобразует байты в формат GiB (например, "123.45 GiB").
     """
@@ -208,16 +188,14 @@ def _convert_bytes_to_human_readable(num_bytes: int) -> str:
     return f"{gib_value:.2f} GiB"
 
 
-def collect_peer_data(peers: Dict[str, Any], sort_by: Optional[SortBy] = None) -> WgPeerList:
+def collect_peer_data(peers: Dict[str, Any]) -> WgPeerList:
     """
     1. Получает «сырой» вывод wg show из Docker (wg0).
     2. Разбивает на блоки (peer: ...), вызывает process_peer_block(...) для каждого.
-    3. Сортирует список, если задан sort_by.
-    4. Возвращает список WgPeer (по каждому пир-юзеру).
+    3. Возвращает список WgPeer (по каждому пир-юзеру).
 
     Args:
         peers (Dict[str, Any]): Словарь {public_key: {username: username, available: available}, ...} из parse_wg_conf.
-        sort_by (Optional[str]): Поле, по которому сортировать ("allowed_ips" или "transfer_sent").
 
     Returns:
         Объект типа WgPeerList.
@@ -245,55 +223,7 @@ def collect_peer_data(peers: Dict[str, Any], sort_by: Optional[SortBy] = None) -
         if processed_peer_block:
             peer_blocks.peers.append(processed_peer_block)
 
-    if sort_by:
-        peer_blocks.sort_peers(sort_by)
-
     return peer_blocks
-
-
-def __display_peer_list(peer_list: WgPeerList) -> None:
-    """
-    Выводит (print) информацию о каждом пире из списка WgPeer.
-
-    Args:
-        peer_list (WgPeerList): Список WgPeer, возвращаемый collect_peer_data().
-    """
-    if not peer_list:
-        print("Нет данных по ни одному конфигу.")
-        return
-    
-    ORANGE = '\033[33m'
-    RED = '\033[31m'
-    RESET = '\033[0m'
-
-    for i, peer in enumerate(peer_list.peers, start=1):
-        username_colored = f"{ORANGE}{peer.username}{RESET}"
-        not_available = f'{RED}[Временно недоступен]{RESET}'
-        print(f"{i:2}] User: {username_colored} ({peer.public_key}) {not_available if not peer.available else ''}")
-
-        if peer.data.allowed_ips:
-            print(f"  allowed ips: {peer.data.allowed_ips}")
-        if peer.data.endpoint:
-            print(f"  endpoint: {peer.data.endpoint}")
-        if peer.data.latest_handshake:
-            print(f"  latest handshake: {peer.data.latest_handshake}")
-        if peer.data.transfer_received and peer.data.transfer_sent:
-            print(f"  transfer: {peer.data.transfer_received} received, {peer.data.transfer_sent} sent")
-
-        print()
-
-
-def display_wg_status_with_names(peers: Dict[str, Any], sort_by: Optional[str] = None) -> None:
-    """
-    Функция, оставленная для совместимости,
-    которая теперь просто вызывает collect_peer_data(...) + display_peer_list(...).
-
-    Args:
-        peers (Dict[str, Any]): Словарь {public_key: {username: username, available: available}, ...}.
-        sort_by (Optional[str]): "allowed_ips" или "transfer_sent".
-    """
-    peer_list = collect_peer_data(peers, sort_by=sort_by)
-    __display_peer_list(peer_list)
 
     
 def write_data_to_json(file_path: str, data: Dict[str, WgPeerData]) -> None:
@@ -351,15 +281,15 @@ def __merge_results(
         new_received = new_info.transfer_received or "0 B"
         new_sent = new_info.transfer_sent or "0 B"
 
-        sum_received = _convert_transfer_to_bytes(old_received) + _convert_transfer_to_bytes(new_received)
-        sum_sent = _convert_transfer_to_bytes(old_sent) + _convert_transfer_to_bytes(new_sent)
+        sum_received = __convert_transfer_to_bytes(old_received) + __convert_transfer_to_bytes(new_received)
+        sum_sent = __convert_transfer_to_bytes(old_sent) + __convert_transfer_to_bytes(new_sent)
 
         # Обновляем latest_handshake
         merged[user].latest_handshake = new_info.latest_handshake or "N/A"
 
         # Сохраняем суммированный трафик
-        merged[user].transfer_received = _convert_bytes_to_human_readable(sum_received)
-        merged[user].transfer_sent = _convert_bytes_to_human_readable(sum_sent)
+        merged[user].transfer_received = __convert_bytes_to_human_readable(sum_received)
+        merged[user].transfer_sent = __convert_bytes_to_human_readable(sum_sent)
 
         # При желании обновляем и другие поля
         if new_info.allowed_ips:
@@ -442,7 +372,7 @@ def __sort_merged_data(merged_data: Dict[str, WgPeerData], sort_by: SortBy) -> D
         # Сортируем по объёму переданных данных (по убыванию)
         sorted_keys = sorted(
             merged_data.keys(),
-            key=lambda k: _convert_transfer_to_bytes(merged_data[k].transfer_sent or "0 B"),
+            key=lambda k: __convert_transfer_to_bytes(merged_data[k].transfer_sent or "0 B"),
             reverse=True
         )
     else:
