@@ -61,7 +61,7 @@ class WgPeerList(BaseModel):
             )
     
 
-def parse_wg_conf(file_path: str) -> dict:
+def parse_wg_conf(file_path: str) -> Dict[str, Any]:
     """
     Парсит файл конфигурации WireGuard для извлечения списка пиров и их публичных ключей.
 
@@ -69,7 +69,7 @@ def parse_wg_conf(file_path: str) -> dict:
         file_path (str): Путь к файлу wg0.conf.
 
     Returns:
-        dict: Словарь, где ключи - публичные ключи пиров, значения - имена пользователей.
+        Dict[str, Any]: Словарь, где ключи - публичные ключи пиров, значения - имена пользователей и статус конфига.
     """
     peers = {}
     with open(file_path, 'r', encoding="utf-8") as f:

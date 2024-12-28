@@ -28,8 +28,8 @@ if __name__ == "__main__":
 
         sort_option = input("Enter choice (1 or 2): ").strip()
         if sort_option == "1":
-            stats.display_wg_status_with_names(peers, sort_by="allowed_ips")
+            stats.display_wg_status_with_names(peers, sort_by=stats.SortBy.ALLOWED_IPS)
         elif sort_option == "2":
-            stats.display_wg_status_with_names(peers, sort_by="transfer_sent")
+            stats.display_wg_status_with_names(peers, sort_by=stats.SortBy.TRANSFER_SENT)
         else:
             print("Invalid choice")
