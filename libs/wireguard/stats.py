@@ -8,6 +8,8 @@ from typing import Optional, List, Dict, Any, Union
 from enum import Enum
 from pydantic import BaseModel
 
+from . import user_control
+
 class WgPeerData(BaseModel):
     """
     Модель для хранения дополнительной информации о Peer (WireGuard).
@@ -40,6 +42,13 @@ class WgPeerList(BaseModel):
     """
     peers: List[WgPeer] = []
     
+    def __contains__(self, username: str) -> bool:
+        """
+        Позволяет писать: if username in wg_peer_list:
+          - True, если в self.peers есть WgPeer с таким username.
+        """
+        return any(peer.username == username for peer in self.peers)
+    
     def sort_peers(self, sort_by: SortBy) -> None:
         """
         Inline-сортировка по одному из двух критериев: 
@@ -56,7 +65,7 @@ class WgPeerList(BaseModel):
 
         elif sort_by == SortBy.TRANSFER_SENT:
             self.peers.sort(
-                key=lambda p: convert_transfer_to_bytes(p.data.transfer_sent or "0 B"),
+                key=lambda p: __convert_transfer_to_bytes(p.data.transfer_sent or "0 B"),
                 reverse=True
             )
     
@@ -111,7 +120,7 @@ def parse_wg_conf(file_path: str) -> Dict[str, Any]:
     return peers
 
 
-def get_wg_status_from_docker() -> str:
+def __get_wg_status_from_docker() -> str:
     """
     Выполняет команду wg show в Docker-контейнере WireGuard и возвращает вывод.
 
@@ -123,7 +132,7 @@ def get_wg_status_from_docker() -> str:
     return result.stdout.decode('utf-8')
 
 
-def process_peer_block(block: List[str], peers: Dict[str, Any]) -> Union[WgPeer,  None]:
+def __process_peer_block(block: List[str], peers: Dict[str, Any]) -> Union[WgPeer,  None]:
     """
     ООбрабатывает блок строк (peer: ..., endpoint: ..., etc.), 
     возвращает объект WgPeer с заполненными полями.
@@ -174,7 +183,7 @@ def process_peer_block(block: List[str], peers: Dict[str, Any]) -> Union[WgPeer,
     ) 
 
 
-def convert_transfer_to_bytes(transfer: Optional[str]) -> int:
+def __convert_transfer_to_bytes(transfer: Optional[str]) -> int:
     """
     Преобразует строку (например, "6.23 GiB") в байты.
 
@@ -191,7 +200,7 @@ def convert_transfer_to_bytes(transfer: Optional[str]) -> int:
     return int(float(size_str) * units[unit])
 
 
-def convert_bytes_to_human_readable(num_bytes: int) -> str:
+def __convert_bytes_to_human_readable(num_bytes: int) -> str:
     """
     Преобразует байты в формат GiB (например, "123.45 GiB").
     """
@@ -213,7 +222,7 @@ def collect_peer_data(peers: Dict[str, Any], sort_by: Optional[SortBy] = None) -
     Returns:
         Объект типа WgPeerList.
     """
-    wg_status = get_wg_status_from_docker()
+    wg_status = __get_wg_status_from_docker()
     lines = wg_status.splitlines()
     
     peer_blocks: WgPeerList = WgPeerList()
@@ -222,7 +231,7 @@ def collect_peer_data(peers: Dict[str, Any], sort_by: Optional[SortBy] = None) -
     for line in lines:
         if line.startswith("peer:"):
             if current_peer_block:
-                processed_peer_block = process_peer_block(current_peer_block, peers)
+                processed_peer_block = __process_peer_block(current_peer_block, peers)
                 if processed_peer_block:
                     peer_blocks.peers.append(processed_peer_block)
                 current_peer_block = []
@@ -232,7 +241,7 @@ def collect_peer_data(peers: Dict[str, Any], sort_by: Optional[SortBy] = None) -
 
     # Обработать последний блок
     if current_peer_block:
-        processed_peer_block = process_peer_block(current_peer_block, peers)
+        processed_peer_block = __process_peer_block(current_peer_block, peers)
         if processed_peer_block:
             peer_blocks.peers.append(processed_peer_block)
 
@@ -242,21 +251,25 @@ def collect_peer_data(peers: Dict[str, Any], sort_by: Optional[SortBy] = None) -
     return peer_blocks
 
 
-def display_peer_list(peer_list: WgPeerList) -> None:
+def __display_peer_list(peer_list: WgPeerList) -> None:
     """
     Выводит (print) информацию о каждом пире из списка WgPeer.
 
     Args:
         peer_list (WgPeerList): Список WgPeer, возвращаемый collect_peer_data().
     """
+    if not peer_list:
+        print("Нет данных по ни одному конфигу.")
+        return
+    
     ORANGE = '\033[33m'
     RED = '\033[31m'
     RESET = '\033[0m'
 
-    for peer in peer_list.peers:
+    for i, peer in enumerate(peer_list.peers, start=1):
         username_colored = f"{ORANGE}{peer.username}{RESET}"
         not_available = f'{RED}[Временно недоступен]{RESET}'
-        print(f"User: {username_colored} ({peer.public_key}) {not_available if not peer.available else ''}")
+        print(f"{i:2}] User: {username_colored} ({peer.public_key}) {not_available if not peer.available else ''}")
 
         if peer.data.allowed_ips:
             print(f"  allowed ips: {peer.data.allowed_ips}")
@@ -280,7 +293,7 @@ def display_wg_status_with_names(peers: Dict[str, Any], sort_by: Optional[str] =
         sort_by (Optional[str]): "allowed_ips" или "transfer_sent".
     """
     peer_list = collect_peer_data(peers, sort_by=sort_by)
-    display_peer_list(peer_list)
+    __display_peer_list(peer_list)
 
     
 def write_data_to_json(file_path: str, data: Dict[str, WgPeerData]) -> None:
@@ -315,7 +328,7 @@ def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
     return result
 
 
-def merge_results(
+def __merge_results(
     old_data: Dict[str, WgPeerData],
     new_data: Dict[str, WgPeerData]
 ) -> Dict[str, WgPeerData]:
@@ -338,15 +351,15 @@ def merge_results(
         new_received = new_info.transfer_received or "0 B"
         new_sent = new_info.transfer_sent or "0 B"
 
-        sum_received = convert_transfer_to_bytes(old_received) + convert_transfer_to_bytes(new_received)
-        sum_sent = convert_transfer_to_bytes(old_sent) + convert_transfer_to_bytes(new_sent)
+        sum_received = __convert_transfer_to_bytes(old_received) + __convert_transfer_to_bytes(new_received)
+        sum_sent = __convert_transfer_to_bytes(old_sent) + __convert_transfer_to_bytes(new_sent)
 
         # Обновляем latest_handshake
         merged[user].latest_handshake = new_info.latest_handshake or "N/A"
 
         # Сохраняем суммированный трафик
-        merged[user].transfer_received = convert_bytes_to_human_readable(sum_received)
-        merged[user].transfer_sent = convert_bytes_to_human_readable(sum_sent)
+        merged[user].transfer_received = __convert_bytes_to_human_readable(sum_received)
+        merged[user].transfer_sent = __convert_bytes_to_human_readable(sum_sent)
 
         # При желании обновляем и другие поля
         if new_info.allowed_ips:
@@ -400,5 +413,39 @@ def accumulate_wireguard_stats(
         )
 
     # 5. Суммируем
-    merged = merge_results(old_data, new_data)
+    merged = __merge_results(old_data, new_data)
     return merged
+
+
+def display_merged_data(merged_data: Dict[str, WgPeerData]) -> None:
+    """
+    Выводит (print) информацию о каждом пире из переданного словаря.
+
+    Args:
+        merged_data (Dict[str, WgPeerData]): Объединенные данные после функции accumulate_wireguard_stats().
+    """
+    if not merged_data:
+        print("Нет данных по ни одному конфигу.")
+        return
+    
+    ORANGE = '\033[33m'
+    RED = '\033[31m'
+    RESET = '\033[0m'
+
+    commented_users = user_control.get_inactive_usernames()
+
+    for i, (user_name, user_data) in enumerate(merged_data.items(), start=1):
+        username_colored = f"{ORANGE}{user_name}{RESET}"
+        not_available = f'{RED}[Временно недоступен]{RESET}'
+        print(f"{i:2}] User: {username_colored} {not_available if user_name in commented_users else ''}")
+
+        if user_data.allowed_ips:
+            print(f"  allowed ips: {user_data.allowed_ips}")
+        if user_data.endpoint:
+            print(f"  endpoint: {user_data.endpoint}")
+        if user_data.latest_handshake:
+            print(f"  latest handshake: {user_data.latest_handshake}")
+        if user_data.transfer_received and user_data.transfer_sent:
+            print(f"  transfer: {user_data.transfer_received} received, {user_data.transfer_sent} sent")
+
+        print()
