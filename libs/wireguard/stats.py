@@ -65,7 +65,7 @@ class WgPeerList(BaseModel):
 
         elif sort_by == SortBy.TRANSFER_SENT:
             self.peers.sort(
-                key=lambda p: __convert_transfer_to_bytes(p.data.transfer_sent or "0 B"),
+                key=lambda p: _convert_transfer_to_bytes(p.data.transfer_sent or "0 B"),
                 reverse=True
             )
     
@@ -183,7 +183,7 @@ def __process_peer_block(block: List[str], peers: Dict[str, Any]) -> Union[WgPee
     ) 
 
 
-def __convert_transfer_to_bytes(transfer: Optional[str]) -> int:
+def _convert_transfer_to_bytes(transfer: Optional[str]) -> int:
     """
     Преобразует строку (например, "6.23 GiB") в байты.
 
@@ -200,7 +200,7 @@ def __convert_transfer_to_bytes(transfer: Optional[str]) -> int:
     return int(float(size_str) * units[unit])
 
 
-def __convert_bytes_to_human_readable(num_bytes: int) -> str:
+def _convert_bytes_to_human_readable(num_bytes: int) -> str:
     """
     Преобразует байты в формат GiB (например, "123.45 GiB").
     """
@@ -351,15 +351,15 @@ def __merge_results(
         new_received = new_info.transfer_received or "0 B"
         new_sent = new_info.transfer_sent or "0 B"
 
-        sum_received = __convert_transfer_to_bytes(old_received) + __convert_transfer_to_bytes(new_received)
-        sum_sent = __convert_transfer_to_bytes(old_sent) + __convert_transfer_to_bytes(new_sent)
+        sum_received = _convert_transfer_to_bytes(old_received) + _convert_transfer_to_bytes(new_received)
+        sum_sent = _convert_transfer_to_bytes(old_sent) + _convert_transfer_to_bytes(new_sent)
 
         # Обновляем latest_handshake
         merged[user].latest_handshake = new_info.latest_handshake or "N/A"
 
         # Сохраняем суммированный трафик
-        merged[user].transfer_received = __convert_bytes_to_human_readable(sum_received)
-        merged[user].transfer_sent = __convert_bytes_to_human_readable(sum_sent)
+        merged[user].transfer_received = _convert_bytes_to_human_readable(sum_received)
+        merged[user].transfer_sent = _convert_bytes_to_human_readable(sum_sent)
 
         # При желании обновляем и другие поля
         if new_info.allowed_ips:
