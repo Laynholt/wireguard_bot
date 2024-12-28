@@ -664,18 +664,13 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     )
 
     lines = []
-    shift_index = 0
-
+    inactive_usernames = wireguard.get_inactive_usernames()
+    
     for i, wg_user in enumerate(wireguard_users, start=1):
         user_data = all_wireguard_stats.get(wg_user, None)
 
         # Случай, когда статистики для пользователя нет
         if user_data is None:
-            # Возможно, пользователь закомментирован?
-            if wireguard.is_username_commented(wg_user):
-                lines.append(f"{i - shift_index}] Конфиг [{wg_user}] временно недоступен.\n")
-                continue
-
             # Проверяем, существует ли конфиг этого пользователя фактически
             check_result = wireguard.check_user_exists(wg_user)
             if check_result.status:
@@ -693,15 +688,14 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
                     f"Не удалось удалить информацию о пользователе [{wg_user}] из базы данных."
                 )
 
-            shift_index += 1
             continue
 
         # Если всё в порядке, формируем строку со статистикой
         lines.append(
-            f"{i - shift_index}] Конфиг: {wg_user}\n"
-            f"   IP: {user_data['allowed_ips']}\n"
-            f"   Отправлено: {user_data['transfer_sent']}\n"
-            f"   Получено: {user_data['transfer_received']}\n"
+            f"{i}] Конфиг: {wg_user} {'[Временно недоступен]' if wg_user in inactive_usernames else ''}\n"
+            f"   IP: {user_data.allowed_ips}\n"
+            f"   Отправлено: {user_data.transfer_sent}\n"
+            f"   Получено: {user_data.transfer_received}\n"
         )
 
     logger.info(f"Отправляю статистику по личным конфигам Wireguard -> Tid [{telegram_id}].")
@@ -747,6 +741,8 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     )
 
     lines = []
+    inactive_usernames = wireguard.get_inactive_usernames()
+    
     for i, (wg_user, user_data) in enumerate(all_wireguard_stats.items(), start=1):
         owner_tid = linked_dict.get(wg_user)
         if owner_tid is not None:
@@ -756,10 +752,10 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
             owner_part = " [Нет владельца]"
 
         lines.append(
-            f"{i}] Конфиг: {wg_user}{owner_part}\n"
-            f"   IP: {user_data['allowed_ips']}\n"
-            f"   Отправлено: {user_data['transfer_sent']}\n"
-            f"   Получено: {user_data['transfer_received']}\n"
+            f"{i}] Конфиг: {wg_user}{owner_part} {'[Временно недоступен]' if wg_user in inactive_usernames else ''}\n"
+            f"   IP: {user_data.allowed_ips}\n"
+            f"   Отправлено: {user_data.transfer_sent}\n"
+            f"   Получено: {user_data.transfer_received}\n"
         )
 
     logger.info(f"Отправляю статистику по всем конфигам Wireguard -> Tid [{update.effective_user.id}].")

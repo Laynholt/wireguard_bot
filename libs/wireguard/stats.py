@@ -3,8 +3,63 @@ import subprocess
 
 import json
 import ipaddress
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
+from enum import Enum
+from pydantic import BaseModel
+
+class WgPeerData(BaseModel):
+    """
+    Модель для хранения дополнительной информации о Peer (WireGuard).
+    """
+    allowed_ips: Optional[str] = None
+    endpoint: Optional[str] = None
+    latest_handshake: Optional[str] = None
+    transfer_received: Optional[str] = None
+    transfer_sent: Optional[str] = None
+
+class WgPeer(BaseModel):
+    """
+    Модель для хранения основных данных о Peer (WireGuard).
+    """
+    public_key: str
+    username: str
+    available: bool
+    data: Optional[WgPeerData] = None
+
+class SortBy(str, Enum):
+    """
+    Перечисление вариантов сортировки списка WgPeer.
+    """
+    ALLOWED_IPS = "allowed_ips"
+    TRANSFER_SENT = "transfer_sent"
+
+class WgPeerList(BaseModel):
+    """
+    Модель для хранения списка Peer`ов (WireGuard).
+    """
+    peers: List[WgPeer] = []
+    
+    def sort_peers(self, sort_by: SortBy) -> None:
+        """
+        Inline-сортировка по одному из двух критериев: 
+        1) ALLOWED_IPS
+        2) TRANSFER_SENT
+        """
+        if sort_by == SortBy.ALLOWED_IPS:
+            def sort_key_ips(peer: WgPeer):
+                if peer.data.allowed_ips:
+                    return ipaddress.ip_network(peer.data.allowed_ips.split("/")[0])
+                return ipaddress.ip_network("0.0.0.0/32")
+
+            self.peers.sort(key=sort_key_ips)
+
+        elif sort_by == SortBy.TRANSFER_SENT:
+            self.peers.sort(
+                key=lambda p: convert_transfer_to_bytes(p.data.transfer_sent or "0 B"),
+                reverse=True
+            )
+    
 
 def parse_wg_conf(file_path: str) -> dict:
     """
@@ -17,28 +72,42 @@ def parse_wg_conf(file_path: str) -> dict:
         dict: Словарь, где ключи - публичные ключи пиров, значения - имена пользователей.
     """
     peers = {}
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
+    with open(file_path, 'r', encoding="utf-8") as f:
+        lines = [line.strip() for line in f]
 
     username = None
     public_key = None
+    available = True
+    
     for i, line in enumerate(lines):
-        line = line.strip()
-        if line == "[Peer]":
-            # Следующая строка, предположительно, это комментарий с именем пользователя
-            username_line = lines[i + 1].strip()
-            if username_line.startswith("#"):
-                username = username_line[1:].strip()  # Извлекаем имя пользователя
-            else:
-                username = "Unknown"  # Если комментарий отсутствует
-        elif line.startswith("PublicKey"):
-            public_key = line.split('=')[1].strip() + '='  # Обрабатываем публичный ключ
-            if username and public_key:
-                peers[public_key] = username
+        # Проверяем, является ли строка "[Peer]" (или "#[Peer]")
+        if line.endswith("[Peer]"):
+            # Определяем, закомментирована ли
+            is_commented = line.startswith("#")
+            available = not is_commented
 
-            # Сбрасываем значения для следующего пира
+            # Безопасно получаем следующую строку, если существует
+            next_line = lines[i+1] if i+1 < len(lines) else ""
+
+            # Если следующая строка начинается с '#',
+            # то имя пользователя "прячется" после '#' (или '##')
+            if next_line.startswith("#"):
+                # Срезаем один или два символа '#', если нужно
+                username = next_line.lstrip("#")
+            else:
+                username = "Unknown"
+
+        elif line.startswith("PublicKey"):
+            public_key = line.split('=')[1] + '='
+            if username and public_key:
+                peers[public_key] = {
+                    "username": username,
+                    "available": available
+                }
+            # Сбрасываем для следующего пира
             username = None
             public_key = None
+
     return peers
 
 
@@ -54,16 +123,17 @@ def get_wg_status_from_docker() -> str:
     return result.stdout.decode('utf-8')
 
 
-def process_peer_block(block: List[str], peers: dict) -> dict:
+def process_peer_block(block: List[str], peers: Dict[str, Any]) -> Union[WgPeer,  None]:
     """
-    Обрабатывает блок (строки) о пире для извлечения необходимых данных.
+    ООбрабатывает блок строк (peer: ..., endpoint: ..., etc.), 
+    возвращает объект WgPeer с заполненными полями.
 
     Args:
         block (List[str]): Список строк (peer: ..., endpoint: ..., etc.)
-        peers (dict): Словарь {public_key: username, ...}
+        peers (Dict[str, Any]): Словарь {public_key: {username: username, available: available}, ...}
 
     Returns:
-        dict: Словарь с полями ('username', 'latest_handshake', 'transfer_received', 'transfer_sent', и др.)
+        dict: Объект WgPeer с заполненными полями или None, если пользователь не найден в конфиге.
     """
     public_key = block[0].split("peer:")[1].strip()
 
@@ -86,17 +156,22 @@ def process_peer_block(block: List[str], peers: dict) -> dict:
             transfer_received = transfer_received.strip()
             transfer_sent = transfer_sent.strip().replace("sent", "").strip()
 
-    user_info = peers.get(public_key, "Unknown")
+    user_info = peers.get(public_key)
+    if user_info is None:
+        return None
 
-    return {
-        'public_key': public_key,
-        'username': user_info,
-        'allowed_ips': allowed_ips,
-        'endpoint': endpoint,
-        'latest_handshake': latest_handshake,
-        'transfer_received': transfer_received,
-        'transfer_sent': transfer_sent
-    }
+    return WgPeer(
+        public_key=public_key,
+        username=user_info['username'],
+        available=user_info['available'],
+        data=WgPeerData(
+            allowed_ips=allowed_ips,
+            endpoint=endpoint,
+            latest_handshake=latest_handshake,
+            transfer_received=transfer_received,
+            transfer_sent=transfer_sent   
+        )
+    ) 
 
 
 def convert_transfer_to_bytes(transfer: Optional[str]) -> int:
@@ -116,135 +191,6 @@ def convert_transfer_to_bytes(transfer: Optional[str]) -> int:
     return int(float(size_str) * units[unit])
 
 
-def collect_peer_data(peers: dict, sort_by: Optional[str] = None) -> List[dict]:
-    """
-    1. Получает «сырой» вывод wg show из Docker (wg0).
-    2. Разбивает на блоки (peer: ...), вызывает process_peer_block(...) для каждого.
-    3. Сортирует список, если задан sort_by (allowed_ips или transfer_sent).
-    4. Возвращает список словарей (по каждому пир-юзеру).
-
-    Args:
-        peers (dict): Словарь {public_key: username, ...} из parse_wg_conf.
-        sort_by (Optional[str]): Поле, по которому сортировать ("allowed_ips" или "transfer_sent").
-
-    Returns:
-        List[dict]: Список словарей вида:
-            [
-              {
-                "username": str,
-                "public_key": str,
-                "latest_handshake": str | None,
-                "transfer_received": str | None,
-                "transfer_sent": str | None,
-                "endpoint": str | None,
-                "allowed_ips": str | None
-              },
-              ...
-            ]
-    """
-    wg_status = get_wg_status_from_docker()
-    lines = wg_status.splitlines()
-    peer_blocks = []
-    current_peer_block = []
-
-    for line in lines:
-        if line.startswith("peer:"):
-            if current_peer_block:
-                peer_blocks.append(process_peer_block(current_peer_block, peers))
-                current_peer_block = []
-            current_peer_block.append(line.strip())
-        elif current_peer_block:
-            current_peer_block.append(line.strip())
-
-    # Обработать последний блок
-    if current_peer_block:
-        peer_blocks.append(process_peer_block(current_peer_block, peers))
-
-    # Сортировка
-    if sort_by == "allowed_ips":
-        def sort_key_ips(peer_data: dict) -> ipaddress.IPv4Network:
-            if peer_data["allowed_ips"]:
-                return ipaddress.ip_network(peer_data["allowed_ips"].split("/")[0])
-            return ipaddress.ip_network("0.0.0.0/32")
-        peer_blocks.sort(key=sort_key_ips)
-
-    elif sort_by == "transfer_sent":
-        peer_blocks.sort(
-            key=lambda x: convert_transfer_to_bytes(x["transfer_sent"]),
-            reverse=True
-        )
-
-    return peer_blocks
-
-
-def display_peer_list(peer_list: List[dict]) -> None:
-    """
-    Выводит (print) информацию о каждом пире из списка словарей.
-
-    Args:
-        peer_list (List[dict]): Список словарей, возвращаемый collect_peer_data().
-    """
-    ORANGE = '\033[33m'
-    RESET = '\033[0m'
-
-    for peer in peer_list:
-        username_colored = f"{ORANGE}{peer['username']}{RESET}"
-        print(f"User: {username_colored} ({peer['public_key']})")
-
-        if peer['allowed_ips']:
-            print(f"  allowed ips: {peer['allowed_ips']}")
-        if peer['endpoint']:
-            print(f"  endpoint: {peer['endpoint']}")
-        if peer['latest_handshake']:
-            print(f"  latest handshake: {peer['latest_handshake']}")
-        if peer['transfer_received'] and peer['transfer_sent']:
-            print(f"  transfer: {peer['transfer_received']} received, {peer['transfer_sent']} sent")
-
-        print()
-
-
-def display_wg_status_with_names(peers: dict, sort_by: Optional[str] = None) -> None:
-    """
-    Функция, оставленная для совместимости,
-    которая теперь просто вызывает collect_peer_data(...) + display_peer_list(...).
-
-    Args:
-        peers (dict): Словарь {public_key: username, ...}.
-        sort_by (Optional[str]): "allowed_ips" или "transfer_sent".
-    """
-    peer_list = collect_peer_data(peers, sort_by=sort_by)
-    display_peer_list(peer_list)
-
-
-def read_previous_results_json(file_path: str) -> Dict[str, Dict[str, Any]]:
-    """
-    Считывает предыдущие результаты из JSON-файла. Если файла нет, возвращает пустой словарь.
-    Формат:
-    {
-      "username": {
-        "latest_handshake": "...",
-        "transfer_received": "... GiB",
-        "transfer_sent": "... GiB",
-        "allowed_ips": "...",
-        "endpoint": "..."
-      },
-      ...
-    }
-    """
-    if not os.path.exists(file_path):
-        return {}
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-def write_results_json(file_path: str, data: Dict[str, Dict[str, Any]]) -> None:
-    """
-    Перезаписывает JSON-файл новыми данными (data).
-    """
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-
 def convert_bytes_to_human_readable(num_bytes: int) -> str:
     """
     Преобразует байты в формат GiB (например, "123.45 GiB").
@@ -253,15 +199,131 @@ def convert_bytes_to_human_readable(num_bytes: int) -> str:
     return f"{gib_value:.2f} GiB"
 
 
+def collect_peer_data(peers: Dict[str, Any], sort_by: Optional[SortBy] = None) -> WgPeerList:
+    """
+    1. Получает «сырой» вывод wg show из Docker (wg0).
+    2. Разбивает на блоки (peer: ...), вызывает process_peer_block(...) для каждого.
+    3. Сортирует список, если задан sort_by.
+    4. Возвращает список WgPeer (по каждому пир-юзеру).
+
+    Args:
+        peers (Dict[str, Any]): Словарь {public_key: {username: username, available: available}, ...} из parse_wg_conf.
+        sort_by (Optional[str]): Поле, по которому сортировать ("allowed_ips" или "transfer_sent").
+
+    Returns:
+        Объект типа WgPeerList.
+    """
+    wg_status = get_wg_status_from_docker()
+    lines = wg_status.splitlines()
+    
+    peer_blocks: WgPeerList = WgPeerList()
+    current_peer_block: list[str] = []
+
+    for line in lines:
+        if line.startswith("peer:"):
+            if current_peer_block:
+                processed_peer_block = process_peer_block(current_peer_block, peers)
+                if processed_peer_block:
+                    peer_blocks.peers.append(processed_peer_block)
+                current_peer_block = []
+            current_peer_block.append(line.strip())
+        elif current_peer_block:
+            current_peer_block.append(line.strip())
+
+    # Обработать последний блок
+    if current_peer_block:
+        processed_peer_block = process_peer_block(current_peer_block, peers)
+        if processed_peer_block:
+            peer_blocks.peers.append(processed_peer_block)
+
+    if sort_by:
+        peer_blocks.sort_peers(sort_by)
+
+    return peer_blocks
+
+
+def display_peer_list(peer_list: WgPeerList) -> None:
+    """
+    Выводит (print) информацию о каждом пире из списка WgPeer.
+
+    Args:
+        peer_list (WgPeerList): Список WgPeer, возвращаемый collect_peer_data().
+    """
+    ORANGE = '\033[33m'
+    RED = '\033[31m'
+    RESET = '\033[0m'
+
+    for peer in peer_list.peers:
+        username_colored = f"{ORANGE}{peer.username}{RESET}"
+        not_available = f'{RED}[Временно недоступен]{RESET}'
+        print(f"User: {username_colored} ({peer.public_key}) {not_available if not peer.available else ''}")
+
+        if peer.data.allowed_ips:
+            print(f"  allowed ips: {peer.data.allowed_ips}")
+        if peer.data.endpoint:
+            print(f"  endpoint: {peer.data.endpoint}")
+        if peer.data.latest_handshake:
+            print(f"  latest handshake: {peer.data.latest_handshake}")
+        if peer.data.transfer_received and peer.data.transfer_sent:
+            print(f"  transfer: {peer.data.transfer_received} received, {peer.data.transfer_sent} sent")
+
+        print()
+
+
+def display_wg_status_with_names(peers: Dict[str, Any], sort_by: Optional[str] = None) -> None:
+    """
+    Функция, оставленная для совместимости,
+    которая теперь просто вызывает collect_peer_data(...) + display_peer_list(...).
+
+    Args:
+        peers (Dict[str, Any]): Словарь {public_key: {username: username, available: available}, ...}.
+        sort_by (Optional[str]): "allowed_ips" или "transfer_sent".
+    """
+    peer_list = collect_peer_data(peers, sort_by=sort_by)
+    display_peer_list(peer_list)
+
+    
+def write_data_to_json(file_path: str, data: Dict[str, WgPeerData]) -> None:
+    """
+    Сохраняет Dict[str, WgPeerData] в файл JSON.
+    В процессе сериализации каждый объект WgPeerData превращается в словарь.
+    """
+    # Превращаем каждое значение (WgPeerData) в dict через .dict()
+    raw_data = {key: val.model_dump() for key, val in data.items()}
+
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(raw_data, f, indent=2, ensure_ascii=False)
+
+
+def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
+    """
+    Загружает Dict[str, WgPeerData] из JSON-файла.
+    Если файл не существует, возвращает пустой словарь.
+    """
+    if not os.path.exists(file_path):
+        return {}
+
+    with open(file_path, 'r', encoding='utf-8') as f:
+        raw_data = json.load(f)  # это Dict[str, dict]
+
+    # Превращаем каждую вложенную dict обратно в объект WgPeerData
+    result = {}
+    for key, val in raw_data.items():
+        # val: dict => WgPeerData(**val)
+        result[key] = WgPeerData(**val)
+
+    return result
+
+
 def merge_results(
-    old_data: Dict[str, Dict[str, Any]],
-    new_data: Dict[str, Dict[str, Any]]
-) -> Dict[str, Dict[str, Any]]:
+    old_data: Dict[str, WgPeerData],
+    new_data: Dict[str, WgPeerData]
+) -> Dict[str, WgPeerData]:
     """
     Объединяет старые и новые данные:
-    - latest_handshake перезаписываем
+    - latest_handshake и endpoint перезаписываем
     - transfer_received/transfer_sent — суммируем
-    - allowed_ips/endpoint — тоже обновляем (по желанию)
+    - allowed_ips — тоже обновляем
     """
     merged = dict(old_data)  # копия
 
@@ -271,26 +333,26 @@ def merge_results(
             merged[user] = new_info
             continue
 
-        old_received = merged[user].get("transfer_received", "0 B")
-        old_sent = merged[user].get("transfer_sent", "0 B")
-        new_received = new_info.get("transfer_received", "0 B")
-        new_sent = new_info.get("transfer_sent", "0 B")
+        old_received = merged[user].transfer_received or "0 B"
+        old_sent = merged[user].transfer_sent or "0 B"
+        new_received = new_info.transfer_received or "0 B"
+        new_sent = new_info.transfer_sent or "0 B"
 
         sum_received = convert_transfer_to_bytes(old_received) + convert_transfer_to_bytes(new_received)
         sum_sent = convert_transfer_to_bytes(old_sent) + convert_transfer_to_bytes(new_sent)
 
         # Обновляем latest_handshake
-        merged[user]["latest_handshake"] = new_info.get("latest_handshake", "N/A")
+        merged[user].latest_handshake = new_info.latest_handshake or "N/A"
 
         # Сохраняем суммированный трафик
-        merged[user]["transfer_received"] = convert_bytes_to_human_readable(sum_received)
-        merged[user]["transfer_sent"] = convert_bytes_to_human_readable(sum_sent)
+        merged[user].transfer_received = convert_bytes_to_human_readable(sum_received)
+        merged[user].transfer_sent = convert_bytes_to_human_readable(sum_sent)
 
         # При желании обновляем и другие поля
-        if "allowed_ips" in new_info:
-            merged[user]["allowed_ips"] = new_info["allowed_ips"]
-        if "endpoint" in new_info and new_info["endpoint"] is not None:
-            merged[user]["endpoint"] = new_info["endpoint"]
+        if new_info.allowed_ips:
+            merged[user].allowed_ips = new_info.allowed_ips
+        if new_info.endpoint:
+            merged[user].endpoint = new_info.endpoint
 
     return merged
 
@@ -299,7 +361,7 @@ def accumulate_wireguard_stats(
     conf_file_path: str,
     json_file_path: str,
     sort_by: Optional[str] = None
-) -> Dict[str, Dict[str, Any]]:
+) -> Dict[str, WgPeerData]:
     """
     1. Считывает старые результаты из json_file_path (если есть).
     2. Вызывает parse_wg_conf(conf_file_path) -> peers.
@@ -316,7 +378,7 @@ def accumulate_wireguard_stats(
         Возвращает объединенный словарь данных.
     """
     # 1. Старые результаты
-    old_data = read_previous_results_json(json_file_path)
+    old_data = read_data_from_json(json_file_path)
 
     # 2. Парсим файл конфигурации (получаем {public_key: username})
     peers = parse_wg_conf(conf_file_path)
@@ -326,16 +388,16 @@ def accumulate_wireguard_stats(
 
     # 4. Превращаем список словарей в словарь вида {username: {...}}
     #    (ключ — peer['username'])
-    new_data: Dict[str, Dict[str, Any]] = {}
-    for peer in peer_list:
-        username = peer["username"]
-        new_data[username] = {
-            "latest_handshake": peer["latest_handshake"],
-            "transfer_received": peer["transfer_received"],
-            "transfer_sent": peer["transfer_sent"],
-            "allowed_ips": peer["allowed_ips"],
-            "endpoint": peer["endpoint"]
-        }
+    new_data: Dict[str, WgPeerData] = {}
+    for peer in peer_list.peers:
+        username = peer.username
+        new_data[username] = WgPeerData(
+            allowed_ips=peer.data.allowed_ips,
+            endpoint=peer.data.endpoint,
+            latest_handshake=peer.data.latest_handshake,
+            transfer_received=peer.data.transfer_received,
+            transfer_sent=peer.data.transfer_sent
+        )
 
     # 5. Суммируем
     merged = merge_results(old_data, new_data)

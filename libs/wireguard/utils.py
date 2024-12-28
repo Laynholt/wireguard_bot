@@ -113,7 +113,7 @@ def log_wireguard_status():
         sort_by="transfer_sent"
     )
     
-    stats.write_results_json(config.wireguard_log_filepath, wireguard_stats)
+    stats.write_data_to_json(config.wireguard_log_filepath, wireguard_stats)
     print(f"[+] Логи Wireguard успешно обновлены и сохранены в [{config.wireguard_log_filepath}]")
 
 def log_and_restart_wireguard():

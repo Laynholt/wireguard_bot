@@ -121,6 +121,9 @@ async def get_usernames_in_bulk(
     Returns:
         dict[int, Optional[str]]: Словарь вида {telegram_id: "@username" или None}.
     """
+    if not telegram_ids:
+        return {}
+    
     # Создаем задачи для асинхронного получения username 
     # с использованием ограничения на количество запросов
     tasks = [
