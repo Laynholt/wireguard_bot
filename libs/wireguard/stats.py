@@ -378,9 +378,10 @@ def accumulate_wireguard_stats(
     """
     1. Считывает старые результаты из json_file_path (если есть).
     2. Вызывает parse_wg_conf(conf_file_path) -> peers.
-    3. collect_peer_data(peers, sort_by) -> список словарей.
+    3. collect_peer_data(peers) -> список словарей.
     4. Преобразует список словарей -> dict по username.
     5. merge_results(...) со старыми данными.
+    6. Сортирует данные по переданному типу.
 
     Args:
         conf_file_path (str): Путь к файлу wg0.conf.
@@ -397,7 +398,7 @@ def accumulate_wireguard_stats(
     peers = parse_wg_conf(conf_file_path)
 
     # 3. Собираем новые данные (список словарей)
-    peer_list = collect_peer_data(peers, sort_by=sort_by)
+    peer_list = collect_peer_data(peers)
 
     # 4. Превращаем список словарей в словарь вида {username: {...}}
     #    (ключ — peer['username'])
@@ -412,9 +413,44 @@ def accumulate_wireguard_stats(
             transfer_sent=peer.data.transfer_sent
         )
 
-    # 5. Суммируем
-    merged = __merge_results(old_data, new_data)
+    # 5. Суммируем и сортируем
+    merged = __sort_merged_data(
+        __merge_results(old_data, new_data),
+        sort_by=sort_by
+    )
+    
     return merged
+
+
+def __sort_merged_data(merged_data: Dict[str, WgPeerData], sort_by: SortBy) -> Dict[str, WgPeerData]:
+    """
+    Сортирует словарь {username: WgPeerData} по одному из критериев:
+      - "allowed_ips" (в порядке возрастания IP)
+      - "transfer_sent" (по убыванию объёма трафика)
+    
+    Возвращает НОВЫЙ словарь в отсортированном порядке ключей.
+    """
+    if sort_by == SortBy.ALLOWED_IPS:
+        # Сортируем по IP, если есть, иначе 0.0.0.0/32
+        sorted_keys = sorted(
+            merged_data.keys(),
+            key=lambda k: ipaddress.ip_network(
+                merged_data[k].allowed_ips.split("/")[0]
+            ) if merged_data[k].allowed_ips else ipaddress.ip_network("0.0.0.0/32")
+        )
+    elif sort_by == SortBy.TRANSFER_SENT:
+        # Сортируем по объёму переданных данных (по убыванию)
+        sorted_keys = sorted(
+            merged_data.keys(),
+            key=lambda k: _convert_transfer_to_bytes(merged_data[k].transfer_sent or "0 B"),
+            reverse=True
+        )
+    else:
+        # Если критерий не распознан, не сортируем
+        sorted_keys = list(merged_data.keys())
+
+    # Создаём новый словарь в требуемом порядке
+    return {key: merged_data[key] for key in sorted_keys}
 
 
 def display_merged_data(merged_data: Dict[str, WgPeerData]) -> None:
