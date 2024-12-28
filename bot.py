@@ -704,10 +704,11 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
             f"   Получено: {user_data['transfer_received']}\n"
         )
 
+    logger.info(f"Отправляю статистику по личным конфигам Wireguard -> Tid [{telegram_id}].")
     # Собираем и отправляем одним сообщением
     reply_text = "\n".join(lines)
     if update.message:
-        await update.message.reply_text(reply_text)
+        await telegram_utils.send_long_message(reply_text)
 
     await __end_command(update, context)
 
@@ -761,9 +762,10 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
             f"   Получено: {user_data['transfer_received']}\n"
         )
 
+    logger.info(f"Отправляю статистику по всем конфигам Wireguard -> Tid [{update.effective_user.id}].")
     reply_text = "\n".join(lines)
     if update.message:
-        await update.message.reply_text(reply_text)
+        await telegram_utils.send_long_message(reply_text)
 
     await __end_command(update, context)
     
