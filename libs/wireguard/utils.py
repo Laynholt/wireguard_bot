@@ -66,7 +66,7 @@ def backup_config() -> None:
     try:
         os.makedirs(f'{config.wireguard_folder}/config/wg_confs_backup', exist_ok=True)
         run_command(
-            f'cp {config.wireguard_folder}/config/wg_confs/wg0.conf'
+            f'cp {config.wireguard_config_filepath}'
             f' {config.wireguard_folder}/config/wg_confs_backup/wg0.conf'
         ).return_with_print()
         print('Резервная копия конфига создана.')
@@ -79,7 +79,7 @@ def setup_logs_directory():
     Проверяет, существует ли папка 'logs' в директории 'config'.
     Если папка не существует, она создается.
     """
-    log_dir = f'{config.wireguard_folder}/config/logs'
+    log_dir = os.path.dirname(config.wireguard_log_filepath)
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)  # Создаем папку, если её нет
         print(f'Папка {log_dir} создана.')
@@ -107,15 +107,14 @@ def log_wireguard_status():
     """
     setup_logs_directory()  # Убедиться, что папка logs существует
     
-    conf_file_path = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
-    log_file_path = os.path.join(f'{config.wireguard_folder}/config/logs', "stats.json")
-
-    stats.accumulate_wireguard_stats(
-        conf_file_path=conf_file_path,
-        json_file_path=log_file_path,
+    wireguard_stats = stats.accumulate_wireguard_stats(
+        conf_file_path=config.wireguard_config_filepath,
+        json_file_path=config.wireguard_log_filepath,
         sort_by="transfer_sent"
     )
-
+    
+    stats.write_results_json(config.wireguard_log_filepath, wireguard_stats)
+    print(f"[+] Логи Wireguard успешно обновлены и сохранены в [{config.wireguard_log_filepath}]")
 
 def log_and_restart_wireguard():
     """

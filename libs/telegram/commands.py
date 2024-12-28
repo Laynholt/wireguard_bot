@@ -21,3 +21,5 @@ class BotCommands(str, Enum):
     GET_TELEGRAM_ID = "get_telegram_id"
     GET_TELEGRAM_USERS = "get_telegram_users"
     SEND_MESSAGE = "send_message"
+    GET_MY_STATS = "get_my_stats"
+    GET_ALL_STATS = "get_all_stats"

@@ -45,8 +45,13 @@ ADMIN_HELP = (
     "<b>🔹 Конфигурационные файлы WireGuard: 🔹</b>\n"
     f"📁 <b>/{BotCommands.GET_CONFIG}</b> — получить конфигурационные файлы и QR-коды\n"
     f"📷 <b>/{BotCommands.GET_QRCODE}</b> — получить QR-коды\n"
-    f"📨 <b>/{BotCommands.SEND_CONFIG}</b> — отправить конфигурационные файлы и QR-коды пользователю Telegram"
+    f"📨 <b>/{BotCommands.SEND_CONFIG}</b> — отправить конфигурационные файлы и QR-коды пользователю Telegram\n\n"
+
+    "<b>🔹 Просмотр статистики WireGuard: 🔹</b>\n"
+    f"📊 <b>/{BotCommands.MY_STATS}</b> — показать статистику по вашим конфигам WireGuard\n"
+    f"📊 <b>/{BotCommands.ALL_STATS}</b> — показать статистику по всем конфигурациям"
 )
+
 
 USER_HELP = (
     "<b>🔹 ✨ Доступные команды: ✨ 🔹</b>\n\n"
@@ -54,7 +59,8 @@ USER_HELP = (
     "<b>🔹 Основные команды: 🔹</b>\n"
     f"ℹ️ <b>/{BotCommands.HELP}</b> — показать справочную информацию\n"
     f"📋 <b>/{BotCommands.MENU}</b> — отобразить меню\n"
-    f"🆔 <b>/{BotCommands.GET_TELEGRAM_ID}</b> — узнать ваш Telegram ID\n\n"
+    f"🆔 <b>/{BotCommands.GET_TELEGRAM_ID}</b> — узнать ваш Telegram ID\n"
+    f"📊 <b>/{BotCommands.MY_STATS}</b> — показать статистику по вашим конфигам WireGuard\n\n"
 
     "<b>🔹 Конфигурационные файлы WireGuard: 🔹</b>\n"
     f"📁 <b>/{BotCommands.GET_CONFIG}</b> — получить все ваши конфигурационные файлы и QR-коды\n"

@@ -5,7 +5,7 @@ from libs.wireguard import stats
 
 if __name__ == "__main__":
     # Путь к файлу wg0.conf
-    conf_file_path = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
+    conf_file_path = config.wireguard_config_filepath
 
     # Парсим аргументы командной строки
     parser = argparse.ArgumentParser(description="WireGuard peer status with sorting options.")

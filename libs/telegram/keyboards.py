@@ -50,6 +50,10 @@ ADMIN_MENU = ReplyKeyboardMarkup(
             f"/{BotCommands.GET_TELEGRAM_USERS}",
         ],
         [
+            f"/{BotCommands.GET_MY_STATS}",
+            f"/{BotCommands.GET_ALL_STATS}",
+        ],
+        [
             f"/{BotCommands.SEND_MESSAGE}",
             f"/{BotCommands.HELP}",
         ],
@@ -67,6 +71,7 @@ USER_MENU = ReplyKeyboardMarkup(
         ],
         [
             f"/{BotCommands.GET_TELEGRAM_ID}",
+            f"/{BotCommands.GET_MY_STATS}",
             f"/{BotCommands.HELP}",
         ],
     ],

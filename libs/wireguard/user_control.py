@@ -50,7 +50,7 @@ def __error_exit(user_name: str) -> None:
     Args:
         user_name (str): Имя пользователя.
     """
-    filename = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
+    filename = config.wireguard_config_filepath
     command = (
         f'docker exec -it wireguard bash -c "' 
         f'rm -r /config/{user_name}'
@@ -70,7 +70,7 @@ def __get_next_available_ip() -> utils.FunctionResult:
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и доступный IP-адрес или описание ошибки.
     """
-    filename = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
+    filename = config.wireguard_config_filepath
     busy_ips = []
 
     try:
@@ -190,7 +190,7 @@ def add_user(user_name: str) -> utils.FunctionResult:
             return ip_func_result.return_with_print(error_handler=lambda: __error_exit(user_name))
         allowed_ip = ip_func_result.description
 
-        filename = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
+        filename = config.wireguard_config_filepath
         try:
             utils.run_command(f'cp {filename} {filename}.bak').return_with_print()
 
@@ -302,7 +302,7 @@ def __remove_user_from_config(user_name: str) -> utils.FunctionResult:
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
     """
-    filename = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
+    filename = config.wireguard_config_filepath
     try:
         with open(filename, 'r', encoding='utf-8') as file:
             lines = file.readlines()
@@ -369,7 +369,7 @@ def __comment_uncomment_in_config(user_name: str, action_type: ActionType) -> ut
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
     """
-    filename = f'{config.wireguard_folder}/config/wg_confs/wg0.conf'
+    filename = config.wireguard_config_filepath
     try:
         with open(filename, 'r', encoding='utf-8') as file:
             lines = file.readlines()

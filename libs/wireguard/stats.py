@@ -289,7 +289,7 @@ def merge_results(
         # При желании обновляем и другие поля
         if "allowed_ips" in new_info:
             merged[user]["allowed_ips"] = new_info["allowed_ips"]
-        if "endpoint" in new_info:
+        if "endpoint" in new_info and new_info["endpoint"] is not None:
             merged[user]["endpoint"] = new_info["endpoint"]
 
     return merged
@@ -306,7 +306,6 @@ def accumulate_wireguard_stats(
     3. collect_peer_data(peers, sort_by) -> список словарей.
     4. Преобразует список словарей -> dict по username.
     5. merge_results(...) со старыми данными.
-    6. write_results_json(...).
 
     Args:
         conf_file_path (str): Путь к файлу wg0.conf.
@@ -340,9 +339,4 @@ def accumulate_wireguard_stats(
 
     # 5. Суммируем
     merged = merge_results(old_data, new_data)
-
-    # 6. Сохраняем
-    write_results_json(json_file_path, merged)
-    print(f"[+] Логи Wireguard успешно обновлены и сохранены в [{json_file_path}]")
-
     return merged

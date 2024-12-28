@@ -633,6 +633,140 @@ async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
         await __end_command(update, context)
 
 
+async def get_my_stats_command(update: Update, context: CallbackContext) -> None:
+    """
+    Команда для пользователей (доступна всем).
+    Выводит статистику по конфигам WireGuard, привязанным к текущему Telegram ID.
+    Если конфиг недоступен или отсутствует (удалён), информация об этом
+    выводится в сообщении. При необходимости лишние записи удаляются из БД.
+    """
+    telegram_id = update.effective_user.id
+
+    if not await __check_database_state(update):
+        return
+
+    wireguard_users = database.get_users_by_telegram_id(telegram_id)
+    if not wireguard_users:
+        if update.message:
+            await update.message.reply_text(
+                "У вас ещё нет конфигурационных файлов Wireguard.\n\n"
+                f"Используйте /{BotCommands.REQUEST_NEW_CONFIG} для запроса их у администратора."
+            )
+        await __end_command(update, context)
+        return
+
+    # Получаем полную статистику
+    all_wireguard_stats = wireguard.stats.accumulate_wireguard_stats(
+        conf_file_path=config.wireguard_config_filepath,
+        json_file_path=config.wireguard_log_filepath,
+        sort_by="transfer_sent",
+    )
+
+    lines = []
+    shift_index = 0
+
+    for i, wg_user in enumerate(wireguard_users, start=1):
+        user_data = all_wireguard_stats.get(wg_user, None)
+
+        # Случай, когда статистики для пользователя нет
+        if user_data is None:
+            # Возможно, пользователь закомментирован?
+            if wireguard.is_username_commented(wg_user):
+                lines.append(f"{i - shift_index}] Конфиг [{wg_user}] временно недоступен.\n")
+                continue
+
+            # Проверяем, существует ли конфиг этого пользователя фактически
+            check_result = wireguard.check_user_exists(wg_user)
+            if check_result.status:
+                remove_result = wireguard.remove_user(wg_user)
+                if remove_result.status:
+                    logger.info(remove_result.description)
+                else:
+                    logger.error(remove_result.description)
+
+            # Если пользователь есть в БД, но конфиг отсутствует — удаляем из БД
+            if database.delete_user(wg_user):
+                logger.info(f"Пользователь [{wg_user}] удалён из базы данных.")
+            else:
+                logger.error(
+                    f"Не удалось удалить информацию о пользователе [{wg_user}] из базы данных."
+                )
+
+            shift_index += 1
+            continue
+
+        # Если всё в порядке, формируем строку со статистикой
+        lines.append(
+            f"{i - shift_index}] Конфиг: {wg_user}\n"
+            f"   IP: {user_data['allowed_ips']}\n"
+            f"   Отправлено: {user_data['transfer_sent']}\n"
+            f"   Получено: {user_data['transfer_received']}\n"
+        )
+
+    # Собираем и отправляем одним сообщением
+    reply_text = "\n".join(lines)
+    if update.message:
+        await update.message.reply_text(reply_text)
+
+    await __end_command(update, context)
+
+
+@wrappers.admin_required
+async def get_all_stats_command(update: Update, context: CallbackContext) -> None:
+    """
+    Команда для администраторов.
+    Выводит статистику для всех конфигов WireGuard, включая информацию о владельце
+    (Telegram ID и username). Если владелец не привязан, выводит соответствующую пометку.
+    """
+    # Сначала получаем всю статистику
+    all_wireguard_stats = wireguard.stats.accumulate_wireguard_stats(
+        conf_file_path=config.wireguard_config_filepath,
+        json_file_path=config.wireguard_log_filepath,
+        sort_by="transfer_sent",
+    )
+
+    if not all_wireguard_stats:
+        if update.message:
+            await update.message.reply_text("Нет данных по ни одному конфигу.")
+        await __end_command(update, context)
+        return
+
+    if not await __check_database_state(update):
+        return
+
+    # Получаем все связки (владелец <-> конфиг)
+    linked_users = database.get_all_linked_data()
+    linked_dict = {user_name: tid for tid, user_name in linked_users}
+
+    # Достаем username для всех владельцев (bulk-запрос)
+    linked_telegram_ids = set(linked_dict.values())
+    linked_telegram_names_dict = await telegram_utils.get_usernames_in_bulk(
+        linked_telegram_ids, context, semaphore
+    )
+
+    lines = []
+    for i, (wg_user, user_data) in enumerate(all_wireguard_stats.items(), start=1):
+        owner_tid = linked_dict.get(wg_user)
+        if owner_tid is not None:
+            owner_username = linked_telegram_names_dict.get(owner_tid, "Нет имени пользователя")
+            owner_part = f" [{owner_username} ({owner_tid})]"
+        else:
+            owner_part = " [Нет владельца]"
+
+        lines.append(
+            f"{i}] Конфиг: {wg_user}{owner_part}\n"
+            f"   IP: {user_data['allowed_ips']}\n"
+            f"   Отправлено: {user_data['transfer_sent']}\n"
+            f"   Получено: {user_data['transfer_received']}\n"
+        )
+
+    reply_text = "\n".join(lines)
+    if update.message:
+        await update.message.reply_text(reply_text)
+
+    await __end_command(update, context)
+    
+
 async def unknown_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик неизвестных команд.
@@ -1299,6 +1433,10 @@ def main() -> None:
     application.add_handler(CommandHandler(BotCommands.GET_TELEGRAM_ID, get_telegram_id_command))
     application.add_handler(CommandHandler(BotCommands.GET_TELEGRAM_USERS, get_telegram_users_command))
     application.add_handler(CommandHandler(BotCommands.SEND_MESSAGE, send_message_command))
+
+    # Команды для получения статистики по Wireguard
+    application.add_handler(CommandHandler(BotCommands.GET_MY_STATS, get_my_stats_command))
+    application.add_handler(CommandHandler(BotCommands.GET_ALL_STATS, get_all_stats_command))
 
     # Обработка сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
