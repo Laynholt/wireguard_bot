@@ -1,5 +1,5 @@
 stuff/user_config.json
 *.db
-telegram-bot/
 __pycache__/
 .vscode/
+bot_env/

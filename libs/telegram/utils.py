@@ -3,9 +3,9 @@ import logging
 import asyncio
 from typing import Iterable, Optional, Union
 
-from telegram import Update# type: ignore
-from telegram.ext import CallbackContext# type: ignore
-from telegram.error import TelegramError# type: ignore
+from telegram import Update
+from telegram.ext import CallbackContext
+from telegram.error import TelegramError
 
 from libs.wireguard import config
 

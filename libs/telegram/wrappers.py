@@ -1,8 +1,8 @@
 import logging
 from functools import wraps
 
-from telegram import Update  # type: ignore
-from telegram.ext import CallbackContext  # type: ignore
+from telegram import Update
+from telegram.ext import CallbackContext
 
 from libs.wireguard import config
 
@@ -25,6 +25,9 @@ def admin_required(func):
     """
     @wraps(func)
     async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+        if update.effective_user is None:
+            return None
+        
         telegram_id = update.effective_user.id
 
         # Проверка на наличие прав администратора
@@ -59,13 +62,17 @@ def command_lock(func):
     """
     @wraps(func)
     async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+        if context.user_data is None:
+            return None
+        
         current_command = context.user_data.get("command")
         if current_command is not None:
-            logger.info(
-                "Попытка выполнить команду [%s] в процессе выполнения другой [%s].",
-                update.message.text.lower(), current_command
-            )
-            if update.message:
+            if update.message is not None and update.message.text is not None:
+                logger.info(
+                    "Попытка выполнить команду [%s] в процессе выполнения другой [%s].",
+                    update.message.text.lower(), current_command
+                )
+            if update.message is not None and update.message.text is not None:
                 await update.message.reply_text(
                     f"Перед началом выполнения новой команды [{update.message.text.lower()}] "
                     f"завершите выполнение [{current_command}]."
