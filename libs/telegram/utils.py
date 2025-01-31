@@ -1,7 +1,7 @@
 import re
 import logging
 import asyncio
-from typing import Iterable, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 from telegram import Update
 from telegram.ext import CallbackContext
@@ -62,6 +62,45 @@ async def send_long_message(
 
     for i in range(0, len(message), max_length):
         await update.message.reply_text(message[i : i + max_length], parse_mode=parse_mode)
+
+
+async def send_batched_messages(
+    update: Update,
+    batched_lines: List[List[str]],
+    parse_mode: Optional[str] = None,
+    groups_before_delay: int = 2,
+    delay_between_groups: float = 0.5
+) -> None:
+    """
+    Отправляет сообщения батчами с задержками между группами
+
+    Args:
+        update (Update): Объект обновления Telegram
+        batched_lines (List[List[str]]): Список строк с информацией о конфигах
+        parse_mode (str): Тип парсинга (Markdown/HTML)
+        groups_before_delay (int): Количество групп сообщений перед задержкой
+        delay_between_groups (float): Задержка между группами сообщений
+    """
+    if not update.message or not batched_lines:
+        return
+
+    total_batches = len(batched_lines)
+    sent_groups = 0
+
+    for batch_idx, batch in enumerate(batched_lines, 1):
+        # Формируем сообщение из текущего батча
+        message = "\n".join(batch)
+        
+        try:
+            await update.message.reply_text(message, parse_mode=parse_mode)
+        except Exception as e:
+            # Fallback: попытка отправить по частям если возникла ошибка
+            await send_long_message(update, message, parse_mode=parse_mode)
+
+        sent_groups += 1
+        # Управление задержками между группами сообщений
+        if sent_groups % groups_before_delay == 0 and batch_idx != total_batches:
+            await asyncio.sleep(delay_between_groups)
 
 
 async def get_username_by_id(telegram_id: int, context: CallbackContext) -> Optional[str]:

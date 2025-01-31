@@ -11,6 +11,7 @@ from telegram.ext import (
     CallbackContext,
     filters,
 )
+from telegram.helpers import escape_markdown
 from telegram.error import TelegramError, NetworkError, RetryAfter, TimedOut, BadRequest
 
 from libs.wireguard import config
@@ -534,7 +535,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
 
 
 async def __get_configuration(
-    update: Update, command: str, telegram_id: int
+    update: Update, command: BotCommands, telegram_id: int
 ) -> None:
     """
     Универсальная функция получения и отправки пользователю конфигурационных файлов/QR-кода.
@@ -542,15 +543,17 @@ async def __get_configuration(
     if update.effective_user is None:
         return
     
+    if update.message is None:
+        return
+    
     requester_telegram_id = update.effective_user.id
 
     if not database.db_loaded:
         logger.error("Ошибка! База данных не загружена!")
-        if update.message is not None:
-            await update.message.reply_text(
-                "Не удалось получить данные из базы данных. "
-                "Пожалуйста, свяжитесь с администратором."
-            )
+        await update.message.reply_text(
+            "Не удалось получить данные из базы данных. "
+            "Пожалуйста, свяжитесь с администратором."
+        )
         return
 
     # Если пользователь сам запрашивает конфиг, проверить, есть ли он в базе
@@ -562,11 +565,10 @@ async def __get_configuration(
     user_names = database.get_users_by_telegram_id(telegram_id)
     if not user_names:
         logger.info(f"Пользователь Tid [{telegram_id}] не привязан ни к одной конфигурации.")
-        if update.message is not None:
-            await update.message.reply_text(
-                "Ваши конфигурации не найдены. "
-                "Пожалуйста, свяжитесь с администратором для добавления новых."
-            )
+        await update.message.reply_text(
+            "Ваши конфигурации не найдены. "
+            "Пожалуйста, свяжитесь с администратором для добавления новых."
+        )
         return
 
     for user_name in user_names:
@@ -574,7 +576,7 @@ async def __get_configuration(
 
 
 async def __get_user_configuration(
-    update: Update, command: str, user_name: str
+    update: Update, command: BotCommands, user_name: str
 ) -> None:
     """
     Отправляет пользователю .zip-конфиг или QR-код в зависимости от команды.
@@ -583,26 +585,33 @@ async def __get_user_configuration(
     if update.effective_user is None:
         return
     
+    if update.message is None:
+        return
+    
     requester_telegram_id = update.effective_user.id
 
+    # Форматируем имя конфига для сообщений
+    formatted_user = f"🔐 *{escape_markdown(user_name)}*"
+
+    # Проверка существования конфига
     user_exists_result = wireguard.check_user_exists(user_name)
     if not user_exists_result.status:
         logger.error(f"Конфиг [{user_name}] не найден. Удаляю привязку.")
-        if update.message is not None:
-            await update.message.reply_text(
-                f"Конфигурация [{user_name}] была удалена. "
-                f"Пожалуйста, свяжитесь с администратором для создания новой."
-            )
+        await update.message.reply_text(
+            f"🚫 Конфигурация {formatted_user} была удалена\n\n"
+            f"_Пожалуйста, свяжитесь с администратором для создания новой_",
+            parse_mode="MarkdownV2"
+        )
         database.delete_user(user_name)
         return
 
     if wireguard.is_username_commented(user_name):
         logger.info(f"Конфиг [{user_name}] на данный момент закомментирован.")
-        if update.message is not None:
-            await update.message.reply_text(
-                f"Конфигурация [{user_name}] на данный момент заблокирована. "
-                f"Пожалуйста, свяжитесь с администратором."
-            )
+        await update.message.reply_text(
+            f"⚠️ Конфигурация {formatted_user} временно заблокирована\n\n"
+            f"_Причина: администратор ограничил доступ_",
+            parse_mode="MarkdownV2"
+        )
         return
 
     if command == BotCommands.GET_CONFIG:
@@ -610,25 +619,70 @@ async def __get_user_configuration(
             f"Создаю и отправляю Zip-архив пользователя Wireguard [{user_name}] "
             f"пользователю Tid [{requester_telegram_id}]."
         )
+        
         zip_result = wireguard.create_zipfile(user_name)
         if zip_result.status:
-            if update.message is not None:
-                await update.message.reply_text(
-                    f"Архив с файлом конфигурации и QR-кодом для пользователя [{user_name}]:"
-                )
-                await update.message.reply_document(document=open(zip_result.description, "rb"))
+            caption = (
+                f"📦 *Архив конфигурации*\n"
+                f"┌─────────────────────────────\n"
+                f"├ Содержимое:\n"
+                f"├─ 📄 Файл конфигурации \n"
+                f"├─ 📲 QR-код для быстрого подключения\n"
+                f"└─────────────────────────────\n\n"
+                f"🔧 Конфигурация: {formatted_user}\n\n"
+                f"┌─────────────────────────────\n"
+                f"├ 📂 Распакуйте архив\n"
+                f"├ 🛡 Перейдите в приложение Wireguard\n"
+                f"├ ➕ Нажмите `добавить новую конфигурацию` (+)\n"
+                f"├ 📷 Отсканируйте камерой устройства QR-код\n"
+                f"├ ⚙️ Или импортируйте .conf файл\n"
+                f"└─────────────────────────────"
+            )
+            await update.message.reply_document(
+                document=open(zip_result.description, "rb"),
+                caption=caption,
+                parse_mode="MarkdownV2"
+            )
             wireguard.remove_zipfile(user_name)
+        else:
+            logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{zip_result.description}]')
+            await update.message.reply_text(
+                f"❌ Не удалось создать архив для {formatted_user}\n"
+                f"_Ошибка: {escape_markdown(zip_result.description)}_",
+                parse_mode="MarkdownV2"
+            )
 
     elif command == BotCommands.GET_QRCODE:
         logger.info(
             f"Создаю и отправляю Qr-код пользователя Wireguard [{user_name}] "
             f"пользователю Tid [{requester_telegram_id}]."
         )
+        
         png_path = wireguard.get_qrcode_path(user_name)
         if png_path.status:
-            if update.message is not None:
-                await update.message.reply_text(f"QR-код для пользователя [{user_name}]:")
-                await update.message.reply_photo(photo=open(png_path.description, "rb"))
+            caption = (
+                f"📲 *QR-код для подключения*\n"
+                f"──────────────────────────────\n\n"
+                f"🔧 Конфигурация: {formatted_user}\n\n"
+                f"┌─────────────────────────────\n"
+                f"├ 🛡 Перейдите в приложение Wireguard\n"
+                f"├ ➕ Нажмите `добавить новую конфигурацию` (+)\n"
+                f"├ 📷 Отсканируйте камерой устройства QR-код\n"
+                f"└─────────────────────────────"
+            )
+            
+            await update.message.reply_photo(
+                photo=open(png_path.description, "rb"),
+                caption=caption,
+                parse_mode="MarkdownV2"
+            )
+        else:
+            logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{png_path.description}]')
+            await update.message.reply_text(
+                f"❌ Не удалось сгенерировать QR-код для {formatted_user}\n"
+                f"_Ошибка: {escape_markdown(png_path.description)}_",
+                parse_mode="MarkdownV2"
+            )
 
 
 @wrappers.command_lock
@@ -637,24 +691,15 @@ async def get_config_command(update: Update, context: CallbackContext) -> None:
     Команда /get_config: выдаёт пользователю .zip конфигурации Wireguard.
     Если пользователь администратор — позволяет выбрать, чьи конфиги получать.
     """
-    if update.effective_user is None:
-        return
-    
-    telegram_id = update.effective_user.id
-    if telegram_id in config.telegram_admin_ids:
-        if context.user_data is not None:
-            context.user_data["command"] = BotCommands.GET_CONFIG
-        if update.message is not None:
-            await update.message.reply_text(
-                (
-                    "Выберете, чьи файлы конфигурации вы хотите получить.\n\n"
-                    "Для отмены действия нажмите кнопку Закрыть."
-                ),
-                reply_markup=keyboards.CONFIG_MENU,
-            )
-    else:
-        await __get_configuration(update, command="get_config", telegram_id=telegram_id)
-        await __end_command(update, context)
+    await __get_config_or_qrcode_helper(
+        update=update,
+        context=context,
+        command=BotCommands.GET_CONFIG,
+        message=(
+            "Выберете, чьи файлы конфигурации вы хотите получить.\n\n"
+            "Для отмены действия нажмите кнопку Закрыть."
+        )
+    )
 
 
 @wrappers.command_lock
@@ -663,25 +708,38 @@ async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
     Команда /get_qrcode: выдаёт пользователю QR-код конфигурации Wireguard.
     Если пользователь администратор — позволяет выбрать, чьи QR-коды получать.
     """
+    await __get_config_or_qrcode_helper(
+        update=update,
+        context=context,
+        command=BotCommands.GET_QRCODE,
+        message=(
+            "Выберете, чьи Qr-код файлы конфигурации вы хотите получить.\n\n"
+            "Для отмены действия нажмите кнопку Закрыть."
+        )
+    )
+
+
+async def __get_config_or_qrcode_helper(
+    update: Update,
+    context: CallbackContext,
+    command: BotCommands,
+    message: str
+) -> None:
     if update.effective_user is None:
+        return
+
+    if update.message is None:
         return
     
     telegram_id = update.effective_user.id
     if telegram_id in config.telegram_admin_ids:
         if context.user_data is not None:
-            context.user_data["command"] = BotCommands.GET_QRCODE
-        if update.message is not None:
-            await update.message.reply_text(
-                (
-                    "Выберете, чьи Qr-код файлы конфигурации вы хотите получить.\n\n"
-                    "Для отмены действия нажмите кнопку Закрыть."
-                ),
-                reply_markup=keyboards.CONFIG_MENU,
-            )
+            context.user_data["command"] = command
+        await update.message.reply_text(message,reply_markup=keyboards.CONFIG_MENU)
     else:
-        await __get_configuration(update, command="get_qrcode", telegram_id=telegram_id)
+        await __get_configuration(update, command=command, telegram_id=telegram_id)
         await __end_command(update, context)
-
+        
 
 async def get_my_stats_command(update: Update, context: CallbackContext) -> None:
     """
@@ -693,6 +751,9 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     if update.effective_user is None:
         return
     
+    if update.message is None:
+        return
+    
     telegram_id = update.effective_user.id
 
     if not await __check_database_state(update):
@@ -700,11 +761,10 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
 
     wireguard_users = database.get_users_by_telegram_id(telegram_id)
     if not wireguard_users:
-        if update.message is not None:
-            await update.message.reply_text(
-                "У вас ещё нет конфигурационных файлов Wireguard.\n\n"
-                f"Используйте /{BotCommands.REQUEST_NEW_CONFIG} для запроса их у администратора."
-            )
+        await update.message.reply_text(
+            "У вас ещё нет конфигурационных файлов Wireguard.\n\n"
+            f"Используйте /{BotCommands.REQUEST_NEW_CONFIG} для запроса их у администратора."
+        )
         await __end_command(update, context)
         return
 
@@ -744,17 +804,29 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
 
         # Если всё в порядке, формируем строку со статистикой
         lines.append(
-            f"{i}] Конфиг: {wg_user} {'[Временно недоступен]' if wg_user in inactive_usernames else ''}\n"
-            f"   IP: {user_data.allowed_ips}\n"
-            f"   Отправлено: {user_data.transfer_sent}\n"
-            f"   Получено: {user_data.transfer_received}\n"
+            f"\n{i}] 🌐 Конфиг: {wg_user} {'🔴 [Неактивен]' if wg_user in inactive_usernames else '🟢'}\n"
+            f"   📡 IP: {user_data.allowed_ips}\n"
+            f"   📤 Отправлено: {user_data.transfer_sent.ljust(8)}"
+            f"   📥 Получено: {user_data.transfer_received}\n"
+            f"   ────────────────────────────────────────"
         )
 
     logger.info(f"Отправляю статистику по личным конфигам Wireguard -> Tid [{telegram_id}].")
-    # Собираем и отправляем одним сообщением
-    reply_text = "\n".join(lines)
-    if update.message is not None:
-        await telegram_utils.send_long_message(update, reply_text)
+    
+    # Разбиваем на батчи по указанному размеру
+    batch_size = 5
+    batched_lines = [
+        lines[i:i + batch_size]
+        for i in range(0, len(lines), batch_size)
+    ]
+    
+    await telegram_utils.send_batched_messages(
+        update=update,
+        batched_lines=batched_lines,
+        parse_mode=None,
+        groups_before_delay=2,
+        delay_between_groups=0.5
+    )
 
     await __end_command(update, context)
 
@@ -766,6 +838,9 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     Выводит статистику для всех конфигов WireGuard, включая информацию о владельце
     (Telegram ID и username). Если владелец не привязан, выводит соответствующую пометку.
     """
+    if update.message is None:
+        return
+    
     # Сначала получаем всю статистику
     all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
         conf_file_path=config.wireguard_config_filepath,
@@ -774,8 +849,7 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     )
 
     if not all_wireguard_stats:
-        if update.message is not None:
-            await update.message.reply_text("Нет данных по ни одному конфигу.")
+        await update.message.reply_text("Нет данных по ни одному конфигу.")
         await __end_command(update, context)
         return
 
@@ -799,15 +873,19 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
         owner_tid = linked_dict.get(wg_user)
         if owner_tid is not None:
             owner_username = linked_telegram_names_dict.get(owner_tid, "Нет имени пользователя")
-            owner_part = f" [{owner_username} ({owner_tid})]"
+            owner_part = f" 👤 Владелец: @{owner_username} (ID: {owner_tid})"
         else:
-            owner_part = " [Нет владельца]"
+            owner_part = " 👤 Владелец: не назначен"
+
+        status_icon = "🔴 [НЕАКТИВЕН]" if wg_user in inactive_usernames else "🟢 [АКТИВЕН]"
 
         lines.append(
-            f"{i}] Конфиг: {wg_user}{owner_part} {'[Временно недоступен]' if wg_user in inactive_usernames else ''}\n"
-            f"   IP: {user_data.allowed_ips}\n"
-            f"   Отправлено: {user_data.transfer_sent}\n"
-            f"   Получено: {user_data.transfer_received}\n"
+            f"\n{i}] 🌐 Конфиг: {wg_user} {status_icon}\n"
+            f"   {owner_part}\n"
+            f"   📡 IP: {user_data.allowed_ips}\n"
+            f"   📤 Отправлено: {user_data.transfer_sent.ljust(10)}"
+            f"📥 Получено: {user_data.transfer_received}\n"
+            f"   ─────────────────────────────────────────────"
         )
 
     tid = -1
@@ -815,9 +893,21 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
         tid = update.effective_user.id
     
     logger.info(f"Отправляю статистику по всем конфигам Wireguard -> Tid [{tid}].")
-    reply_text = "\n".join(lines)
-    if update.message is not None:
-        await telegram_utils.send_long_message(update, reply_text)
+    
+    # Разбиваем на батчи по указанному размеру
+    batch_size = 5
+    batched_lines = [
+        lines[i:i + batch_size]
+        for i in range(0, len(lines), batch_size)
+    ]
+    
+    await telegram_utils.send_batched_messages(
+        update=update,
+        batched_lines=batched_lines,
+        parse_mode=None,
+        groups_before_delay=2,
+        delay_between_groups=0.5
+    )
 
     await __end_command(update, context)
     
