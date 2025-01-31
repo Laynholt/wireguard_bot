@@ -346,14 +346,14 @@ def __remove_user_from_logs(user_name: str) -> utils.FunctionResult:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
     """
     # Загружаем логи
-    logs_data = stats.read_previous_results_json(config.wireguard_log_filepath)
+    logs_data = stats.read_data_from_json(config.wireguard_log_filepath)
     
     # Удаляем пользователя из логов
     if user_name in logs_data:
         del logs_data[user_name]
         
         # Перезаписываем лог
-        stats.write_results_json(config.wireguard_log_filepath, logs_data)
+        stats.write_data_to_json(config.wireguard_log_filepath, logs_data)
         return utils.FunctionResult(status=False,
                                     description=f'Пользователь [{user_name}] успешно удален из логов.')
     else:
