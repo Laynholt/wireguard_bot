@@ -1,6 +1,5 @@
 import os
 import subprocess
-from datetime import datetime
 from typing import Callable, Optional
 
 from . import config
@@ -110,7 +109,7 @@ def log_wireguard_status():
     wireguard_stats = stats.accumulate_wireguard_stats(
         conf_file_path=config.wireguard_config_filepath,
         json_file_path=config.wireguard_log_filepath,
-        sort_by="transfer_sent"
+        sort_by=stats.SortBy.TRANSFER_SENT
     )
     
     stats.write_data_to_json(config.wireguard_log_filepath, wireguard_stats)

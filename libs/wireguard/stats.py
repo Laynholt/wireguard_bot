@@ -303,7 +303,7 @@ def __merge_results(
 def accumulate_wireguard_stats(
     conf_file_path: str,
     json_file_path: str,
-    sort_by: Optional[str] = None
+    sort_by: SortBy = SortBy.TRANSFER_SENT
 ) -> Dict[str, WgPeerData]:
     """
     1. Считывает старые результаты из json_file_path (если есть).
@@ -334,6 +334,9 @@ def accumulate_wireguard_stats(
     #    (ключ — peer['username'])
     new_data: Dict[str, WgPeerData] = {}
     for peer in peer_list.peers:
+        if peer.data is None:
+            continue
+        
         username = peer.username
         new_data[username] = WgPeerData(
             allowed_ips=peer.data.allowed_ips,
