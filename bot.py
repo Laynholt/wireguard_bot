@@ -807,8 +807,8 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
         lines.append(
             f"\n{i}] 🌐 Конфиг: {wg_user} {'🔴 [Неактивен]' if wg_user in inactive_usernames else '🟢'}\n"
             f"   📡 IP: {user_data.allowed_ips}\n"
-            f"   📤 Отправлено: {user_data.transfer_sent.ljust(8)}"
-            f"   📥 Получено: {user_data.transfer_received}\n"
+            f"   📤 Отправлено: {(user_data.transfer_sent if user_data.transfer_sent else 'N/A').ljust(8)}"
+            f"   📥 Получено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
             f"   ────────────────────────────────────────"
         )
 
@@ -884,8 +884,8 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
             f"\n{i}] 🌐 Конфиг: {wg_user} {status_icon}\n"
             f"   {owner_part}\n"
             f"   📡 IP: {user_data.allowed_ips}\n"
-            f"   📤 Отправлено: {user_data.transfer_sent.ljust(10)}"
-            f"📥 Получено: {user_data.transfer_received}\n"
+            f"   📤 Отправлено: {(user_data.transfer_sent if user_data.transfer_sent else 'N/A').ljust(10)}"
+            f"   📥 Получено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
             f"   ─────────────────────────────────────────────"
         )
 
