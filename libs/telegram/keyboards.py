@@ -20,8 +20,9 @@ class KeyboardText:
 
 # Кнопки, используемые в разных меню
 BUTTON_BIND_TO_YOURSELF = KeyboardText(text="Привязать к себе")
+BUTTON_UNBIND_FROM_YOURSELF = KeyboardText(text="Отвязать от себя")
 BUTTON_CLOSE = KeyboardText(text="Закрыть")
-BUTTON_OWN_CONFIG = KeyboardText(text="Свои")
+BUTTON_OWN = KeyboardText(text="Свои")
 BUTTON_WG_USER_CONFIG = KeyboardText(text="Пользователя Wireguard")
 
 # Админское меню (ADMIN_MENU)
@@ -97,6 +98,25 @@ BIND_MENU = ReplyKeyboardMarkup(
     one_time_keyboard=True,
 )
 
+# Меню для отвязки пользователей (UNBIND_MENU)
+UNBIND_MENU = ReplyKeyboardMarkup(
+    [
+        [
+            KeyboardButton(
+                text="Отвязать от пользователя",
+                request_users=KeyboardButtonRequestUsers(
+                    request_id=0,
+                    user_is_bot=False,
+                    request_username=True,
+                ),
+            ),
+            BUTTON_UNBIND_FROM_YOURSELF.text,
+            BUTTON_CLOSE.text,
+        ]
+    ],
+    one_time_keyboard=True,
+)
+
 # Меню для выбора, чью конфигурацию получить (CONFIG_MENU)
 CONFIG_MENU = ReplyKeyboardMarkup(
     [
@@ -112,7 +132,26 @@ CONFIG_MENU = ReplyKeyboardMarkup(
             BUTTON_WG_USER_CONFIG.text,
         ],
         [
-            BUTTON_OWN_CONFIG.text,
+            BUTTON_OWN.text,
+            BUTTON_CLOSE.text,
+        ],
+    ],
+    one_time_keyboard=True,
+)
+
+# Меню для выбора, чьи привязки получить (BINDINGS_MENU)
+BINDINGS_MENU = ReplyKeyboardMarkup(
+    [
+        [
+            KeyboardButton(
+                text="Пользователя Telegram",
+                request_users=KeyboardButtonRequestUsers(
+                    request_id=0,
+                    user_is_bot=False,
+                    request_username=True,
+                ),
+            ),
+            BUTTON_OWN.text,
             BUTTON_CLOSE.text,
         ],
     ],

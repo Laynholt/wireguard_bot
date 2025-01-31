@@ -346,7 +346,7 @@ async def unbind_telegram_id_command(update: Update, context: CallbackContext) -
                 "Пожалуйста, выберите пользователя Telegram, которого хотите отвязать.\n\n"
                 "Для отмены действия нажмите кнопку Закрыть."
             ),
-            reply_markup=keyboards.BIND_MENU,
+            reply_markup=keyboards.UNBIND_MENU,
         )
     if context.user_data is not None:
         context.user_data["command"] = BotCommands.UNBIND_TELEGRAM_ID
@@ -364,7 +364,7 @@ async def get_bound_users_by_telegram_id_command(update: Update, context: Callba
                 "Пожалуйста, выберите пользователя Telegram, привязки которого хотите увидеть.\n\n"
                 "Для отмены действия нажмите кнопку Закрыть."
             ),
-            reply_markup=keyboards.BIND_MENU,
+            reply_markup=keyboards.BINDINGS_MENU,
         )
     if context.user_data is not None:
         context.user_data["command"] = BotCommands.GET_USERS_BY_ID
@@ -870,18 +870,45 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                 return
 
         # Обработка нажатия кнопки Own Config / Wg User Config
-        if update.message.text in (
-            keyboards.BUTTON_OWN_CONFIG.text,
-            keyboards.BUTTON_WG_USER_CONFIG.text,
+        if (
+            current_command in (BotCommands.GET_CONFIG, BotCommands.GET_QRCODE)
+            and update.message.text in (
+                keyboards.BUTTON_OWN.text,
+                keyboards.BUTTON_WG_USER_CONFIG.text
+            )
         ):
             if await __get_config_buttons_handler(update, context):
                 clear_command_flag = False
                 return
             
         # Обработка нажатия кнопки Bind to YourSelf
-        if update.message.text == keyboards.BUTTON_BIND_TO_YOURSELF.text:
+        if (
+            current_command == BotCommands.BIND_USER
+            and update.message.text == keyboards.BUTTON_BIND_TO_YOURSELF.text
+        ):
             if update.effective_user is not None:
+                await __delete_message(update, context)
                 await __bind_users(update, context, update.effective_user.id)
+            return
+        
+        # Обработка нажатия кнопки Unbind from YourSelf
+        if (
+            current_command == BotCommands.UNBIND_TELEGRAM_ID
+            and update.message.text == keyboards.BUTTON_UNBIND_FROM_YOURSELF.text
+        ):
+            if update.effective_user is not None:
+                await __delete_message(update, context)
+                await __unbind_telegram_id(update, context, update.effective_user.id)
+            return
+        
+        # Обработка нажатия кнопки Own
+        if (
+            current_command == BotCommands.GET_USERS_BY_ID
+            and update.message.text == keyboards.BUTTON_OWN.text
+        ):
+            if update.effective_user is not None:
+                await __delete_message(update, context)
+                await __get_bound_users_by_tid(update, context, update.effective_user.id)
             return
 
         # Обработка /cancel
@@ -1053,7 +1080,7 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
     if current_command in (BotCommands.GET_CONFIG, BotCommands.GET_QRCODE):
         await __delete_message(update, context)
 
-        if update.message.text == keyboards.BUTTON_OWN_CONFIG.text and update.effective_user is not None:
+        if update.message.text == keyboards.BUTTON_OWN.text and update.effective_user is not None:
             await __get_configuration(update, current_command, update.effective_user.id)
             await __end_command(update, context)
             return True
