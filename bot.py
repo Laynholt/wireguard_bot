@@ -11,7 +11,6 @@ from telegram.ext import (
     CallbackContext,
     filters,
 )
-from telegram.helpers import escape_markdown
 from telegram.error import TelegramError, NetworkError, RetryAfter, TimedOut, BadRequest
 
 from libs.wireguard import config
@@ -591,7 +590,7 @@ async def __get_user_configuration(
     requester_telegram_id = update.effective_user.id
 
     # Форматируем имя конфига для сообщений
-    formatted_user = f"🔐 *{escape_markdown(user_name)}*"
+    formatted_user = f"🔐 <em>{user_name}</em>"
 
     # Проверка существования конфига
     user_exists_result = wireguard.check_user_exists(user_name)
@@ -599,8 +598,8 @@ async def __get_user_configuration(
         logger.error(f"Конфиг [{user_name}] не найден. Удаляю привязку.")
         await update.message.reply_text(
             f"🚫 Конфигурация {formatted_user} была удалена\n\n"
-            f"_Пожалуйста, свяжитесь с администратором для создания новой_",
-            parse_mode="MarkdownV2"
+            f"<em>Пожалуйста, свяжитесь с администратором для создания новой</em>",
+            parse_mode="HTML"
         )
         database.delete_user(user_name)
         return
@@ -609,8 +608,8 @@ async def __get_user_configuration(
         logger.info(f"Конфиг [{user_name}] на данный момент закомментирован.")
         await update.message.reply_text(
             f"⚠️ Конфигурация {formatted_user} временно заблокирована\n\n"
-            f"_Причина: администратор ограничил доступ_",
-            parse_mode="MarkdownV2"
+            f"<em>Причина: администратор ограничил доступ</em>",
+            parse_mode="HTML"
         )
         return
 
@@ -622,34 +621,36 @@ async def __get_user_configuration(
         
         zip_result = wireguard.create_zipfile(user_name)
         if zip_result.status:
+            # Экранируем все специальные символы
             caption = (
-                f"📦 *Архив конфигурации*\n"
+                f"<b>📦 Архив конфигурации</b>\n"
                 f"┌─────────────────────────────\n"
-                f"├ Содержимое:\n"
-                f"├─ 📄 Файл конфигурации \n"
+                f"├ <i>Содержимое:</i>\n"
+                f"├─ 📄 Файл конфигурации\n"
                 f"├─ 📲 QR-код для быстрого подключения\n"
                 f"└─────────────────────────────\n\n"
-                f"🔧 Конфигурация: {formatted_user}\n\n"
+                f"🔧 <b>Конфигурация:</b> {formatted_user}\n\n"
                 f"┌─────────────────────────────\n"
                 f"├ 📂 Распакуйте архив\n"
-                f"├ 🛡 Перейдите в приложение Wireguard\n"
-                f"├ ➕ Нажмите `добавить новую конфигурацию` (+)\n"
-                f"├ 📷 Отсканируйте камерой устройства QR-код\n"
+                f"├ 🛡 Перейдите в приложение WireGuard\n"
+                f"├ ➕ Нажмите «добавить новую конфигурацию» (+)\n"
+                f"├ 📷 Отсканируйте QR-код камерой устройства\n"
                 f"├ ⚙️ Или импортируйте .conf файл\n"
                 f"└─────────────────────────────"
             )
+            
             await update.message.reply_document(
                 document=open(zip_result.description, "rb"),
                 caption=caption,
-                parse_mode="MarkdownV2"
+                parse_mode="HTML"
             )
             wireguard.remove_zipfile(user_name)
         else:
             logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{zip_result.description}]')
             await update.message.reply_text(
                 f"❌ Не удалось создать архив для {formatted_user}\n"
-                f"_Ошибка: {escape_markdown(zip_result.description)}_",
-                parse_mode="MarkdownV2"
+                f"<em>Ошибка: {zip_result.description}</em>",
+                parse_mode="HTML"
             )
 
     elif command == BotCommands.GET_QRCODE:
@@ -661,27 +662,27 @@ async def __get_user_configuration(
         png_path = wireguard.get_qrcode_path(user_name)
         if png_path.status:
             caption = (
-                f"📲 *QR-код для подключения*\n"
+                f"<b>📲 QR-код для подключения</b>\n"
                 f"──────────────────────────────\n\n"
-                f"🔧 Конфигурация: {formatted_user}\n\n"
+                f"🔧 <b>Конфигурация:</b> {formatted_user}\n\n"
                 f"┌─────────────────────────────\n"
-                f"├ 🛡 Перейдите в приложение Wireguard\n"
-                f"├ ➕ Нажмите `добавить новую конфигурацию` (+)\n"
-                f"├ 📷 Отсканируйте камерой устройства QR-код\n"
+                f"├ 🛡 Перейдите в приложение WireGuard\n"
+                f"├ ➕ Нажмите «добавить новую конфигурацию» (+)\n"
+                f"├ 📷 Отсканируйте QR-код камерой устройства\n"
                 f"└─────────────────────────────"
             )
             
             await update.message.reply_photo(
                 photo=open(png_path.description, "rb"),
                 caption=caption,
-                parse_mode="MarkdownV2"
+                parse_mode="HTML"
             )
         else:
             logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{png_path.description}]')
             await update.message.reply_text(
                 f"❌ Не удалось сгенерировать QR-код для {formatted_user}\n"
-                f"_Ошибка: {escape_markdown(png_path.description)}_",
-                parse_mode="MarkdownV2"
+                f"<em>Ошибка: {png_path.description}</em>",
+                parse_mode="HTML"
             )
 
 
