@@ -1,7 +1,7 @@
-import utils
-import database
+from . import utils
+from . import database
 
-import wrappers
-import commands
-import messages
-import keyboards
+from . import wrappers
+from . import commands
+from . import messages
+from . import keyboards
