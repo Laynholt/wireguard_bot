@@ -166,7 +166,7 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
 
     logger.info(f"Отправляю ответ на команду [get_telegram_id] -> Tid [{telegram_id}].")
     if update.message is not None:
-        await update.message.reply_text(f"Ваш id: {telegram_id}.")
+        await update.message.reply_text(f"🆔 Ваш идентификатор: {telegram_id}.")
     await __end_command(update, context)
 
 
