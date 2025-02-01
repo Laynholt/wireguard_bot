@@ -1716,6 +1716,11 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
 
                 # Оповещаем админов о действии
                 text = (
+                    f"Администратор [{current_admin_name} ({current_admin_id})] отправил "
+                    f"файлы конфигурации Wireguard [{user_name}] пользователю "
+                    f"[@{telegram_username} ({tid})]."
+                )
+                pretty_text = (
                     f"👤 <b>Администратор:</b> {current_admin_name} (<code>{current_admin_id}</code>)\n"
                     f"📤 <b>Отправил конфигурацию WireGuard</b>\n"
                     f"👤 <b>Пользователь:</b> @{telegram_username} (<code>{tid}</code>)"
@@ -1724,7 +1729,7 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
                     if admin_id == current_admin_id:
                         continue
                     try:
-                        await context.bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
+                        await context.bot.send_message(chat_id=admin_id, text=pretty_text, parse_mode="HTML")
                         logger.info(f"Сообщение для [{admin_id}]: {text}")
                     except TelegramError as e:
                         logger.error(f"Не удалось отправить сообщение администратору {admin_id}: {e}.")
