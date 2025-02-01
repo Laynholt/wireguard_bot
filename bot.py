@@ -39,8 +39,6 @@ logger = logging.getLogger(__name__)
 database = UserDatabase(config.users_database_path)
 semaphore = asyncio.Semaphore(config.telegram_max_concurrent_messages)
 
-# scheduler = AsyncIOScheduler()
-
 
 async def __check_database_state(update: Update) -> bool:
     """
