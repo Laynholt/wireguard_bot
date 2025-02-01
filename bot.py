@@ -675,7 +675,7 @@ async def __get_user_configuration(
         png_path = wireguard.get_qrcode_path(user_name)
         if png_path.status:
             caption = (
-                "<b>📲 QR-код для подключения</b>\n"
+                "<b>📲 QR-код для подключения</b>\u2003\u2003\u2003\n"
                 "━━━━━━━━━━━━━━━━━━\n\n"
                 f"🔧 <b>Конфигурация:</b> {formatted_user}\n\n"
                 "╔━━━━━━━━━━━━━━━━━━\n"
@@ -1739,7 +1739,7 @@ def main() -> None:
     # Устанавливаем расписание перезагрузок Wireguard
     # Запускаем планировщик в отдельном потоке
     scheduler_thread = threading.Thread(target=setup_scheduler, daemon=True)
-    scheduler_thread.start()
+    # scheduler_thread.start()
 
     application = (
         ApplicationBuilder()
