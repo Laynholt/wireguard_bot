@@ -874,7 +874,7 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
         owner_tid = linked_dict.get(wg_user)
         if owner_tid is not None:
             owner_username = linked_telegram_names_dict.get(owner_tid, "Нет имени пользователя")
-            owner_part = f" 👤 Владелец: @{owner_username} (ID: {owner_tid})"
+            owner_part = f" 👤 Владелец: {owner_username} (ID: {owner_tid})"
         else:
             owner_part = " 👤 Владелец: не назначен"
 
@@ -911,7 +911,24 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     )
 
     await __end_command(update, context)
+
+
+@wrappers.admin_required
+async def reload_wireguard_server_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды перезагрузки сервера Wireguard.
+    """
+    if update.message is not None:
+        await update.message.reply_text("🔄 Перезагружаю сервер WireGuard...")
     
+    try:
+        await asyncio.to_thread(wireguard_utils.log_and_restart_wireguard)
+        if update.message:
+            await update.message.reply_text("✅ Сервер WireGuard успешно перезагружен!")
+    except Exception as e:
+        if update.message:
+            await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
 
 async def unknown_command(update: Update, context: CallbackContext) -> None:
     """
@@ -1646,6 +1663,9 @@ def main() -> None:
     # Команды для получения статистики по Wireguard
     application.add_handler(CommandHandler(BotCommands.GET_MY_STATS, get_my_stats_command))
     application.add_handler(CommandHandler(BotCommands.GET_ALL_STATS, get_all_stats_command))
+
+    # Перезагрузка сервера
+    application.add_handler(CommandHandler(BotCommands.RELOAD_WG_SERVER, reload_wireguard_server_command))
 
     # Обработка сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

@@ -49,7 +49,10 @@ ADMIN_HELP = (
 
     "<b>🔹 Просмотр статистики WireGuard: 🔹</b>\n"
     f"📊 <b>/{BotCommands.GET_MY_STATS}</b> — показать статистику по вашим конфигам WireGuard\n"
-    f"📊 <b>/{BotCommands.GET_ALL_STATS}</b> — показать статистику по всем конфигурациям"
+    f"📊 <b>/{BotCommands.GET_ALL_STATS}</b> — показать статистику по всем конфигурациям\n\n"
+    
+    "<b>🔹 Дополнительные команды: 🔹</b>\n"
+    f"🔄 <b>/{BotCommands.RELOAD_WG_SERVER}</b> — перезагрузить WireGuard сервер"
 )
 
 

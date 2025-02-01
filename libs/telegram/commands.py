@@ -23,3 +23,4 @@ class BotCommands(str, Enum):
     SEND_MESSAGE = "send_message"
     GET_MY_STATS = "get_my_stats"
     GET_ALL_STATS = "get_all_stats"
+    RELOAD_WG_SERVER = "reload_wg_server"

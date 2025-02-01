@@ -58,6 +58,9 @@ ADMIN_MENU = ReplyKeyboardMarkup(
             f"/{BotCommands.SEND_MESSAGE}",
             f"/{BotCommands.HELP}",
         ],
+        [
+            f"/{BotCommands.RELOAD_WG_SERVER}"
+        ]
     ],
     one_time_keyboard=True,
 )
