@@ -901,7 +901,7 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
             owner_part = (
                 f"   👤 <b>Владелец:</b>\n"
                 f"      ├ 🆔 <b>ID:</b> <code>{owner_tid}</code>\n"
-                f"      └ 🔗 <b>Telegram:</b> @{owner_username}" if owner_username != "Нет имени пользователя" else "Не указан"
+                f"      └ 🔗 <b>Telegram:</b> {owner_username}" if owner_username != "Нет имени пользователя" else "Не указан"
             )
         else:
             owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"
