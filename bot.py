@@ -1023,18 +1023,18 @@ def setup_scheduler():
         - Должна быть вызвана один раз при старте приложения
         - Для остановки используйте scheduler.shutdown()
     """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
     scheduler.add_job(
         reload_wireguard_server_schedule,
         trigger=IntervalTrigger(days=7),
         next_run_time=datetime.now() + timedelta(seconds=10)
     )
     scheduler.start()
-    
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
 
 
 async def unknown_command(update: Update, context: CallbackContext) -> None:
@@ -1795,5 +1795,5 @@ if __name__ == "__main__":
             logger.error(f"Не удалось подключиться к базе данных: [{config.users_database_path}]!")
         else:
             main()
-    except ValueError as e:
+    except Exception as e:
         logger.error(f"Произошла ошибка: [{e}]")
