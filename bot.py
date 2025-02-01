@@ -838,7 +838,7 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     await telegram_utils.send_batched_messages(
         update=update,
         batched_lines=batched_lines,
-        parse_mode=None,
+        parse_mode="HTML",
         groups_before_delay=2,
         delay_between_groups=0.5
     )
