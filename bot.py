@@ -1023,11 +1023,12 @@ def setup_scheduler():
         - Должна быть вызвана один раз при старте приложения
         - Для остановки используйте scheduler.shutdown()
     """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    # try:
+    #     loop = asyncio.get_running_loop()
+    # except RuntimeError:
+    #     loop = asyncio.new_event_loop()
+    #     asyncio.set_event_loop(loop)
+    asyncio.get_event_loop()
     
     scheduler.add_job(
         reload_wireguard_server_schedule,
