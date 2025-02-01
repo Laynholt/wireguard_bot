@@ -39,7 +39,11 @@ def admin_required(func):
             telegram_id
         )
         if update.message:
-            await update.message.reply_text("У вас нет прав для выполнения этой команды.")
+            await update.message.reply_text(
+                "⛔ <b>Ошибка:</b> У вас нет прав для выполнения этой команды.",
+                parse_mode="HTML"
+            )
+
         return None
 
     return wrapper

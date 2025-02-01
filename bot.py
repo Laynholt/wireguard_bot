@@ -171,7 +171,7 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
 
     logger.info(f"Отправляю ответ на команду [get_telegram_id] -> Tid [{telegram_id}].")
     if update.message is not None:
-        await update.message.reply_text(f"🆔 Ваш идентификатор: {telegram_id}.")
+        await update.message.reply_text(f"🆔 Ваш идентификатор: <code>{telegram_id}</code>.", parse_mode="HTML")
     await __end_command(update, context)
 
 
@@ -818,7 +818,7 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
 
         # Если всё в порядке, формируем строку со статистикой
         lines.append(
-            f"\n<b>{i}]</b>] <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
+            f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
             f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
             f"   📡 IP: {user_data.allowed_ips}\n"
             f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
@@ -888,19 +888,22 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
         owner_tid = linked_dict.get(wg_user)
         if owner_tid is not None:
             owner_username = linked_telegram_names_dict.get(owner_tid, "Нет имени пользователя")
-            owner_part = f" 👤 Владелец: {owner_username} (ID: {owner_tid})"
+            owner_part = (
+                f"   👤 <b>Владелец:</b>\n"
+                f"      ├ 🆔 <b>ID:</b> <code>{owner_tid}</code>\n"
+                f"      └ 🔗 <b>Telegram:</b> @{owner_username}" if owner_username != "Нет имени пользователя" else "Не указан"
+            )
         else:
-            owner_part = " 👤 Владелец: не назначен"
-
-        status_icon = "🔴 [НЕАКТИВЕН]" if wg_user in inactive_usernames else "🟢 [АКТИВЕН]"
+            owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"
 
         lines.append(
-            f"\n{i}] 🌐 Конфиг: {wg_user} {status_icon}\n"
+            f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
+            f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
             f"   {owner_part}\n"
             f"   📡 IP: {user_data.allowed_ips}\n"
-            f"   📤 Отправлено: {(user_data.transfer_sent if user_data.transfer_sent else 'N/A').ljust(10)}"
-            f"   📥 Получено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
-            f"   ────────────────"
+            f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
+            f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
+            f"   ━━━━━━━━━━━━━━━━"
         )
 
     tid = -1
@@ -919,7 +922,7 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     await telegram_utils.send_batched_messages(
         update=update,
         batched_lines=batched_lines,
-        parse_mode=None,
+        parse_mode="HTML",
         groups_before_delay=2,
         delay_between_groups=0.5
     )
@@ -1639,6 +1642,9 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
     if not await __check_database_state(update):
         return
     
+    if update.message is None:
+        return
+    
     if context.user_data is None:
         return
 
@@ -1649,16 +1655,14 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
         check_result = wireguard.check_user_exists(user_name)
         if not check_result.status:
             logger.error(f"Конфиг [{user_name}] не найден.")
-            if update.message is not None:
-                await update.message.reply_text(f"Конфигурация [{user_name}] не найдена.")
+            await update.message.reply_text(f"Конфигурация [{user_name}] не найдена.")
             return
 
         if wireguard.is_username_commented(user_name):
             logger.info(f"Конфиг [{user_name}] на данный момент закомментирован.")
-            if update.message is not None:
-                await update.message.reply_text(
-                    f"Конфигурация [{user_name}] на данный момент заблокирована."
-                )
+            await update.message.reply_text(
+                f"Конфигурация [{user_name}] на данный момент заблокирована."
+            )
             return
 
         logger.info(
@@ -1668,13 +1672,36 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
         zip_result = wireguard.create_zipfile(user_name)
         try:
             if zip_result.status:
-                await context.bot.send_message(chat_id=tid, text="Ваш новый конфиг Wireguard.")
-                await context.bot.send_document(chat_id=tid, document=open(zip_result.description, "rb"))
+                formatted_user = f"🔐 <em>{user_name}</em>"
+                caption = (
+                    f"<b>📦 Новый архив конфигурации</b>\n"
+                    f"╔━━━━━━━━━━━━━━━━━━\n"
+                    f"│ <i>Содержимое:</i>\n"
+                    f"│▸ 📄 Файл конфигурации\n"
+                    f"│▸ 📲 QR-код для быстрого подключения\n"
+                    f"╚━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🔧 <b>Конфигурация:</b> {formatted_user}\n\n"
+                    f"╔━━━━━━━━━━━━━━━━━━\n"
+                    f"│▸ 📂 Распакуйте архив\n"
+                    f"│▸ 🛡 Откройте приложение WireGuard\n"
+                    f"│▸ ➕ Нажмите «добавить туннель» (+)\n"
+                    f"│▸ 📷 Отсканируйте QR-код\n"
+                    f"│▸ ⚙️ Или импортируйте .conf файл\n"
+                    f"╚━━━━━━━━━━━━━━━━━━"
+                )
+                
+                await context.bot.send_document(
+                    chat_id=tid,
+                    document=open(zip_result.description, "rb"),
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+
                 wireguard.remove_zipfile(user_name)
 
-                png_path = wireguard.get_qrcode_path(user_name)
-                if png_path.status:
-                    await context.bot.send_photo(chat_id=tid, photo=open(png_path.description, "rb"))
+                # png_path = wireguard.get_qrcode_path(user_name)
+                # if png_path.status:
+                #     await context.bot.send_photo(chat_id=tid, photo=open(png_path.description, "rb"))
 
                 current_admin_id = -1
                 current_admin_name = "NoUsername"
@@ -1685,27 +1712,25 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
 
                 # Оповещаем админов о действии
                 text = (
-                    f"Администратор [{current_admin_name} ({current_admin_id})] отправил "
-                    f"файлы конфигурации Wireguard [{user_name}] пользователю "
-                    f"[@{telegram_username} ({tid})]."
+                    f"👤 <b>Администратор:</b> {current_admin_name} (<code>{current_admin_id}</code>)\n"
+                    f"📤 <b>Отправил конфигурацию WireGuard</b>\n"
+                    f"👤 <b>Пользователь:</b> @{telegram_username} (<code>{tid}</code>)"
                 )
                 for admin_id in config.telegram_admin_ids:
                     if admin_id == current_admin_id:
                         continue
                     try:
-                        await context.bot.send_message(chat_id=admin_id, text=text)
+                        await context.bot.send_message(chat_id=admin_id, text=text, parse_mode="HTML")
                         logger.info(f"Сообщение для [{admin_id}]: {text}")
                     except TelegramError as e:
                         logger.error(f"Не удалось отправить сообщение администратору {admin_id}: {e}.")
-                        if update.message is not None:
-                            await update.message.reply_text(
-                                f"Не удалось отправить сообщение администратору {admin_id}: {e}."
-                            )
+                        await update.message.reply_text(
+                            f"Не удалось отправить сообщение администратору {admin_id}: {e}."
+                        )
 
         except TelegramError as e:
             logger.error(f"Не удалось отправить сообщение пользователю {tid}: {e}.")
-            if update.message is not None:
-                await update.message.reply_text(f"Не удалось отправить сообщение пользователю {tid}: {e}.")
+            await update.message.reply_text(f"Не удалось отправить сообщение пользователю {tid}: {e}.")
 
 
 # ---------------------- Обработчик ошибок ----------------------
@@ -1740,7 +1765,7 @@ def main() -> None:
     # Устанавливаем расписание перезагрузок Wireguard
     # Запускаем планировщик в отдельном потоке
     scheduler_thread = threading.Thread(target=setup_scheduler, daemon=True)
-    # scheduler_thread.start()
+    scheduler_thread.start()
 
     application = (
         ApplicationBuilder()
