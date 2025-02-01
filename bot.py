@@ -676,7 +676,7 @@ async def __get_user_configuration(
         if png_path.status:
             caption = (
                 "<b>📲 QR-код для подключения</b>\u2003\u2003\u2003\n"
-                "━━━━━━━━━━━━━━━\n\n"
+                "━━━━━━━━━━━━━━━━\n\n"
                 f"🔧 <b>Конфигурация:</b> {formatted_user}\n\n"
                 "╔━━━━━━━━━━━━━━━\n"
                 "│▸ 🛡 Откройте приложение WireGuard\n"
@@ -818,11 +818,12 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
 
         # Если всё в порядке, формируем строку со статистикой
         lines.append(
-            f"\n{i}] 🌐 Конфиг: {wg_user} {'🔴 [Неактивен]' if wg_user in inactive_usernames else '🟢'}\n"
+            f"\n<b>{i}]</b>] <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
+            f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
             f"   📡 IP: {user_data.allowed_ips}\n"
-            f"   📤 Отправлено: {(user_data.transfer_sent if user_data.transfer_sent else 'N/A').ljust(8)}"
-            f"   📥 Получено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
-            f"   ────────────────"
+            f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
+            f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
+            f"   ━━━━━━━━━━━━━━━━"
         )
 
     logger.info(f"Отправляю статистику по личным конфигам Wireguard -> Tid [{telegram_id}].")
