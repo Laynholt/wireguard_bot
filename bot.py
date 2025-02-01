@@ -49,7 +49,9 @@ async def __check_database_state(update: Update) -> bool:
         logger.error("Ошибка! База данных не загружена!")
         if update.message is not None:
             await update.message.reply_text(
-                "Технические неполадки. Пожалуйста, свяжитесь с администратором."
+                "⚙️ <b>Технические неполадки</b>\n\n"
+                "📞 Пожалуйста, свяжитесь с администратором.",
+                parse_mode="HTML"
             )
         return False
     return True
@@ -579,8 +581,9 @@ async def __get_configuration(
     if not user_names:
         logger.info(f"Пользователь Tid [{telegram_id}] не привязан ни к одной конфигурации.")
         await update.message.reply_text(
-            "🔍 <b>Конфигурации не найдены</b>\n"
-            "💡 Пожалуйста, свяжитесь с администратором для их добавления.",
+            "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
+            f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+            f"администратору на создание новой конфигурации.</em>",
             parse_mode="HTML"
         )
         return
@@ -612,8 +615,9 @@ async def __get_user_configuration(
     if not user_exists_result.status:
         logger.error(f"Конфиг [{user_name}] не найден. Удаляю привязку.")
         await update.message.reply_text(
-            f"🚫 Конфигурация {formatted_user} была удалена\n\n"
-            f"<em>Пожалуйста, свяжитесь с администратором для создания новой</em>",
+            f"🚫 Конфигурация {formatted_user} была удалена!\n\n"
+            f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+            f"администратору на создание новой конфигурации.</em>",
             parse_mode="HTML"
         )
         database.delete_user(user_name)
@@ -622,7 +626,7 @@ async def __get_user_configuration(
     if wireguard.is_username_commented(user_name):
         logger.info(f"Конфиг [{user_name}] на данный момент закомментирован.")
         await update.message.reply_text(
-            f"⚠️ Конфигурация {formatted_user} временно заблокирована\n\n"
+            f"⚠️ Конфигурация {formatted_user} временно заблокирована!\n\n"
             f"<em>Причина: администратор ограничил доступ</em>",
             parse_mode="HTML"
         )
@@ -663,7 +667,7 @@ async def __get_user_configuration(
         else:
             logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{zip_result.description}]')
             await update.message.reply_text(
-                f"❌ Не удалось создать архив для {formatted_user}\n"
+                f"❌ Не удалось создать архив для {formatted_user}!\n"
                 f"<em>Ошибка: {zip_result.description}</em>",
                 parse_mode="HTML"
             )
@@ -779,7 +783,8 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     if not wireguard_users:
         await update.message.reply_text(
             "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
-            f"📝 Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос администратору.",
+            f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+            f"администратору на создание новой конфигурации.</em>",
             parse_mode="HTML"
         )
 
