@@ -13,6 +13,8 @@ from telegram.ext import (
 )
 from telegram.error import TelegramError, NetworkError, RetryAfter, TimedOut, BadRequest
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 from libs.wireguard import config
 from libs.wireguard import stats as wireguard_stats
 from libs.wireguard import user_control as wireguard
@@ -34,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 database = UserDatabase(config.users_database_path)
 semaphore = asyncio.Semaphore(config.telegram_max_concurrent_messages)
+
+scheduler = AsyncIOScheduler()
 
 
 async def __check_database_state(update: Update) -> bool:
@@ -938,18 +942,91 @@ async def reload_wireguard_server_command(update: Update, context: CallbackConte
     await __end_command(update, context)
 
 
-# Асинхронная обертка для синхронной функции
 async def __async_restart_wireguard() -> bool:
+    """Асинхронная обертка для синхронной операции перезагрузки WireGuard.
+    
+    Запускает блокирующую операцию в отдельном потоке, чтобы не блокировать event loop.
+    
+    Returns:
+        bool: Результат операции перезагрузки
+            - True: перезагрузка успешно выполнена
+            - False: произошла ошибка при перезагрузке
+            
+    Raises:
+        Exception: Любые исключения из wireguard_utils.log_and_restart_wireguard 
+            будут перехвачены и залогированы, но не проброшены выше
+            
+    Notes:
+        - Использует дефолтный ThreadPoolExecutor
+        - Является internal-функцией (не предназначена для прямого вызова)
+    """
     loop = asyncio.get_running_loop()
     try:
-        # Запуск блокирующей функции в отдельном потоке
         return await loop.run_in_executor(
-            None,  # Используем дефолтный ThreadPoolExecutor
+            None,
             wireguard_utils.log_and_restart_wireguard
         )
     except Exception as e:
         logger.error(f"Ошибка перезагрузки: {str(e)}")
         return False
+
+
+async def reload_wireguard_server_schedule():
+    """Периодическая задача для автоматической перезагрузки WireGuard.
+    
+    Features:
+        - Запускается по расписанию через APScheduler
+        - Полностью асинхронная реализация
+        - Интеграция с системой логирования
+        
+    Behavior:
+        1. Инициирует перезагрузку через __async_restart_wireguard()
+        2. Логирует результат операции
+        3. Перехватывает и логирует любые исключения
+        
+    Schedule:
+        - Первый запуск: через 10 секунд после старта приложения
+        - Интервал: каждые 7 дней
+        
+    Notes:
+        - Не принимает параметров и не возвращает значений
+        - Для работы требует предварительной настройки планировщика
+    """
+    logger.info("Запуск автоматической перезагрузки...")
+    try:
+        success = await __async_restart_wireguard()
+        logger.info(f"Результат: {'Успех' if success else 'Ошибка'}")
+    except Exception as e:
+        logger.error(f"Ошибка в расписании: {str(e)}")
+
+
+def setup_scheduler():
+    """Инициализация и настройка планировщика задач.
+    
+    Actions:
+        1. Создает новую job-задачу
+        2. Настраивает триггер типа IntervalTrigger
+        3. Запускает scheduler
+        
+    Job Parameters:
+        - Функция: reload_wireguard_server_schedule
+        - Триггер: интервальный (7 дней)
+        - Первый запуск: через 10 секунд после старта
+        
+    Architecture:
+        - Использует AsyncIOScheduler для интеграции с asyncio
+        - Планировщик работает в том же event loop, что и Telegram бот
+        
+    Notes:
+        - Должна быть вызвана один раз при старте приложения
+        - Для остановки используйте scheduler.shutdown()
+    """
+    scheduler.add_job(
+        reload_wireguard_server_schedule,
+        trigger=IntervalTrigger(days=7),
+        next_run_time=datetime.now() + timedelta(seconds=10)
+    )
+    scheduler.start()
 
 
 async def unknown_command(update: Update, context: CallbackContext) -> None:
@@ -1696,6 +1773,9 @@ def main() -> None:
 
     # Обработчик ошибок
     application.add_error_handler(error_handler)
+
+    # Устанавливаем расписание перезагрузок Wireguard
+    setup_scheduler()
 
     # Запуск бота
     application.run_polling(timeout=10)
