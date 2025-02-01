@@ -115,7 +115,7 @@ def log_wireguard_status():
     stats.write_data_to_json(config.wireguard_log_filepath, wireguard_stats)
     print(f"[+] Логи Wireguard успешно обновлены и сохранены в [{config.wireguard_log_filepath}]")
 
-def log_and_restart_wireguard():
+def log_and_restart_wireguard() -> bool:
     """
     Сначала выполняет запись лога с помощью log_wireguard_status(),
     затем перезагружает WireGuard через команду 'docker compose restart wireguard'.
@@ -123,3 +123,4 @@ def log_and_restart_wireguard():
     log_wireguard_status()  # Записываем лог с выводом show_info.py
     print('Перезагружаю Wireguard...')
     run_command(f'docker compose -f {config.wireguard_folder}/docker-compose.yml restart wireguard').return_with_print()  # Перезагрузка WireGuard
+    return True

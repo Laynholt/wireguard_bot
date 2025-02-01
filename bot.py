@@ -922,12 +922,34 @@ async def reload_wireguard_server_command(update: Update, context: CallbackConte
         await update.message.reply_text("🔄 Перезагружаю сервер WireGuard...")
     
     try:
-        await asyncio.to_thread(wireguard_utils.log_and_restart_wireguard)
-        if update.message:
-            await update.message.reply_text("✅ Сервер WireGuard успешно перезагружен!")
+        # await asyncio.to_thread(wireguard_utils.log_and_restart_wireguard)
+        success = await __async_restart_wireguard()
+        response = (
+            "✅ Сервер WireGuard успешно перезагружен!"
+            if success
+            else "❌ Ошибка! Не удалось перезагрузить Wireguard!"
+        )
     except Exception as e:
-        if update.message:
-            await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+        response = f"⚠️ Ошибка: {str(e)}"
+        
+    if update.message is not None:
+        await update.message.reply_text(response)
+
+    await __end_command(update, context)
+
+
+# Асинхронная обертка для синхронной функции
+async def __async_restart_wireguard() -> bool:
+    loop = asyncio.get_running_loop()
+    try:
+        # Запуск блокирующей функции в отдельном потоке
+        return await loop.run_in_executor(
+            None,  # Используем дефолтный ThreadPoolExecutor
+            wireguard_utils.log_and_restart_wireguard
+        )
+    except Exception as e:
+        logger.error(f"Ошибка перезагрузки: {str(e)}")
+        return False
 
 
 async def unknown_command(update: Update, context: CallbackContext) -> None:
