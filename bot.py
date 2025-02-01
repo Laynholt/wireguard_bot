@@ -1023,12 +1023,11 @@ def setup_scheduler():
         - Должна быть вызвана один раз при старте приложения
         - Для остановки используйте scheduler.shutdown()
     """
-    # try:
-    #     loop = asyncio.get_running_loop()
-    # except RuntimeError:
-    #     loop = asyncio.new_event_loop()
-    #     asyncio.set_event_loop(loop)
-    asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     
     scheduler.add_job(
         reload_wireguard_server_schedule,
@@ -1036,6 +1035,8 @@ def setup_scheduler():
         next_run_time=datetime.now() + timedelta(seconds=10)
     )
     scheduler.start()
+    logger.info("Планировщик запущен.")
+    loop.run_forever()  # Держим event loop активным
 
 
 async def unknown_command(update: Update, context: CallbackContext) -> None:
@@ -1728,7 +1729,9 @@ def main() -> None:
     token = config.telegram_token
 
     # Устанавливаем расписание перезагрузок Wireguard
-    setup_scheduler()
+    # Запускаем планировщик в отдельном потоке
+    scheduler_thread = threading.Thread(target=setup_scheduler, daemon=True)
+    scheduler_thread.start()
 
     application = (
         ApplicationBuilder()
