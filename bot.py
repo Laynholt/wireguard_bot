@@ -110,7 +110,8 @@ async def start_command(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(
             messages.ADMIN_HELLO
             if telegram_id in config.telegram_admin_ids
-            else messages.USER_HELLO
+            else messages.USER_HELLO,
+            parse_mode="HTML"
         )
 
 
