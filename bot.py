@@ -962,12 +962,7 @@ async def __async_restart_wireguard() -> bool:
         - Использует дефолтный ThreadPoolExecutor
         - Является internal-функцией (не предназначена для прямого вызова)
     """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+    loop = asyncio.get_running_loop()   
     try:
         return await loop.run_in_executor(
             None,
@@ -1034,6 +1029,12 @@ def setup_scheduler():
         next_run_time=datetime.now() + timedelta(seconds=10)
     )
     scheduler.start()
+    
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
 
 async def unknown_command(update: Update, context: CallbackContext) -> None:
@@ -1725,6 +1726,9 @@ def main() -> None:
     """
     token = config.telegram_token
 
+    # Устанавливаем расписание перезагрузок Wireguard
+    setup_scheduler()
+
     application = (
         ApplicationBuilder()
         .token(token)
@@ -1780,9 +1784,6 @@ def main() -> None:
 
     # Обработчик ошибок
     application.add_error_handler(error_handler)
-
-    # Устанавливаем расписание перезагрузок Wireguard
-    setup_scheduler()
 
     # Запуск бота
     application.run_polling(timeout=10)
