@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 database = UserDatabase(config.users_database_path)
 semaphore = asyncio.Semaphore(config.telegram_max_concurrent_messages)
 
-scheduler = AsyncIOScheduler()
+# scheduler = AsyncIOScheduler()
 
 
 async def __check_database_state(update: Update) -> bool:
@@ -1029,6 +1029,7 @@ def setup_scheduler():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     
+    scheduler = AsyncIOScheduler(event_loop=loop)  # Передаём loop явно
     scheduler.add_job(
         reload_wireguard_server_schedule,
         trigger=IntervalTrigger(days=7),
