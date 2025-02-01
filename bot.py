@@ -1795,5 +1795,5 @@ if __name__ == "__main__":
             logger.error(f"Не удалось подключиться к базе данных: [{config.users_database_path}]!")
         else:
             main()
-    except Exception as e:
+    except ValueError as e:
         logger.error(f"Произошла ошибка: [{e}]")
