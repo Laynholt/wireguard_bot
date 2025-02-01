@@ -14,6 +14,8 @@ from telegram.ext import (
 from telegram.error import TelegramError, NetworkError, RetryAfter, TimedOut, BadRequest
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from datetime import datetime, timedelta
 
 from libs.wireguard import config
 from libs.wireguard import stats as wireguard_stats
@@ -992,10 +994,10 @@ async def reload_wireguard_server_schedule():
         - Не принимает параметров и не возвращает значений
         - Для работы требует предварительной настройки планировщика
     """
-    logger.info("Запуск автоматической перезагрузки...")
+    logger.info("Запуск автоматической перезагрузки Wireguard...")
     try:
         success = await __async_restart_wireguard()
-        logger.info(f"Результат: {'Успех' if success else 'Ошибка'}")
+        logger.info(f"Перезагрузка прошла: {'успешно' if success else 'неудачно'}!")
     except Exception as e:
         logger.error(f"Ошибка в расписании: {str(e)}")
 
