@@ -4,18 +4,26 @@ from dataclasses import dataclass
 from telegram import (
     ReplyKeyboardMarkup,
     KeyboardButton,
-    KeyboardButtonRequestUsers,  # type: ignore
+    KeyboardButtonRequestUsers,
 )
 
 # Импорт вашего перечисления команд
 from .commands import BotCommands
 
-@dataclass
+@dataclass(frozen=True)
 class KeyboardText:
     """
     Класс для хранения текста кнопки в виде поля `text`.
+    Объекты неизменяемы (frozen=True).
     """
     text: str
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, KeyboardText):
+            return self.text == other.text
+        if isinstance(other, str):
+            return self.text == other
+        return NotImplemented
 
 
 # Кнопки, используемые в разных меню

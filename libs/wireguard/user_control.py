@@ -218,14 +218,14 @@ def add_user(user_name: str) -> utils.FunctionResult:
                     f'[Interface]\n'
                     f'Address = {allowed_ip}\n'
                     f'PrivateKey = {user_private_key}\n'
-                    f'ListenPort = 51820\n'
+                    # f'ListenPort = 51820\n'
                     f'DNS = {__get_dsn_server_ip()}\n\n'
                     f'[Peer]\n'
                     f'PublicKey = {server_public_key}\n'
                     f'PresharedKey = {user_preshared_key}\n'
                     f'Endpoint = {config.server_ip}:{config.server_port}\n'
                     f'AllowedIPs = 0.0.0.0/0\n'
-                    f'PersistentKeepalive = 30\n'
+                    # f'PersistentKeepalive = 30\n'
                 )
         except IOError:
             return utils.FunctionResult(status=False,
