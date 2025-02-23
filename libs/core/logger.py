@@ -16,6 +16,8 @@ class RotatingCharFileHandler(logging.Handler):
 
     def _open_new_file(self):
         """Создаёт новый файл для логирования."""
+        os.makedirs(os.path.dirname(self.base_filename), exist_ok=True)
+        
         num = 1
         while True:
             new_filename = f"{self.base_filename}_{num}.log"
