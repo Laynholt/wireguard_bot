@@ -818,6 +818,7 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     
     await __create_list_of_wireguard_users_by_telegram_id(update, context, telegram_id=update.effective_user.id)
     await __get_user_stats(update, context, own_stats=True)
+    await __end_command(update, context)
 
 
 async def __get_user_stats(update: Update, context: CallbackContext, own_stats: bool = False) -> None:
@@ -860,8 +861,6 @@ async def __get_user_stats(update: Update, context: CallbackContext, own_stats: 
                 "ℹ️ <b>Статистика для заданного пользователя Telegram или пользователей WireGuard отсутствует.</b>\n\n",
                 parse_mode="HTML"
             )
-
-        await __end_command(update, context)
         return
 
     # Получаем полную статистику
@@ -873,7 +872,6 @@ async def __get_user_stats(update: Update, context: CallbackContext, own_stats: 
     
     if not all_wireguard_stats:
         await update.message.reply_text("Нет данных по ни одному конфигу.")
-        await __end_command(update, context)
         return
 
     owner_tid = database.get_telegram_id_by_user(wireguard_users[0])
@@ -950,8 +948,6 @@ async def __get_user_stats(update: Update, context: CallbackContext, own_stats: 
         groups_before_delay=2,
         delay_between_groups=0.5
     )
-
-    await __end_command(update, context)
 
 
 @wrappers.admin_required
