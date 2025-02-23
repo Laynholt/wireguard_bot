@@ -6,7 +6,7 @@ import zipfile
 import ipaddress
 from enum import Enum
 
-from . import config
+from ..core import config
 from . import utils
 from . import stats
 

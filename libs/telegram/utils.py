@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 from telegram.error import TelegramError
 
-from libs.wireguard import config
+from libs.core import config
 
 
 logger = logging.getLogger(__name__)

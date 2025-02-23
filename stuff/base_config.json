@@ -7,6 +7,10 @@
 
     "users_database_path": "stuff/wireguard_users.db",
 
+    "logs_dir": "stuff/logs",
+    "base_log_filename": "telegram_bot",
+    "max_log_length": 5000,
+
     "telegram_token": "",
     "telegram_admin_ids": [],
     "telegram_max_concurrent_messages": 5,

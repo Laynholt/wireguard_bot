@@ -1,6 +1,6 @@
 import argparse
 
-from libs.wireguard import config  
+from libs.core import config  
 from libs.wireguard import stats
 
 if __name__ == "__main__":

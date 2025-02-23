@@ -2,7 +2,7 @@ import os
 import subprocess
 from typing import Callable, Optional
 
-from . import config
+from ..core import config
 from . import stats
 
 class FunctionResult:

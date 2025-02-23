@@ -1,6 +1,7 @@
 import inspect
 import logging
 import asyncio
+import os
 import threading
 from typing import Optional
 
@@ -18,7 +19,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime, timedelta
 
-from libs.wireguard import config
+from libs.core import config
+from libs.core import RotatingCharFileHandler
+
 from libs.wireguard import stats as wireguard_stats
 from libs.wireguard import user_control as wireguard
 from libs.wireguard import utils as wireguard_utils
@@ -28,13 +31,23 @@ from libs.telegram import utils as telegram_utils
 from libs.telegram import wrappers, keyboards, messages
 from libs.telegram.commands import BotCommands
 
+
+logger_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format=logger_fmt,
     level=logging.INFO,
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+# Добавляем кастомный обработчик
+file_handler = RotatingCharFileHandler(
+    base_filename=os.path.join(config.logs_dir, config.base_log_filename),
+    max_chars=config.max_log_length
+)
+file_handler.setFormatter(logging.Formatter(logger_fmt))
+logger.addHandler(file_handler)
 
 
 database = UserDatabase(config.users_database_path)

@@ -12,6 +12,11 @@ class Config(BaseModel):
 
     # Параметры базы данных
     users_database_path: str = Field(default="")
+    
+    # Путь к папке с логами
+    logs_dir: str = Field(default="logs")
+    base_log_filename: str = Field(default="log")
+    max_log_length: int = Field(default=5000)
 
     # Параметры Telegram
     telegram_token: str = Field(default="")
