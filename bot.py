@@ -1,3 +1,4 @@
+import inspect
 import logging
 import asyncio
 import threading
@@ -99,6 +100,8 @@ async def start_command(update: Update, context: CallbackContext) -> None:
     Команда /start: приветствие и первичная регистрация пользователя в базе.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -120,6 +123,8 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     Команда /help: показывает помощь по доступным командам.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -142,6 +147,8 @@ async def menu_command(update: Update, context: CallbackContext) -> None:
     Команда /menu: выводит меню в зависимости от прав пользователя.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -166,6 +173,8 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
     Команда /get_telegram_id: выводит телеграм-ID пользователя.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -183,6 +192,8 @@ async def request_new_config_command(update: Update, context: CallbackContext) -
     Команда /request_new_config: пользователь запрашивает у админов новый конфиг.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     if update.message is not None:
@@ -222,6 +233,8 @@ async def get_telegram_users_command(update: Update, context: CallbackContext) -
     взаимодействовали с ботом (есть в БД).
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -405,6 +418,8 @@ async def show_users_state_command(update: Update, context: CallbackContext) -> 
     Команда /show_users_state: отображает состояние пользователей (активные/отключённые).
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -484,6 +499,8 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     - Список непривязанных user_name.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -556,9 +573,13 @@ async def __get_configuration(
     Универсальная функция получения и отправки пользователю конфигурационных файлов/QR-кода.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
         return
     
     requester_telegram_id = update.effective_user.id
@@ -601,9 +622,13 @@ async def __get_user_configuration(
     Если пользователь заблокирован или конфиг отсутствует, выводится соответствующее сообщение.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
         return
     
     requester_telegram_id = update.effective_user.id
@@ -747,9 +772,13 @@ async def __get_config_or_qrcode_helper(
     message: str
 ) -> None:
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
 
     if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -770,9 +799,33 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     выводится в сообщении. При необходимости лишние записи удаляются из БД.
     """
     if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
+        return
+    
+    await __create_list_of_wireguard_users_by_telegram_id(update, context, telegram_id=update.effective_user.id)
+    await __get_user_stats(update, context, own_stats=True)
+
+
+async def __get_user_stats(update: Update, context: CallbackContext, own_stats: bool = False) -> None:
+    """
+    Выводит статистику по переданным WireGuard конфигам в context'е.
+    Если конфиг недоступен или отсутствует (удалён), информация об этом
+    выводится в сообщении. При необходимости лишние записи удаляются из БД.
+    """
+    if update.effective_user is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
     if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
+        return
+    
+    if context.user_data is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
         return
     
     telegram_id = update.effective_user.id
@@ -780,14 +833,20 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     if not await __check_database_state(update):
         return
 
-    wireguard_users = database.get_users_by_telegram_id(telegram_id)
+    wireguard_users = context.user_data["wireguard_users"]
     if not wireguard_users:
-        await update.message.reply_text(
-            "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
-            f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
-            f"администратору на создание новой конфигурации.</em>",
-            parse_mode="HTML"
-        )
+        if own_stats:
+            await update.message.reply_text(
+                "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
+                f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+                f"администратору на создание новой конфигурации.</em>",
+                parse_mode="HTML"
+            )
+        else:
+            await update.message.reply_text(
+                "ℹ️ <b>Статистика для заданного пользователя Telegram или пользователей WireGuard отсутствует.</b>\n\n",
+                parse_mode="HTML"
+            )
 
         await __end_command(update, context)
         return
@@ -798,6 +857,31 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
         json_file_path=config.wireguard_log_filepath,
         sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
     )
+    
+    if not all_wireguard_stats:
+        await update.message.reply_text("Нет данных по ни одному конфигу.")
+        await __end_command(update, context)
+        return
+
+    owner_tid = database.get_telegram_id_by_user(wireguard_users[0])
+    # Так как возвращается в базе данных нет ограничений на привязке нескольких конфигов к нескольким tid
+    # (это ограничение установлено в коде нашего бота), там возвращается список.
+    # Однако, если нет привязки, он может быть пустой.
+    owner_tid = owner_tid[0] if owner_tid else None
+    
+    if owner_tid is not None and own_stats is False:
+        owner_username = await telegram_utils.get_username_by_id(owner_tid, context)
+        owner_part = (
+            f"   👤 <b>Владелец:</b>\n"
+            f"      ├ 🆔 <b>ID:</b> <code>{owner_tid}</code>\n"
+            f"      └ 🔗 <b>Telegram:</b> "
+            f"{'Не удалось получить' if owner_username is None else owner_username}"
+        )
+
+    else:
+        owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"       
+
+    owner_part = "" if own_stats else f"   {owner_part}\n"
 
     lines = []
     inactive_usernames = wireguard.get_inactive_usernames()
@@ -830,6 +914,7 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
         lines.append(
             f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
             f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
+            f"{owner_part}"
             f"   📡 IP: {user_data.allowed_ips}\n"
             f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
             f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
@@ -857,6 +942,26 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
 
 
 @wrappers.admin_required
+@wrappers.command_lock
+async def get_user_stats_command(update: Update, context: CallbackContext) -> None:
+    """
+    Команда для администраторов.
+    Выводит статистику для конкретного пользователя телеграмм или конкретного конфига WireGuard.
+    """
+    if update.message is not None:
+        await update.message.reply_text(
+            text=(
+                "Выберете, чью статистику вы хотите получить.\n\n"
+                "Для отмены нажмите кнопку Закрыть."
+            ),
+            reply_markup=keyboards.STATS_MENU
+        )
+    if context.user_data is not None:
+        context.user_data["command"] = BotCommands.GET_USER_STATS
+        context.user_data["wireguard_users"] = []
+
+
+@wrappers.admin_required
 async def get_all_stats_command(update: Update, context: CallbackContext) -> None:
     """
     Команда для администраторов.
@@ -864,6 +969,8 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     (Telegram ID и username). Если владелец не привязан, выводит соответствующую пометку.
     """
     if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
         return
     
     # Сначала получаем всю статистику
@@ -897,11 +1004,12 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     for i, (wg_user, user_data) in enumerate(all_wireguard_stats.items(), start=1):
         owner_tid = linked_dict.get(wg_user)
         if owner_tid is not None:
-            owner_username = linked_telegram_names_dict.get(owner_tid, "Нет имени пользователя")
+            owner_username = linked_telegram_names_dict.get(owner_tid, None)
             owner_part = (
                 f"   👤 <b>Владелец:</b>\n"
                 f"      ├ 🆔 <b>ID:</b> <code>{owner_tid}</code>\n"
-                f"      └ 🔗 <b>Telegram:</b> {owner_username}" if owner_username != "Нет имени пользователя" else "Не указан"
+                f"      └ 🔗 <b>Telegram:</b> "
+                f"{'Не удалось получить' if owner_username is None else owner_username}"
             )
         else:
             owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"
@@ -1082,9 +1190,13 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
     clear_command_flag = True
     try:
         if context.user_data is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
             return
         
         if update.message is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
             return
         
         current_command = context.user_data.get("command", None)
@@ -1113,7 +1225,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             current_command in (BotCommands.GET_CONFIG, BotCommands.GET_QRCODE)
             and update.message.text in (
                 keyboards.BUTTON_OWN.text,
-                keyboards.BUTTON_WG_USER_CONFIG.text
+                keyboards.BUTTON_WIREGUARD_USER_CONFIG.text
             )
         ):
             if await __get_config_buttons_handler(update, context):
@@ -1149,7 +1261,16 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                 await __delete_message(update, context)
                 await __get_bound_users_by_tid(update, context, update.effective_user.id)
             return
-
+        
+        # Обработка нажатия кнопки Пользователя Wireguard
+        if (
+            current_command == BotCommands.GET_USER_STATS
+            and update.message.text == keyboards.BUTTON_WIREGUARD_USER_STATS.text
+        ):
+            if await __get_stats_buttons_handler(update, context):
+                clear_command_flag = False
+                return
+            
         # Обработка /cancel
         if update.message.text is not None and update.message.text.lower() == f'/{BotCommands.CANCEL}':
             await cancel_command(update, context)
@@ -1179,7 +1300,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             elif current_command == BotCommands.COM_UNCOM_USER:
                 ret_val = await __com_user(update, entry)
 
-            elif current_command in (BotCommands.BIND_USER, BotCommands.SEND_CONFIG):
+            elif current_command in (BotCommands.BIND_USER, BotCommands.SEND_CONFIG, BotCommands.GET_USER_STATS):
                 ret_val = await __create_list_of_wireguard_users(update, context, entry)
 
             elif current_command == BotCommands.UNBIND_USER:
@@ -1207,7 +1328,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
 
         # Для add_user / bind_user предлагаем выбрать пользователя Telegram
         if current_command in (BotCommands.ADD_USER, BotCommands.BIND_USER):
-            if len(context.user_data["wireguard_users"]) > 0 and update.message:
+            if len(context.user_data["wireguard_users"]) > 0:
                 await update.message.reply_text(
                     (
                         "Нажмите на кнопку выбора пользователя, чтобы выбрать пользователя Telegram "
@@ -1220,7 +1341,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
 
         # Для /send_config — аналогичная логика
         elif current_command == BotCommands.SEND_CONFIG:
-            if len(context.user_data["wireguard_users"]) > 0 and update.message:
+            if len(context.user_data["wireguard_users"]) > 0:
                 await update.message.reply_text(
                     (
                         "Нажмите на кнопку выбора пользователя, чтобы выбрать пользователя Telegram,"
@@ -1230,6 +1351,9 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                     reply_markup=keyboards.SEND_MENU,
                 )
                 clear_command_flag = False
+                
+        elif current_command == BotCommands.GET_USER_STATS:
+            await __get_user_stats(update, context)
 
     except Exception as e:
         logger.error(f"Неожиданная ошибка: {e}")
@@ -1252,9 +1376,13 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
         await __delete_message(update, context)
 
         if context.user_data is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
             return
         
         if update.message is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
             return
 
         current_command = context.user_data.get("command", None)
@@ -1272,6 +1400,8 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
             return
 
         if update.message.users_shared is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Update message users_shared is None в функции {curr_frame.f_code.co_name}')
             return
 
         for shared_user in update.message.users_shared.users:
@@ -1289,6 +1419,14 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
 
             elif current_command == BotCommands.SEND_CONFIG:
                 await __send_config(update, context, shared_user)
+                
+            elif current_command == BotCommands.GET_USER_STATS:
+                await __create_list_of_wireguard_users_by_telegram_id(
+                    update,
+                    context,
+                    shared_user.user_id
+                )
+                await __get_user_stats(update, context)
 
     except Exception as e:
         logger.error(f"Неожиданная ошибка: {e}")
@@ -1310,9 +1448,13 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
     Возвращает True, если нужно прервать дальнейший парсинг handle_text.
     """
     if context.user_data is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
         return False
         
     if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
         return False
 
     current_command = context.user_data.get("command", None)
@@ -1324,7 +1466,32 @@ async def __get_config_buttons_handler(update: Update, context: CallbackContext)
             await __end_command(update, context)
             return True
 
-        elif update.message.text == keyboards.BUTTON_WG_USER_CONFIG.text:
+        elif update.message.text == keyboards.BUTTON_WIREGUARD_USER_CONFIG.text:
+            await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
+            return True
+    return False
+
+
+async def __get_stats_buttons_handler(update: Update, context: CallbackContext) -> bool:
+    """
+    Обработка нажатия кнопок для команд get_user_stats.
+    Возвращает True, если нужно прервать дальнейший парсинг handle_text.
+    """
+    if context.user_data is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
+        return False
+        
+    if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
+        return False
+
+    current_command = context.user_data.get("command", None)
+    if current_command == BotCommands.GET_USER_STATS:
+        await __delete_message(update, context)
+
+        if update.message.text == keyboards.BUTTON_WIREGUARD_USER_STATS.text:
             await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
             return True
     return False
@@ -1360,6 +1527,7 @@ async def __close_button_handler(update: Update, context: CallbackContext) -> bo
         BotCommands.GET_CONFIG,
         BotCommands.GET_QRCODE,
         BotCommands.SEND_CONFIG,
+        BotCommands.GET_USER_STATS
     ):
         await __delete_message(update, context)
         if update.message is not None:
@@ -1481,8 +1649,8 @@ async def __create_list_of_wireguard_users(
     update: Update, context: CallbackContext, user_name: str
 ) -> Optional[wireguard_utils.FunctionResult]:
     """
-    Добавляет существующие user_name в список, чтобы затем связать их с Telegram-пользователем
-    (либо отправить конфиг).
+    Добавляет существующие user_name в список пользователей Wireguard для дальнейшей обработки,
+    если user_name существует и корректен.
     """
     if not await __validate_username(update, user_name):
         return None
@@ -1531,6 +1699,8 @@ async def __bind_users(update: Update, context: CallbackContext, tid: int) -> No
         return
 
     if context.user_data is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
         return
 
     telegram_username = await telegram_utils.get_username_by_id(tid, context)
@@ -1653,9 +1823,13 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
         return
     
     if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
         return
     
     if context.user_data is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
         return
 
     tid = telegram_user.user_id
@@ -1733,6 +1907,10 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
                 )
                 for admin_id in config.telegram_admin_ids:
                     if admin_id == current_admin_id:
+                        await update.message.reply_text((
+                            f"Конфигурация [{user_name}] успешно отправлена"
+                            f" пользователю [@{telegram_username} ({tid})]."
+                        ))
                         continue
                     try:
                         await context.bot.send_message(chat_id=admin_id, text=pretty_text, parse_mode="HTML")
@@ -1747,6 +1925,38 @@ async def __send_config(update: Update, context: CallbackContext, telegram_user:
             logger.error(f"Не удалось отправить сообщение пользователю {tid}: {e}.")
             await update.message.reply_text(f"Не удалось отправить сообщение пользователю {tid}: {e}.")
 
+
+
+async def __create_list_of_wireguard_users_by_telegram_id(
+    update: Update,
+    context: CallbackContext,
+    telegram_id: int
+) -> None:
+    """
+    Добавляет список конфигов пользователя Telegram в список пользователей Wireguard для дальнейшей обработки,
+    если user_name существует и корректен.
+    """
+    
+    if not await __check_database_state(update):
+        return
+    
+    if update.message is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
+        return
+    
+    if context.user_data is None:
+        if (curr_frame := inspect.currentframe()):
+            logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
+        return
+
+
+    wireguard_users = database.get_users_by_telegram_id(telegram_id)
+    for user_name in wireguard_users:
+        ret_val = await __create_list_of_wireguard_users(update, context, user_name)
+        
+        if ret_val is not None and ret_val.status is False:
+            logger.error(ret_val.description)
 
 # ---------------------- Обработчик ошибок ----------------------
 
@@ -1825,6 +2035,7 @@ def main() -> None:
 
     # Команды для получения статистики по Wireguard
     application.add_handler(CommandHandler(BotCommands.GET_MY_STATS, get_my_stats_command))
+    application.add_handler(CommandHandler(BotCommands.GET_USER_STATS, get_user_stats_command))
     application.add_handler(CommandHandler(BotCommands.GET_ALL_STATS, get_all_stats_command))
 
     # Перезагрузка сервера
