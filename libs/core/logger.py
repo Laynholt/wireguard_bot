@@ -1,4 +1,5 @@
 import os
+import glob
 import logging
 
 class RotatingCharFileHandler(logging.Handler):
@@ -12,12 +13,23 @@ class RotatingCharFileHandler(logging.Handler):
         self.max_chars = max_chars
         self.current_file = None
         self.current_filename = None
+        
+        self._prepare()
         self._open_new_file()
+
+    def _prepare(self):
+        """Создает папку с логами, если ее еще нет. Удаляет предыдущие логи."""
+        dir_name = os.path.dirname(self.base_filename)
+        
+        if not os.path.exists(dir_name) or not os.path.isdir(dir_name): 
+            os.makedirs(dir_name, exist_ok=True)
+        
+        # Удаляем все старые логи перед созданием нового файла
+        for log_file in glob.glob(f"{self.base_filename}_*.log"):
+            os.remove(log_file)
 
     def _open_new_file(self):
         """Создаёт новый файл для логирования."""
-        os.makedirs(os.path.dirname(self.base_filename), exist_ok=True)
-        
         num = 1
         while True:
             new_filename = f"{self.base_filename}_{num}.log"
