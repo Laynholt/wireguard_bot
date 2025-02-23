@@ -816,6 +816,9 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
             logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
         return
     
+    if context.user_data is not None:
+        context.user_data["wireguard_users"] = []
+    
     await __create_list_of_wireguard_users_by_telegram_id(update, context, telegram_id=update.effective_user.id)
     await __get_user_stats(update, context, own_stats=True)
     await __end_command(update, context)
