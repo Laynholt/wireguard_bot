@@ -54,6 +54,12 @@ ADMIN_MENU = ReplyKeyboardMarkup(
             f"/{BotCommands.SHOW_ALL_BINDINGS}",
         ],
         [
+            f"/{BotCommands.BAN_TELEGRAM_USER}",
+            f"/{BotCommands.UNBAN_TELEGRAM_USER}",
+            f"/{BotCommands.SHOW_BANNED_TELEGRAM_USER}",
+            f"/{BotCommands.REMOVE_TELEGRAM_USER}",
+        ],
+        [
             f"/{BotCommands.GET_CONFIG}",
             f"/{BotCommands.GET_QRCODE}",
             f"/{BotCommands.SEND_CONFIG}",
@@ -174,12 +180,11 @@ BINDINGS_MENU = ReplyKeyboardMarkup(
     one_time_keyboard=True,
 )
 
-# Меню для отправки конфигов (SEND_MENU)
-SEND_MENU = ReplyKeyboardMarkup(
+SELECT_USER_MENU = ReplyKeyboardMarkup(
     [
         [
             KeyboardButton(
-                text="Отправить пользователю",
+                text="Выбрать пользователя",
                 request_users=KeyboardButtonRequestUsers(
                     request_id=0,
                     user_is_bot=False,

@@ -1,8 +1,10 @@
 import re
 import logging
 import asyncio
-from typing import Iterable, List, Optional, Union
-
+from typing import (
+    Dict, Tuple, List,
+    Optional, Iterable, Union
+)
 from telegram import Update
 from telegram.ext import CallbackContext
 from telegram.error import TelegramError
@@ -40,6 +42,17 @@ def validate_telegram_id(telegram_id: Union[str, int]) -> bool:
     if isinstance(telegram_id, int):
         return True
     return telegram_id.isdigit() if isinstance(telegram_id, str) else False
+
+
+def create_linked_dict(linked_users: Iterable[Tuple[int, str]]) -> Dict[int, List[str]]:
+    """
+    Принимает список кортежей (telegram_id, wireguard_user_name)
+    и возвращает словарь вида {telegram_id: [user_names]}.
+    """
+    linked_dict = {}
+    for tid, user_name in linked_users:
+        linked_dict.setdefault(tid, []).append(user_name)
+    return linked_dict
 
 
 async def send_long_message(

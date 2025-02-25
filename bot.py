@@ -447,53 +447,35 @@ async def show_users_state_command(update: Update, context: CallbackContext) -> 
     active_usernames = sorted(wireguard.get_active_usernames())
     inactive_usernames = sorted(wireguard.get_inactive_usernames())
 
-    linked_dict = {}
-    for tid, user_name in linked_users:
-        linked_dict[user_name] = tid
+    linked_dict_tg_wg = telegram_utils.create_linked_dict(linked_users)
 
-    active_telegram_ids = [
-        linked_dict.get(user_name, "Нет привязки") for user_name in active_usernames
-    ]
-    inactive_telegram_ids = [
-        linked_dict.get(user_name, "Нет привязки") for user_name in inactive_usernames
-    ]
+    telegram_names_dict = await telegram_utils.get_usernames_in_bulk(
+        list(linked_dict_tg_wg.keys()), context, semaphore
+    )
 
-    active_telegram_names_dict = await telegram_utils.get_usernames_in_bulk(
-        [
-            tid
-            for tid in active_telegram_ids
-            if telegram_utils.validate_telegram_id(tid)
-        ],
-        context,
-        semaphore,
-    )
-    inactive_telegram_names_dict = await telegram_utils.get_usernames_in_bulk(
-        [
-            tid
-            for tid in inactive_telegram_ids
-            if telegram_utils.validate_telegram_id(tid)
-        ],
-        context,
-        semaphore,
-    )
+    linked_dict_wg_tg = {user_name: tid for tid, user_name in linked_users}
 
     message_parts = []
     message_parts.append(f"<b>🔹 Активные пользователи [{len(active_usernames)}] 🔹</b>\n")
     for index, user_name in enumerate(active_usernames, start=1):
-        tid = linked_dict.get(user_name, "Нет привязки")
-        telegram_username = active_telegram_names_dict.get(tid, "Нет имени пользователя")
-        message_parts.append(f"{index}. <code>{user_name}</code> - {telegram_username} ({tid})\n")
+        tid = linked_dict_wg_tg.get(user_name, None)
+        telegram_info = (
+            "Нет привязки"
+            if tid is None
+            else f'{telegram_names_dict.get(tid, "Имя пользователя недоступно")} ({tid})'
+        )
+        message_parts.append(f"{index}. <code>{user_name}</code> - {telegram_info}\n")
 
     message_parts.append(
         f"\n<b>🔹 Отключенные пользователи [{len(inactive_usernames)}] 🔹</b>\n"
     )
     for index, user_name in enumerate(inactive_usernames, start=1):
-        tid = linked_dict.get(user_name, "Нет привязки")
-        telegram_username = inactive_telegram_names_dict.get(
-            tid, "Нет имени пользователя"
+        tid = linked_dict_wg_tg.get(user_name, None)
+        telegram_info = (
+            "Нет привязки"
+            if tid is None
+            else f'{telegram_names_dict.get(tid, "Имя пользователя недоступно")} ({tid})'
         )
-        message_parts.append(f"{index}. <code>{user_name}</code> - {telegram_username} ({tid})\n")
-
     logger.info(
         f"Отправляю информацию об активных и отключенных пользователях -> Tid [{telegram_id}]."
     )
@@ -529,9 +511,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     available_usernames = wireguard.get_usernames()
 
     # Словарь вида {telegram_id: [user_names]}
-    linked_dict = {}
-    for tid, user_name in linked_users:
-        linked_dict.setdefault(tid, []).append(user_name)
+    linked_dict = telegram_utils.create_linked_dict(linked_users)
 
     # Определяем всех Telegram-пользователей, у которых есть привязки
     linked_telegram_ids = list(linked_dict.keys())
@@ -539,11 +519,13 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
         linked_telegram_ids, context, semaphore
     )
 
-    message_parts = [f"<b>🔹🔐 Привязанные пользователи [{len(linked_dict)}] 🔹</b>\n"]
-    for index, (tid, user_names) in enumerate(linked_dict.items(), start=1):
-        user_names_str = ", ".join([f"<code>{u}</code>" for u in sorted(user_names)])
-        telegram_username = linked_telegram_names_dict.get(tid, "Нет имени пользователя")
-        message_parts.append(f"{index}. {telegram_username} ({tid}): {user_names_str}\n")
+    message_parts = []
+    if linked_telegram_ids:
+        message_parts.append(f"<b>🔹🔐 Привязанные пользователи [{len(linked_dict)}] 🔹</b>\n")
+        for index, (tid, user_names) in enumerate(linked_dict.items(), start=1):
+            user_names_str = ", ".join([f"<code>{u}</code>" for u in sorted(user_names)])
+            telegram_username = linked_telegram_names_dict.get(tid, "Имя пользователя недоступно")
+            message_parts.append(f"{index}. {telegram_username} ({tid}): {user_names_str}\n")
 
     # Непривязанные Telegram ID
     unlinked_telegram_ids = set(telegram_ids_in_users) - set(linked_telegram_ids)
@@ -556,7 +538,7 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
         )
         for index, tid in enumerate(unlinked_telegram_ids, start=1):
             telegram_username = unlinked_telegram_names_dict.get(
-                tid, "Нет имени пользователя"
+                tid, "Имя пользователя недоступно"
             )
             message_parts.append(f"{index}. {telegram_username} ({tid})\n")
 
@@ -1360,7 +1342,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                         " которому отправить выбранные конфиги Wireguard.\n\n"
                         "Для отмены нажмите кнопку Закрыть."
                     ),
-                    reply_markup=keyboards.SEND_MENU,
+                    reply_markup=keyboards.SELECT_USER_MENU,
                 )
                 clear_command_flag = False
                 
@@ -1685,7 +1667,7 @@ async def __unbind_user(update: Update, user_name: str) -> None:
     if not await __check_database_state(update):
         return
 
-    if database.user_exists(user_name):
+    if database.is_user_exists(user_name):
         if database.delete_user(user_name):
             logger.info(f"Пользователь [{user_name}] успешно отвязан.")
             if update.message is not None:
@@ -1718,7 +1700,7 @@ async def __bind_users(update: Update, context: CallbackContext, tid: int) -> No
     telegram_username = await telegram_utils.get_username_by_id(tid, context)
 
     for user_name in context.user_data["wireguard_users"]:
-        if not database.user_exists(user_name):
+        if not database.is_user_exists(user_name):
             # user_name ещё не привязан к никому
             if database.add_user(tid, user_name):
                 logger.info(
@@ -1763,7 +1745,7 @@ async def __unbind_telegram_id(update: Update, context: CallbackContext, tid: in
 
     telegram_username = await telegram_utils.get_username_by_id(tid, context)
 
-    if database.telegram_id_exists(tid):
+    if database.is_telegram_user_linked(tid):
         if database.delete_users_by_telegram_id(tid):
             logger.info(
                 f"Пользователи Wireguard успешно отвязаны от [{telegram_username} ({tid})]."
@@ -1806,7 +1788,7 @@ async def __get_bound_users_by_tid(update: Update, context: CallbackContext, tid
 
     telegram_username = await telegram_utils.get_username_by_id(tid, context)
 
-    if database.telegram_id_exists(tid):
+    if database.is_telegram_user_linked(tid):
         user_names = database.get_users_by_telegram_id(tid)
         if update.message is not None:
             await update.message.reply_text(
