@@ -1,6 +1,5 @@
 from .base import *
 from libs.telegram import messages
-from libs.wireguard import stats as wireguard_stats
 
 from telegram import (
     KeyboardButton,
@@ -14,8 +13,7 @@ class RemoveTelegramUserCommand(BaseCommand):
         self,
         database: UserDatabase,
         telegram_admin_ids: Iterable[TelegramId],
-        telegram_user_ids_cache: set[TelegramId],
-        wireguard_log_path: str
+        telegram_user_ids_cache: set[TelegramId]
     ) -> None:
         super().__init__(
             database,
@@ -38,7 +36,6 @@ class RemoveTelegramUserCommand(BaseCommand):
             )
         )
         self.telegram_user_ids_cache = telegram_user_ids_cache
-        self.wireguard_log_path = wireguard_log_path
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -125,7 +122,6 @@ class RemoveTelegramUserCommand(BaseCommand):
             return
         
         user_configs = self.database.get_users_by_telegram_id(tid)
-        wireguard_logs = wireguard_stats.read_data_from_json(self.wireguard_log_path)
         
         need_restart_wireguard = False
         for user in user_configs:
@@ -143,14 +139,7 @@ class RemoveTelegramUserCommand(BaseCommand):
                     logger.info(msg)
                 else:
                     logger.error(msg)
-            
-            # Удаляем логи пользователя
-            if user in wireguard_logs:
-                del wireguard_logs[user]
-                logger.info(f'Для {telegram_username} ({tid}): Пользователь {user} удален из логов.')
 
-        # Перезаписываем логи
-        wireguard_stats.write_data_to_json(self.wireguard_log_path, wireguard_logs)
 
         # Отвязываем от него все конфиги
         if self.database.is_telegram_user_linked(tid):

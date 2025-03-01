@@ -210,8 +210,7 @@ class BotCommandHandler:
         self.__command_wrapper[BotCommands.REMOVE_TELEGRAM_USER] = RemoveTelegramUserCommand(
             database,
             config.telegram_admin_ids,
-            telegram_user_ids_cache,
-            config.wireguard_log_filepath
+            telegram_user_ids_cache
         )
         
         # Команды управления конфигурацией WireGuard
