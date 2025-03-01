@@ -1,7 +1,4 @@
-from doctest import FAIL_FAST
 from enum import Enum
-from tkinter.font import BOLD
-
 
 class BotCommands(str, Enum):
     START = "start"

@@ -1,4 +1,3 @@
-from typing import final
 from .base import *
 from asyncio import Semaphore
 
