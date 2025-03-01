@@ -558,7 +558,7 @@ def main() -> None:
 
     # Загружаем текущих пользователей Telegram в кэш
     global TELEGRAM_USER_IDS_CACHE
-    TELEGRAM_USER_IDS_CACHE: set[TelegramId] = set([
+    TELEGRAM_USER_IDS_CACHE = set([
         tid for tid, ban_status in database.get_all_telegram_users() if not ban_status
     ])
 
