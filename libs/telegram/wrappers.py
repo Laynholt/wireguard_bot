@@ -110,6 +110,7 @@ def check_user_not_blocked(allowed_ids: Iterable[TelegramId]):
             if update.effective_user is None:
                 return None
 
+            print(allowed_ids)
             user_id = update.effective_user.id
             if user_id not in allowed_ids:
                 text = (
@@ -118,7 +119,7 @@ def check_user_not_blocked(allowed_ids: Iterable[TelegramId]):
                     else ''
                 )
                 
-                telegram_username = get_username_by_id(user_id, context)
+                telegram_username = await get_username_by_id(user_id, context)
                 logger.info(
                     f'Обращение от заблокированного пользователя: {telegram_username} ({user_id}) '
                     f'с текстом: [{text}].'
