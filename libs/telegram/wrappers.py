@@ -1,6 +1,6 @@
 import logging
 from functools import wraps
-from typing import Iterable
+from typing import Callable, Iterable
 
 from telegram import Update
 from telegram.ext import CallbackContext
@@ -91,7 +91,7 @@ def command_lock(func):
     return wrapper
 
 
-def check_user_not_blocked(allowed_ids: Iterable[TelegramId]):
+def check_user_not_blocked(allowed_ids: Callable[[], Iterable[TelegramId]]):
     """
     Декоратор для проверки, разрешено ли использование команды пользователю.
     
@@ -110,9 +110,8 @@ def check_user_not_blocked(allowed_ids: Iterable[TelegramId]):
             if update.effective_user is None:
                 return None
 
-            print(allowed_ids)
             user_id = update.effective_user.id
-            if user_id not in allowed_ids:
+            if user_id not in allowed_ids():
                 text = (
                     update.message.text
                     if update.message is not None and update.message.text is not None

@@ -65,7 +65,7 @@ command_handler = BotCommandHandler(
 
 # ---------------------- Команды бота ----------------------
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 async def unknown_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик неизвестных команд.
@@ -84,7 +84,7 @@ async def start_command(update: Update, context: CallbackContext) -> None:
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 async def help_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /help: показывает помощь по доступным командам.
@@ -94,7 +94,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 async def menu_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /menu: выводит меню в зависимости от прав пользователя.
@@ -104,7 +104,7 @@ async def menu_command(update: Update, context: CallbackContext) -> None:
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 async def get_telegram_id_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /get_telegram_id: выводит телеграм-ID пользователя.
@@ -114,7 +114,7 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 async def request_new_config_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /request_new_config: пользователь запрашивает у админов новый конфиг.
@@ -124,7 +124,7 @@ async def request_new_config_command(update: Update, context: CallbackContext) -
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 @wrappers.command_lock
 async def get_config_command(update: Update, context: CallbackContext) -> None:
     """
@@ -136,7 +136,7 @@ async def get_config_command(update: Update, context: CallbackContext) -> None:
     ).request_input(update, context)
 
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 @wrappers.command_lock
 async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
     """
@@ -327,7 +327,7 @@ async def remove_telegram_user_command(update: Update, context: CallbackContext)
     ).request_input(update, context)
         
 
-@wrappers.check_user_not_blocked(TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
 async def get_my_stats_command(update: Update, context: CallbackContext) -> None:
     """
     Команда для пользователей (доступна всем).
@@ -561,7 +561,6 @@ def main() -> None:
     TELEGRAM_USER_IDS_CACHE = set([
         tid for tid, ban_status in database.get_all_telegram_users() if not ban_status
     ])
-    print(TELEGRAM_USER_IDS_CACHE)
 
     application = (
         ApplicationBuilder()
