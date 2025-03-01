@@ -426,7 +426,7 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
     Обработчик, который срабатывает, когда пользователь шлёт запрос
     с кнопкой выбора Telegram-пользователя (filters.StatusUpdate.USER_SHARED).
     """
-    await handle_update(update, context)
+    await handle_update(update, context, delete_msg=True)
 
 # ---------------------- Вспомогательные функции ----------------------
 

@@ -59,7 +59,7 @@ def create_linked_dict(
 
 async def send_long_message(
     update: Update,
-    message: str,
+    message: Union[str, List[str]],
     max_length: int = config.telegram_max_message_length,
     parse_mode: Optional[str] = None,
 ) -> None:
@@ -75,8 +75,25 @@ async def send_long_message(
     if not update.message:
         return
 
-    for i in range(0, len(message), max_length):
-        await update.message.reply_text(message[i : i + max_length], parse_mode=parse_mode)
+    if isinstance(message, str):
+        for i in range(0, len(message), max_length):
+            await update.message.reply_text(message[i : i + max_length], parse_mode=parse_mode)
+    
+    elif isinstance(message, list):
+        start_index = 0
+        current_length = 0
+        for i, line in enumerate(message):
+            if current_length + len(line) > max_length:
+                # Отправляем срез списка строк от start_index до текущего индекса
+                await update.message.reply_text("".join(message[start_index:i]), parse_mode=parse_mode)
+                start_index = i
+                current_length = len(line)
+            else:
+                current_length += len(line)
+        if start_index < len(message):
+            await update.message.reply_text("".join(message[start_index:]), parse_mode=parse_mode)
+
+        
 
 
 async def send_batched_messages(

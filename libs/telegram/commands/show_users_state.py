@@ -46,7 +46,7 @@ class ShowWireguardUsersStateCommand(BaseCommand):
 
         linked_dict_wg_tg = {user_name: tid for tid, user_name in linked_users}
 
-        message_parts = []
+        message_parts: List[str] = []
         message_parts.append(f"<b>🔹 Активные пользователи WG [{len(active_usernames)}] 🔹</b>\n")
         for index, user_name in enumerate(active_usernames, start=1):
             tid = linked_dict_wg_tg.get(user_name, None)
@@ -74,6 +74,6 @@ class ShowWireguardUsersStateCommand(BaseCommand):
             f"Отправляю информацию об активных и отключенных пользователях -> Tid [{telegram_id}]."
         )
         await telegram_utils.send_long_message(
-            update, "".join(message_parts), parse_mode="HTML"
+            update, message_parts, parse_mode="HTML"
         )
         await self._end_command(update, context)

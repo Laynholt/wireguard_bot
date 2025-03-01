@@ -46,18 +46,19 @@ class GetTelegramUsersCommand(BaseCommand):
                 telegram_info.keys(), context, self.semaphore
             )
 
-            header = (
+            message_parts = [
                 f"<b>📋 Telegram Id всех пользователей бота [{len(telegram_info)}]</b>\n"
                 f"<em>Значком 🚩 обозначены заблокированные пользователи.</em>\n\n"
-            )
-            user_lines = [
+            ]
+            message_parts += [
                 f"{index}. {telegram_usernames.get(tid) or 'Имя пользователя недоступно'} (<code>{tid}</code>)"
                 f"{' 🚩' if status else ''}\n"
                 for index, (tid, status) in enumerate(telegram_info.items(), start=1)
             ]
 
-            if update.message is not None:
-                await update.message.reply_text(header + "".join(user_lines), parse_mode="HTML")
+            await telegram_utils.send_long_message(
+                update, message_parts, parse_mode="HTML"
+            )
 
         finally:
             await self._end_command(update, context)

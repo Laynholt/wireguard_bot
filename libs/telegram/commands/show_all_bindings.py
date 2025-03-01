@@ -50,7 +50,7 @@ class ShowAllBindingsCommand(BaseCommand):
             linked_telegram_ids, context, self.semaphore
         )
 
-        message_parts = []
+        message_parts: List[str] = []
         if linked_telegram_ids:
             message_parts.append(f"<b>🔹🔐 Привязанные пользователи [{len(linked_dict)}] 🔹</b>\n")
             for index, (tid, user_names) in enumerate(linked_dict.items(), start=1):
@@ -85,6 +85,6 @@ class ShowAllBindingsCommand(BaseCommand):
             f"Отправляю информацию о привязанных и непривязанных пользователях -> Tid [{telegram_id}]."
         )
         await telegram_utils.send_long_message(
-            update, "".join(message_parts), parse_mode="HTML"
+            update, message_parts, parse_mode="HTML"
         )
         await self._end_command(update, context)
