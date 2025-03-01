@@ -51,7 +51,9 @@ logger.addHandler(file_handler)
 database = UserDatabase(config.users_database_path)
 semaphore = asyncio.Semaphore(config.telegram_max_concurrent_messages)
 
-TELEGRAM_USER_IDS_CACHE: set[TelegramId] = set()
+TELEGRAM_USER_IDS_CACHE: set[TelegramId]
+TELEGRAM_USER_IDS_CACHE = set()
+
 
 command_handler = BotCommandHandler(
     config=config,
