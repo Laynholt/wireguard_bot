@@ -1,5 +1,5 @@
 from .commands import BotCommands
-from .keyboards import BUTTON_ENTER_TELEGRAM_ID, BUTTON_CLOSE, BUTTON_SELECT_TELEGRAM_USER
+from .keyboards.keys import BUTTON_ENTER_TELEGRAM_ID, BUTTON_CLOSE, BUTTON_SELECT_TELEGRAM_USER
 
 ADMIN_HELLO = (
     "👋 Добро пожаловать, администратор!\n\n"
