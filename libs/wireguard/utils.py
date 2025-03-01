@@ -1,9 +1,15 @@
 import os
+import logging
+import asyncio
 import subprocess
 from typing import Callable, Optional
 
 from ..core import config
 from . import stats
+
+
+logger = logging.getLogger(__name__)
+
 
 class FunctionResult:
     """
@@ -124,3 +130,31 @@ def log_and_restart_wireguard() -> bool:
     print('Перезагружаю Wireguard...')
     run_command(f'docker compose -f {config.wireguard_folder}/docker-compose.yml restart wireguard').return_with_print()  # Перезагрузка WireGuard
     return True
+
+async def async_restart_wireguard() -> bool:
+    """Асинхронная обертка для синхронной операции перезагрузки WireGuard.
+    
+    Запускает блокирующую операцию в отдельном потоке, чтобы не блокировать event loop.
+    
+    Returns:
+        bool: Результат операции перезагрузки
+            - True: перезагрузка успешно выполнена
+            - False: произошла ошибка при перезагрузке
+            
+    Raises:
+        Exception: Любые исключения из wireguard_utils.log_and_restart_wireguard 
+            будут перехвачены и залогированы, но не проброшены выше
+            
+    Notes:
+        - Использует дефолтный ThreadPoolExecutor
+        - Является internal-функцией (не предназначена для прямого вызова)
+    """
+    loop = asyncio.get_running_loop()   
+    try:
+        return await loop.run_in_executor(
+            None,
+            log_and_restart_wireguard
+        )
+    except Exception as e:
+        logger.error(f"Ошибка перезагрузки: {str(e)}")
+        return False

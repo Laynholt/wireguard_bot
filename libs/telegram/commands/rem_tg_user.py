@@ -1,0 +1,218 @@
+from .base import *
+from libs.telegram import messages
+from libs.wireguard import stats as wireguard_stats
+
+from telegram import (
+    KeyboardButton,
+    KeyboardButtonRequestUsers,
+    ReplyKeyboardMarkup
+)
+
+
+class RemoveTelegramUserCommand(BaseCommand):
+    def __init__(
+        self,
+        database: UserDatabase,
+        telegram_admin_ids: Iterable[TelegramId],
+        telegram_user_ids_cache: set[TelegramId],
+        wireguard_log_path: str
+    ) -> None:
+        super().__init__(
+            database,
+            telegram_admin_ids,
+        )
+    
+        self.command_name = BotCommands.REMOVE_TELEGRAM_USER
+        self.keyboard = ((
+                KeyboardButton(
+                    text=keyboards.BUTTON_SELECT_TELEGRAM_USER.text,
+                    request_users=KeyboardButtonRequestUsers(
+                        request_id=0,
+                        user_is_bot=False,
+                        request_username=True,
+                    )
+                ),
+                keyboards.BUTTON_ENTER_TELEGRAM_ID.text
+            ), (
+                keyboards.BUTTON_CLOSE.text,
+            )
+        )
+        self.telegram_user_ids_cache = telegram_user_ids_cache
+        self.wireguard_log_path = wireguard_log_path
+    
+    
+    async def request_input(self, update: Update, context: CallbackContext):
+        """
+        Команда /remove_telegram_user: удаляет пользователя Telegram 
+        вместе с его файлами конфигурации Wireguard.
+        """    
+        if update.message is not None:
+            await update.message.reply_text(
+                messages.SELECT_TELEGRAM_USER,
+                reply_markup=ReplyKeyboardMarkup(self.keyboard, one_time_keyboard=True),
+            )
+        if context.user_data is not None:
+            context.user_data["command"] = self.command_name
+
+
+    async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
+        """
+        Удаляет пользователя(-ей) телеграм и его(их) Wireguard конфиги.
+        """
+        if await self.__buttons_handler(update, context):
+            return
+        
+        if context.user_data is None or update.message is None:
+            await self.__end_command(update, context)
+            return
+        
+        need_restart_wireguard = False
+        entries = update.message.text.split() if update.message.text is not None else []
+        if entries:
+            for entry in entries:
+                if await self.__remove_user(update, context, entry):
+                    need_restart_wireguard = True
+                    
+        else:
+            if update.message.users_shared is None:
+                await self.__end_command(update, context)
+                return
+            
+            for shared_user in update.message.users_shared.users:
+                if await self.__remove_user(update, context, shared_user.user_id):
+                    need_restart_wireguard = True
+
+        await self.__end_command(update, context)
+        return need_restart_wireguard
+
+
+    async def __remove_user(
+        self,
+        update: Update,
+        context: CallbackContext,
+        telegram_id: Union[TelegramId, str]
+    ) -> Optional[bool]:
+        """
+        Удаляет передаваемого пользователя.
+        """
+        if not await self.__check_database_state(update):
+            return
+
+        if update.message is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
+            return
+
+        if update.effective_user is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
+            return
+
+        if not await self.__validate_telegram_id(update, telegram_id):
+            return
+        
+        tid = int(telegram_id)
+        telegram_username = await telegram_utils.get_username_by_id(tid, context)
+        
+        req_tid = update.effective_user.id
+        req_telegram_username = await telegram_utils.get_username_by_id(req_tid, context)        
+        
+        if tid in self.telegram_admin_ids:
+            logger.error(f'Пользователь {req_telegram_username} ({req_tid}) пытался '
+                         f'удалить администратора {telegram_username} ({tid}).'
+            )
+            await update.message.reply_text(f'Данную команду нельзя применять на администраторов!')
+            return
+        
+        user_configs = self.database.get_users_by_telegram_id(tid)
+        wireguard_logs = wireguard_stats.read_data_from_json(self.wireguard_log_path)
+        
+        need_restart_wireguard = False
+        for user in user_configs:
+            # Удаляем конфиг пользователя
+            ret_val = wireguard.remove_user(user)
+            
+            if ret_val is not None:
+                # Выводим сообщение с результатом (ошибка или успех)
+                msg = f'Для {telegram_username} ({tid}): {ret_val.description}'
+                pretty_msg = f'Для {telegram_username} (<code>{tid}</code>): <em>{ret_val.description}</em>'
+                
+                await update.message.reply_text(pretty_msg)
+                if ret_val.status:
+                    need_restart_wireguard = True
+                    logger.info(msg)
+                else:
+                    logger.error(msg)
+            
+            # Удаляем логи пользователя
+            if user in wireguard_logs:
+                del wireguard_logs[user]
+                logger.info(f'Для {telegram_username} ({tid}): Пользователь {user} удален из логов.')
+
+        # Перезаписываем логи
+        wireguard_stats.write_data_to_json(self.wireguard_log_path, wireguard_logs)
+
+        # Отвязываем от него все конфиги
+        if self.database.is_telegram_user_linked(tid):
+            if self.database.delete_users_by_telegram_id(tid):
+                logger.info(
+                    f"Для {telegram_username} ({tid}): Пользователи Wireguard успешно отвязаны."
+                )
+                if update.message is not None:
+                    await update.message.reply_text(
+                        f"Для {telegram_username} (<code>{tid}</code>):"
+                        " Пользователи Wireguard успешно отвязаны.",
+                        parse_mode='HTML'
+                    )
+            else:
+                logger.info(
+                    f"Для {telegram_username} ({tid}): Не удалось отвязать пользователей Wireguard."
+                )
+                if update.message is not None:
+                    await update.message.reply_text(
+                        f"Для {telegram_username} (<code>{tid}</code>):"
+                        f" Не удалось отвязать пользователей Wireguard.",
+                        parse_mode='HTML'
+                    )
+        else:
+            logger.info(
+                    f"Для {telegram_username} ({tid}): Ни один из пользователей Wireguard не прикреплен."
+                )
+            if update.message is not None:
+                await update.message.reply_text(
+                    f"Для {telegram_username} (<code>{tid}</code>):"
+                    " Ни один из пользователей Wireguard не прикреплен.",
+                    parse_mode='HTML'
+                )
+        
+        # Удаляем пользователя из бд
+        if self.database.is_telegram_user_exists(tid):
+            if self.database.delete_telegram_user(tid):
+                logger.info(f"Для {telegram_username} ({tid}): Пользователь успешно удален из бд.")
+                await update.message.reply_text(
+                    f"Для {telegram_username} (<code>{tid}</code>): Пользователь успешно удален из бд."
+                )
+            else:
+                logger.error(f"Для {telegram_username} ({tid}): Не удалось удалить пользователя из бд.")
+                await update.message.reply_text(
+                    f"Для {telegram_username} (<code>{tid}</code>): Не удалось удалить пользователя из бд."
+                )
+        
+        # Удаляем его id из кэша
+        self.telegram_user_ids_cache.remove(tid)
+
+        return need_restart_wireguard
+
+
+    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+        if await self.__close_button_handler(update, context):
+            await self.__end_command(update, context)
+            return True
+        
+        if update.message is not None and update.message.text == keyboards.BUTTON_ENTER_TELEGRAM_ID:
+            if update.effective_user is not None:
+                await self.__delete_message(update, context)
+                await update.message.reply_text(messages.ENTER_TELEGRAM_IDS_MESSAGE)
+            return True
+        
+        return False

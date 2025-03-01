@@ -1,4 +1,3 @@
-import logging
 from dataclasses import dataclass
 
 from telegram import (
@@ -23,19 +22,35 @@ class KeyboardText:
             return self.text == other.text
         if isinstance(other, str):
             return self.text == other
+        if isinstance(other, KeyboardButton):
+            return self.text == other.text
         return NotImplemented
+
+    def __str__(self) -> str:
+        """Возвращает строковое представление кнопки."""
+        return self.text
+
+    def __repr__(self) -> str:
+        """Возвращает более информативное представление для отладки."""
+        return f"KeyboardText(text={self.text!r})"
 
 
 # Кнопки, используемые в разных меню
+BUTTON_BIND_WITH_TG_USER = KeyboardText(text="Связать с пользователем")
 BUTTON_BIND_TO_YOURSELF = KeyboardText(text="Привязать к себе")
+
+BUTTON_UNBIND_FROM_TG_USER = KeyboardText(text="Отвязать от пользователя")
 BUTTON_UNBIND_FROM_YOURSELF = KeyboardText(text="Отвязать от себя")
 
 BUTTON_CLOSE = KeyboardText(text="Закрыть")
 
 BUTTON_OWN = KeyboardText(text="Свои")
-BUTTON_WIREGUARD_USER_CONFIG = KeyboardText(text="Пользователя Wireguard")
+BUTTON_WIREGUARD_USER = KeyboardText(text="Пользователя Wireguard")
+BUTTON_TELEGRAM_USER = KeyboardText(text="Пользователя Telegram")
 
-BUTTON_WIREGUARD_USER_STATS = KeyboardText(text="Пользователя Wireguard")
+BUTTON_SELECT_TELEGRAM_USER = KeyboardText(text="Выбрать пользователя")
+BUTTON_ENTER_TELEGRAM_ID = KeyboardText(text="Ввести TID")
+
 
 # Админское меню (ADMIN_MENU)
 ADMIN_MENU = ReplyKeyboardMarkup(
@@ -56,7 +71,6 @@ ADMIN_MENU = ReplyKeyboardMarkup(
         [
             f"/{BotCommands.BAN_TELEGRAM_USER}",
             f"/{BotCommands.UNBAN_TELEGRAM_USER}",
-            f"/{BotCommands.SHOW_BANNED_TELEGRAM_USER}",
             f"/{BotCommands.REMOVE_TELEGRAM_USER}",
         ],
         [
@@ -96,123 +110,6 @@ USER_MENU = ReplyKeyboardMarkup(
             f"/{BotCommands.GET_TELEGRAM_ID}",
             f"/{BotCommands.GET_MY_STATS}",
             f"/{BotCommands.HELP}",
-        ]
-    ],
-    one_time_keyboard=True,
-)
-
-# Меню для привязки пользователей (BIND_MENU)
-BIND_MENU = ReplyKeyboardMarkup(
-    [
-        [
-            KeyboardButton(
-                text="Связать с пользователем",
-                request_users=KeyboardButtonRequestUsers(
-                    request_id=0,
-                    user_is_bot=False,
-                    request_username=True,
-                ),
-            ),
-            BUTTON_BIND_TO_YOURSELF.text,
-            BUTTON_CLOSE.text,
-        ]
-    ],
-    one_time_keyboard=True,
-)
-
-# Меню для отвязки пользователей (UNBIND_MENU)
-UNBIND_MENU = ReplyKeyboardMarkup(
-    [
-        [
-            KeyboardButton(
-                text="Отвязать от пользователя",
-                request_users=KeyboardButtonRequestUsers(
-                    request_id=0,
-                    user_is_bot=False,
-                    request_username=True,
-                ),
-            ),
-            BUTTON_UNBIND_FROM_YOURSELF.text,
-            BUTTON_CLOSE.text,
-        ]
-    ],
-    one_time_keyboard=True,
-)
-
-# Меню для выбора, чью конфигурацию получить (CONFIG_MENU)
-CONFIG_MENU = ReplyKeyboardMarkup(
-    [
-        [
-            KeyboardButton(
-                text="Пользователя Telegram",
-                request_users=KeyboardButtonRequestUsers(
-                    request_id=0,
-                    user_is_bot=False,
-                    request_username=True,
-                ),
-            ),
-            BUTTON_WIREGUARD_USER_CONFIG.text,
-        ],
-        [
-            BUTTON_OWN.text,
-            BUTTON_CLOSE.text,
-        ]
-    ],
-    one_time_keyboard=True,
-)
-
-# Меню для выбора, чьи привязки получить (BINDINGS_MENU)
-BINDINGS_MENU = ReplyKeyboardMarkup(
-    [
-        [
-            KeyboardButton(
-                text="Пользователя Telegram",
-                request_users=KeyboardButtonRequestUsers(
-                    request_id=0,
-                    user_is_bot=False,
-                    request_username=True,
-                ),
-            ),
-            BUTTON_OWN.text,
-            BUTTON_CLOSE.text,
-        ],
-    ],
-    one_time_keyboard=True,
-)
-
-SELECT_USER_MENU = ReplyKeyboardMarkup(
-    [
-        [
-            KeyboardButton(
-                text="Выбрать пользователя",
-                request_users=KeyboardButtonRequestUsers(
-                    request_id=0,
-                    user_is_bot=False,
-                    request_username=True,
-                ),
-            ),
-            BUTTON_CLOSE.text,
-        ]
-    ],
-    one_time_keyboard=True,
-)
-
-# Меню для выборка пользователя статистики
-STATS_MENU = ReplyKeyboardMarkup(
-    [
-        [
-            KeyboardButton(
-                text="Пользователя Telegram",
-                request_users=KeyboardButtonRequestUsers(
-                    request_id=0,
-                    user_is_bot=False,
-                    request_username=True,
-                ),
-            ),
-            BUTTON_WIREGUARD_USER_STATS.text,
-        ],
-        [
-            BUTTON_CLOSE.text,
         ]
     ],
     one_time_keyboard=True,

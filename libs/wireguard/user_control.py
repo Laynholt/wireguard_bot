@@ -686,9 +686,6 @@ def get_inactive_usernames() -> List[str]:
 def is_username_commented(user_name: str) -> bool:
     """
     Проверяет, является ли переданное имя пользователя закомментированным.
-    
-    !Важно!
-    Данная функция не проверяет существования пользователя.
 
     Args:
         user_name (str): Имя пользователя Wireguard.
@@ -696,4 +693,4 @@ def is_username_commented(user_name: str) -> bool:
     Returns:
         bool: True - закомментирован, иначе False.
     """
-    return user_name in get_inactive_usernames()
+    return user_name in get_usernames() and user_name.startswith('+')

@@ -258,6 +258,17 @@ def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
     return result
 
 
+def remove_user_from_log(file_path: str, username: str):
+    """
+    Удаляет информацию о переданном пользователе в файле логов.
+    """
+    current_log_data = read_data_from_json(file_path)
+    
+    if username in current_log_data:
+        del current_log_data[username]
+        write_data_to_json(file_path, current_log_data)
+    
+
 def __merge_results(
     old_data: Dict[str, WgPeerData],
     new_data: Dict[str, WgPeerData]

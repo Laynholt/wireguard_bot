@@ -10,17 +10,17 @@ from telegram.ext import CallbackContext
 from telegram.error import TelegramError
 
 from libs.core import config
-
+from .types import *
 
 logger = logging.getLogger(__name__)
 
 
-def validate_username(username: str) -> bool:
+def validate_username(username: WireguardUserName) -> bool:
     """
     Проверяет, соответствует ли имя пользователя разрешённым символам.
     
     Args:
-        username (str): Имя пользователя.
+        username (WireguardUserName): Имя пользователя.
         
     Returns:
         bool: True, если имя пользователя валидно, иначе False.
@@ -29,22 +29,24 @@ def validate_username(username: str) -> bool:
     return re.match(f'^[{config.allowed_username_pattern}]+$', username) is not None
 
 
-def validate_telegram_id(telegram_id: Union[str, int]) -> bool:
+def validate_telegram_id(telegram_id: Union[str, TelegramId]) -> bool:
     """
     Проверяет, является ли Telegram ID числом.
     
     Args:
-        telegram_id (str): Telegram ID.
+        telegram_id (Union[str, TelegramId]): Telegram ID.
         
     Returns:
         bool: True, если Telegram ID валидно, иначе False.
     """
-    if isinstance(telegram_id, int):
+    if isinstance(telegram_id, TelegramId):
         return True
     return telegram_id.isdigit() if isinstance(telegram_id, str) else False
 
 
-def create_linked_dict(linked_users: Iterable[Tuple[int, str]]) -> Dict[int, List[str]]:
+def create_linked_dict(
+    linked_users: Iterable[Tuple[TelegramId, WireguardUserName]]
+) -> Dict[TelegramId, List[WireguardUserName]]:
     """
     Принимает список кортежей (telegram_id, wireguard_user_name)
     и возвращает словарь вида {telegram_id: [user_names]}.
@@ -116,16 +118,19 @@ async def send_batched_messages(
             await asyncio.sleep(delay_between_groups)
 
 
-async def get_username_by_id(telegram_id: int, context: CallbackContext) -> Optional[str]:
+async def get_username_by_id(
+    telegram_id: TelegramId, context: CallbackContext
+) -> Optional[TelegramUserName]:
     """
     Возвращает @username пользователя по его Telegram ID.
 
     Args:
-        telegram_id (int): Целочисленный Telegram ID пользователя.
+        telegram_id (TelegramId): Целочисленный Telegram ID пользователя.
         context (CallbackContext): Контекст бота для доступа к Bot API.
 
     Returns:
-        Optional[str]: Строка вида "@username" или None, если имя не задано или пользователь не найден.
+        Optional[TelegramUserName]: Строка вида "@username" или None, 
+        если имя не задано или пользователь не найден.
     """
     try:
         # Получаем информацию о чате по Telegram ID
@@ -137,41 +142,44 @@ async def get_username_by_id(telegram_id: int, context: CallbackContext) -> Opti
 
 
 async def get_username_with_limit(
-    telegram_id: int,
+    telegram_id: TelegramId,
     context: CallbackContext,
     semaphore: asyncio.Semaphore
-) -> Optional[str]:
+) -> Optional[TelegramUserName]:
     """
-    Возвращает username пользователя, используя семафор для ограничения количества параллельных запросов.
+    Возвращает username пользователя, используя семафор для
+    ограничения количества параллельных запросов.
 
     Args:
-        telegram_id (int): Идентификатор пользователя Telegram.
+        telegram_id (TelegramId): Идентификатор пользователя Telegram.
         context (CallbackContext): Контекст бота для доступа к Bot API.
-        semaphore (asyncio.Semaphore): Объект семафора для ограничения числа одновременных запросов.
+        semaphore (asyncio.Semaphore): Объект семафора для ограничения
+        числа одновременных запросов.
 
     Returns:
-        Optional[str]: Username вида "@имя" или None, если пользователь не найден/ошибка.
+        Optional[TelegramUserName]: Username вида "@имя" или None, если пользователь не найден/ошибка.
     """
-    async with semaphore:  # Ограничиваем количество одновременно выполняемых запросов с помощью семафора
+    # Ограничиваем количество одновременно выполняемых запросов с помощью семафора
+    async with semaphore:
         # Выполняем запрос к Telegram API внутри семафора
         return await get_username_by_id(telegram_id, context)
 
 
 async def get_usernames_in_bulk(
-    telegram_ids: Iterable[int],
+    telegram_ids: Iterable[TelegramId],
     context: CallbackContext,
     semaphore: asyncio.Semaphore
-) -> dict[int, Optional[str]]:
+) -> dict[TelegramId, Optional[TelegramUserName]]:
     """
     Параллельно (с использованием семафора) получает username для списка Telegram ID.
 
     Args:
-        telegram_ids (Iterable[int]): Итерабельный набор Telegram ID пользователей.
+        telegram_ids (Iterable[TelegramId]): Итерабельный набор Telegram ID пользователей.
         context (CallbackContext): Контекст бота для доступа к Bot API.
         semaphore (asyncio.Semaphore): Семафор для ограничения параллельных запросов.
 
     Returns:
-        dict[int, Optional[str]]: Словарь вида {telegram_id: "@username" или None}.
+        dict[TelegramId, Optional[TelegramUserName]]: Словарь вида {telegram_id: "@username" или None}.
     """
     if not telegram_ids:
         return {}
