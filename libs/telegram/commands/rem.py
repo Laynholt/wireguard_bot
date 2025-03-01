@@ -50,7 +50,7 @@ class RemoveWireguardUserCommand(BaseCommand):
                     else:
                         logger.error(ret_val.description)
         finally:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
         return need_restart_wireguard
 
 
@@ -58,12 +58,12 @@ class RemoveWireguardUserCommand(BaseCommand):
         """
         Удаляет пользователя Wireguard, а также запись о нём из БД (если есть).
         """
-        if not await self.__validate_username(update, user_name):
+        if not await self._validate_username(update, user_name):
             return None
 
         remove_result = wireguard.remove_user(user_name)
         if remove_result.status:
-            if await self.__check_database_state(update):
+            if await self._check_database_state(update):
                 if not self.database.delete_user(user_name):
                     logger.error(f"Не удалось удалить информацию о пользователе [{user_name}] из базы данных.")
                     if update.message is not None:

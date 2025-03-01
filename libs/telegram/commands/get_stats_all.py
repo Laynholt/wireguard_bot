@@ -46,7 +46,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                 await update.message.reply_text("Нет данных по ни одному конфигу.")
                 return
 
-            if not await self.__check_database_state(update):
+            if not await self._check_database_state(update):
                 return
 
             # Получаем все связки (владелец <-> конфиг)
@@ -107,4 +107,4 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             )
 
         finally:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)

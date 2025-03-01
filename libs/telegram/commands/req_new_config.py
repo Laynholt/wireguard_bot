@@ -51,4 +51,4 @@ class RequestNewConfigCommand(BaseCommand):
                 except TelegramError as e:
                     logger.error(f"Не удалось отправить сообщение админу {admin_id}: {e}.")
         finally:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)

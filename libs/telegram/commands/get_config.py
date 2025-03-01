@@ -71,18 +71,18 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             )
         else:
             await self.__get_configuration(update, telegram_id)
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
         """
         Возвращает список пользователей Wireguard, привязанных к данному Telegram.
         """
-        if await self.__buttons_handler(update, context):
+        if await self._buttons_handler(update, context):
             return
         
         if context.user_data is None or update.message is None:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return
     
         entries = update.message.text.split() if update.message.text is not None else []
@@ -92,7 +92,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
         
         else:
             if update.message.users_shared is None:
-                await self.__end_command(update, context)
+                await self._end_command(update, context)
                 return
             
             for shared_user in update.message.users_shared.users:
@@ -100,7 +100,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                     update, shared_user.user_id
                 )
 
-        await self.__end_command(update, context)
+        await self._end_command(update, context)
 
 
     async def __get_configuration(self, update: Update, telegram_id: TelegramId) -> None:
@@ -256,9 +256,9 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 )
 
 
-    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self.__close_button_handler(update, context):
-            await self.__end_command(update, context)
+    async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+        if await self._close_button_handler(update, context):
+            await self._end_command(update, context)
             return True
         
         if (
@@ -269,7 +269,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             )
         ):
             if update.effective_user is not None:
-                await self.__delete_message(update, context)
+                await self._delete_message(update, context)
                 await self.__get_config_buttons_handler(update, context)
             return True
         
@@ -293,7 +293,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
 
         if update.message.text == keyboards.BUTTON_OWN and update.effective_user is not None:
             await self.__get_configuration(update, update.effective_user.id)
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return True
 
         elif update.message.text == keyboards.BUTTON_WIREGUARD_USER.text:

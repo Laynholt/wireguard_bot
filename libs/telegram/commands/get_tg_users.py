@@ -60,4 +60,4 @@ class GetTelegramUsersCommand(BaseCommand):
                 await update.message.reply_text(header + "".join(user_lines), parse_mode="HTML")
 
         finally:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)

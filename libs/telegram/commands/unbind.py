@@ -37,17 +37,17 @@ class UnbindWireguardUserCommand(BaseCommand):
         
         for entry in entries:
             await self.__unbind_user(update, entry)
-        await self.__end_command(update, context)
+        await self._end_command(update, context)
 
 
     async def __unbind_user(self, update: Update, user_name: str) -> None:
         """
         Отвязывает пользователя Wireguard по его user_name (если есть в БД).
         """
-        if not await self.__validate_username(update, user_name):
+        if not await self._validate_username(update, user_name):
             return
 
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return
 
         if self.database.is_user_exists(user_name):

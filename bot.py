@@ -361,7 +361,7 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     """
     await command_handler.command(
         BotCommands.GET_ALL_STATS
-    ).request_input(update, context)
+    ).execute(update, context)
 
 
 @wrappers.admin_required

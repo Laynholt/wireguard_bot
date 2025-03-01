@@ -36,11 +36,11 @@ class SendMessageCommand(BaseCommand):
         Отправляет сообщение всем пользователям.
         """        
         if update.message is None:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return
         
         await self.__send_message_to_all(update, context)
-        await self.__end_command(update, context)
+        await self._end_command(update, context)
 
 
     async def __send_message_to_all(self, update: Update, context: CallbackContext) -> None:

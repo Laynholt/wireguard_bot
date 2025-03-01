@@ -56,7 +56,7 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
         Возвращает список пользователей Wireguard, привязанных к данному Telegram.
         """
         try:
-            if await self.__buttons_handler(update, context):
+            if await self._buttons_handler(update, context):
                 return
             
             if context.user_data is None or update.message is None:
@@ -71,7 +71,7 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
                 )
         
         finally:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
 
 
     async def __get_bound_users_by_tid(
@@ -83,10 +83,10 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
         """
         Показывает, какие user_name привязаны к Telegram ID (tid).
         """
-        if not await self.__validate_telegram_id(update, telegram_id):
+        if not await self._validate_telegram_id(update, telegram_id):
             return
 
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return
 
         telegram_username = await telegram_utils.get_username_by_id(telegram_id, context)
@@ -114,13 +114,13 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
                 )
 
 
-    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self.__close_button_handler(update, context):
+    async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+        if await self._close_button_handler(update, context):
             return True
         
         if update.message is not None and update.message.text == keyboards.BUTTON_OWN:
             if update.effective_user is not None:
-                await self.__delete_message(update, context)
+                await self._delete_message(update, context)
                 await self.__get_bound_users_by_tid(
                     update, context, update.effective_user.id
                 )

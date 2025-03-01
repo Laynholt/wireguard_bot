@@ -55,12 +55,12 @@ class BindWireguardUserCommand(BaseCommand):
         """
         Привязывает пользователя(-ей) Wireguard к Telegram Id.
         """
-        if await self.__buttons_handler(update, context):
-            await self.__end_command(update, context)
+        if await self._buttons_handler(update, context):
+            await self._end_command(update, context)
             return
         
         if context.user_data is None or update.message is None:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return
         
         # Если пользователь вызвал команду сам, а не через add_user
@@ -68,7 +68,7 @@ class BindWireguardUserCommand(BaseCommand):
             
             entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
-                ret_val = await self.__create_list_of_wireguard_users(update, context, entry)
+                ret_val = await self._create_list_of_wireguard_users(update, context, entry)
                 
                 if ret_val is not None:
                     # Выводим сообщение с результатом (ошибка или успех)
@@ -97,7 +97,7 @@ class BindWireguardUserCommand(BaseCommand):
                     await self.__bind_users(update, context, shared_user.user_id)
             
             finally:
-                await self.__end_command(update, context)
+                await self._end_command(update, context)
 
 
     async def __bind_users(
@@ -110,7 +110,7 @@ class BindWireguardUserCommand(BaseCommand):
         Привязывает список Wireguard-конфигов из context.user_data['wireguard_users']
         к выбранному Telegram ID (tid).
         """
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return
 
         if context.user_data is None:
@@ -154,20 +154,20 @@ class BindWireguardUserCommand(BaseCommand):
                     )
 
 
-    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self.__close_button_handler(update, context):
+    async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+        if await self._close_button_handler(update, context):
             return True
         
         if update.message is not None and update.message.text == keyboards.BUTTON_BIND_TO_YOURSELF:
             if update.effective_user is not None:
-                await self.__delete_message(update, context)
+                await self._delete_message(update, context)
                 await self.__bind_users(update, context, update.effective_user.id)
             return True
         
         return False
 
 
-    async def __close_button_handler(self, update: Update, context: CallbackContext) -> bool:
+    async def _close_button_handler(self, update: Update, context: CallbackContext) -> bool:
         """
         Обработка кнопки Закрыть (BUTTON_CLOSE).
         Возвращает True, если нужно прервать дальнейший парсинг handle_text.
@@ -181,7 +181,7 @@ class BindWireguardUserCommand(BaseCommand):
         current_command = context.user_data.get("command", None)
 
         if current_command == self.command_name:
-            await self.__delete_message(update, context)
+            await self._delete_message(update, context)
             user_names = context.user_data["wireguard_users"]
             
             if update.message is not None:

@@ -49,12 +49,12 @@ class SendConfigCommand(BaseCommand):
         """
         Отправляет конфиги пользователя(-ей) Wireguard пользователю Telegram.
         """
-        if await self.__buttons_handler(update, context):
-            await self.__end_command(update, context)
+        if await self._buttons_handler(update, context):
+            await self._end_command(update, context)
             return
         
         if context.user_data is None or update.message is None:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return
         
         # Если пользователь вызвал команду сам, а не через add_user
@@ -62,7 +62,7 @@ class SendConfigCommand(BaseCommand):
             
             entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
-                ret_val = await self.__create_list_of_wireguard_users(
+                ret_val = await self._create_list_of_wireguard_users(
                     update, context, entry
                 )
                 
@@ -86,13 +86,13 @@ class SendConfigCommand(BaseCommand):
         
         else:
             if update.message.users_shared is None:
-                await self.__end_command(update, context)
+                await self._end_command(update, context)
                 return
             
             for shared_user in update.message.users_shared.users:
                 await self.__send_config(update, context, shared_user.user_id)
             
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
 
 
     async def __send_config(
@@ -105,7 +105,7 @@ class SendConfigCommand(BaseCommand):
         Администратор отправляет пользователю (telegram_user) zip-файлы и QR-коды
         для списка конфигов из context.user_data['wireguard_users'].
         """
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return
         
         if update.message is None:
@@ -216,7 +216,7 @@ class SendConfigCommand(BaseCommand):
                 await update.message.reply_text(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}.")
 
 
-    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self.__close_button_handler(update, context):
+    async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+        if await self._close_button_handler(update, context):
             return True
         return False

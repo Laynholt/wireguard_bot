@@ -34,4 +34,4 @@ class GetTelegramIdCommand(BaseCommand):
                     f"🆔 Ваш идентификатор: <code>{telegram_id}</code>.", parse_mode="HTML"
                 )
         finally:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)

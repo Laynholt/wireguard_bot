@@ -58,7 +58,7 @@ class StartCommand(BaseCommand):
         Проверяет состояние базы данных. Если она загружена, убеждается,
         что пользователь Telegram существует в базе. Если нет — добавляет.
         """
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return False
 
         if not self.database.is_telegram_user_exists(telegram_id):

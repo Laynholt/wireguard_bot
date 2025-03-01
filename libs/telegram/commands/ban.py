@@ -56,11 +56,11 @@ class BanTelegramUserCommand(BaseCommand):
         """
         Блокирует пользователя(-ей) телеграм и комментирует их Wireguard конфиги.
         """
-        if await self.__buttons_handler(update, context):
+        if await self._buttons_handler(update, context):
             return
         
         if context.user_data is None or update.message is None:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return
         
         need_restart_wireguard = False
@@ -72,14 +72,14 @@ class BanTelegramUserCommand(BaseCommand):
                     
         else:
             if update.message.users_shared is None:
-                await self.__end_command(update, context)
+                await self._end_command(update, context)
                 return
             
             for shared_user in update.message.users_shared.users:
                 if await self.__ban_user(update, context, shared_user.user_id):
                     need_restart_wireguard = True
 
-        await self.__end_command(update, context)
+        await self._end_command(update, context)
         return need_restart_wireguard
 
 
@@ -92,7 +92,7 @@ class BanTelegramUserCommand(BaseCommand):
         """
         Банит передаваемого пользователя.
         """
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return
 
         if update.message is None:
@@ -105,7 +105,7 @@ class BanTelegramUserCommand(BaseCommand):
                 logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
             return
 
-        if not await self.__validate_telegram_id(update, telegram_id):
+        if not await self._validate_telegram_id(update, telegram_id):
             return
         
         tid = int(telegram_id)
@@ -152,14 +152,14 @@ class BanTelegramUserCommand(BaseCommand):
         return need_restart_wireguard
 
 
-    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self.__close_button_handler(update, context):
-            await self.__end_command(update, context)
+    async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+        if await self._close_button_handler(update, context):
+            await self._end_command(update, context)
             return True
         
         if update.message is not None and update.message.text == keyboards.BUTTON_ENTER_TELEGRAM_ID:
             if update.effective_user is not None:
-                await self.__delete_message(update, context)
+                await self._delete_message(update, context)
                 await update.message.reply_text(messages.ENTER_TELEGRAM_IDS_MESSAGE)
             return True
         

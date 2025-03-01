@@ -60,11 +60,11 @@ class GetWireguardUserStatsCommand(BaseCommand):
             if context.user_data is not None:
                 context.user_data["wireguard_users"] = []
             
-            await self.__create_list_of_wireguard_users_by_telegram_id(
+            await self._create_list_of_wireguard_users_by_telegram_id(
                 update, context, telegram_id
             )
             await self.__get_user_stats(update, context, own_stats=True)
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
 
         # Иначе /get_user_stats
         else:
@@ -85,17 +85,17 @@ class GetWireguardUserStatsCommand(BaseCommand):
         """
         Возвращает список пользователей Wireguard, привязанных к данному Telegram.
         """
-        if await self.__buttons_handler(update, context):
+        if await self._buttons_handler(update, context):
             return
         
         if context.user_data is None or update.message is None:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return
     
         entries = update.message.text.split() if update.message.text is not None else []
         if entries:
             for entry in entries:
-                ret_val = await self.__create_list_of_wireguard_users(update, context, entry)
+                ret_val = await self._create_list_of_wireguard_users(update, context, entry)
             
                 if ret_val is not None:
                     # Выводим сообщение с результатом (ошибка или успех)
@@ -107,18 +107,18 @@ class GetWireguardUserStatsCommand(BaseCommand):
             
         else:
             if update.message.users_shared is None:
-                await self.__end_command(update, context)
+                await self._end_command(update, context)
                 return
             
             for shared_user in update.message.users_shared.users:
-                await self.__create_list_of_wireguard_users_by_telegram_id(
+                await self._create_list_of_wireguard_users_by_telegram_id(
                     update,
                     context,
                     shared_user.user_id
                 )
 
         await self.__get_user_stats(update, context)
-        await self.__end_command(update, context)
+        await self._end_command(update, context)
 
 
     async def __get_user_stats(self, update: Update, context: CallbackContext, own_stats: bool = False) -> None:
@@ -144,7 +144,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
         
         telegram_id = update.effective_user.id
 
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return
 
         wireguard_users = context.user_data["wireguard_users"]
@@ -256,9 +256,9 @@ class GetWireguardUserStatsCommand(BaseCommand):
         )
 
 
-    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self.__close_button_handler(update, context):
-            await self.__end_command(update, context)
+    async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+        if await self._close_button_handler(update, context):
+            await self._end_command(update, context)
             return True
         
         if (
@@ -266,7 +266,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
             and update.message.text == keyboards.BUTTON_WIREGUARD_USER
         ):
             if update.effective_user is not None:
-                await self.__delete_message(update, context)
+                await self._delete_message(update, context)
                 await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
             return True
         

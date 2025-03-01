@@ -51,7 +51,7 @@ class CommentWireguardUserCommand(BaseCommand):
                     else:
                         logger.error(ret_val.description)
         finally:    
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
         return need_restart_wireguard
 
 
@@ -59,6 +59,6 @@ class CommentWireguardUserCommand(BaseCommand):
         """
         Комментирует или раскомментирует (блокирует/разблокирует) пользователя Wireguard.
         """
-        if not await self.__validate_username(update, user_name):
+        if not await self._validate_username(update, user_name):
             return None
         return wireguard.comment_or_uncomment_user(user_name)

@@ -35,4 +35,4 @@ class ReloadWireguardServerCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(response)
 
-        await self.__end_command(update, context)
+        await self._end_command(update, context)

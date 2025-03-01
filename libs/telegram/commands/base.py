@@ -51,7 +51,7 @@ class BaseCommand(ABC):
         pass
     
 
-    async def __check_database_state(self, update: Update) -> bool:
+    async def _check_database_state(self, update: Update) -> bool:
         """
         Проверяет, загружена ли база данных.
         Если база не загружена, оповещает пользователя и возвращает False.
@@ -68,7 +68,7 @@ class BaseCommand(ABC):
         return True
 
 
-    async def __end_command(self, update: Update, context: CallbackContext) -> None:
+    async def _end_command(self, update: Update, context: CallbackContext) -> None:
         """
         Универсальная функция завершения команды. Очищает данные о команде
         и предлагает меню в зависимости от прав пользователя.
@@ -88,7 +88,7 @@ class BaseCommand(ABC):
             )
 
 
-    async def __validate_username(self, update: Update, user_name: WireguardUserName) -> bool:
+    async def _validate_username(self, update: Update, user_name: WireguardUserName) -> bool:
         """
         Проверяет формат имени пользователя Wireguard (латинские буквы и цифры).
         """
@@ -102,7 +102,7 @@ class BaseCommand(ABC):
         return True
 
 
-    async def __validate_telegram_id(self, update: Update, telegram_id: Union[TelegramId, str]) -> bool:
+    async def _validate_telegram_id(self, update: Update, telegram_id: Union[TelegramId, str]) -> bool:
         """
         Проверяет корректность Telegram ID (целое число).
         """
@@ -116,7 +116,7 @@ class BaseCommand(ABC):
         return True
     
     
-    async def __create_list_of_wireguard_users(
+    async def _create_list_of_wireguard_users(
         self,
         update: Update,
         context: CallbackContext,
@@ -126,7 +126,7 @@ class BaseCommand(ABC):
         Добавляет существующие user_name в список пользователей Wireguard для дальнейшей обработки,
         если user_name существует и корректен.
         """
-        if not await self.__validate_username(update, user_name):
+        if not await self._validate_username(update, user_name):
             return None
 
         check_result = wireguard.check_user_exists(user_name)
@@ -137,7 +137,7 @@ class BaseCommand(ABC):
         return check_result
 
 
-    async def __create_list_of_wireguard_users_by_telegram_id(
+    async def _create_list_of_wireguard_users_by_telegram_id(
         self,
         update: Update,
         context: CallbackContext,
@@ -148,7 +148,7 @@ class BaseCommand(ABC):
         Wireguard для дальнейшей обработки, если user_name существует и корректен.
         """
         
-        if not await self.__check_database_state(update):
+        if not await self._check_database_state(update):
             return
         
         if update.message is None:
@@ -164,7 +164,7 @@ class BaseCommand(ABC):
 
         wireguard_users = self.database.get_users_by_telegram_id(telegram_id)
         for user_name in wireguard_users:
-            ret_val = await self.__create_list_of_wireguard_users(
+            ret_val = await self._create_list_of_wireguard_users(
                 update, context, user_name
             )
             
@@ -172,7 +172,7 @@ class BaseCommand(ABC):
                 logger.error(ret_val.description)
 
     
-    async def __buttons_handler(self, update: Update, context: CallbackContext) -> bool:
+    async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
         """
         Общий обработчик кнопок.
         
@@ -185,7 +185,7 @@ class BaseCommand(ABC):
         raise NotImplementedError(f"Необходимо переопределить обработчик кнопок для [{self.keyboard}].")
         
         
-    async def __close_button_handler(self, update: Update, context: CallbackContext) -> bool:
+    async def _close_button_handler(self, update: Update, context: CallbackContext) -> bool:
         """
         Обработка кнопки Закрыть (BUTTON_CLOSE).
         Возвращает True, если нужно прервать дальнейший парсинг handle_text.
@@ -199,14 +199,14 @@ class BaseCommand(ABC):
         current_command = context.user_data.get("command", None)
 
         if current_command == self.command_name:
-            await self.__delete_message(update, context)
+            await self._delete_message(update, context)
             if update.message is not None:
                 await update.message.reply_text("Действие отменено.")
             return True
         return False
 
 
-    async def __delete_message(self, update: Update, context: CallbackContext) -> None:
+    async def _delete_message(self, update: Update, context: CallbackContext) -> None:
         """
         Удаляет последнее сообщение пользователя из чата (обычно нажатую кнопку).
         """

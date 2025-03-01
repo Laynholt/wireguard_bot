@@ -87,4 +87,4 @@ class ShowAllBindingsCommand(BaseCommand):
         await telegram_utils.send_long_message(
             update, "".join(message_parts), parse_mode="HTML"
         )
-        await self.__end_command(update, context)
+        await self._end_command(update, context)

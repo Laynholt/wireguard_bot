@@ -38,7 +38,7 @@ class AddWireguardUserCommand(BaseCommand):
         need_restart_wireguard = False
         
         if context.user_data is None or update.message is None:
-            await self.__end_command(update, context)
+            await self._end_command(update, context)
             return
     
         entries = update.message.text.split() if update.message.text is not None else []
@@ -78,7 +78,7 @@ class AddWireguardUserCommand(BaseCommand):
         """
         Добавляет пользователя Wireguard. Если успешно, сразу отправляет ему .zip-конфиг.
         """
-        if not await self.__validate_username(update, user_name):
+        if not await self._validate_username(update, user_name):
             return None
 
         add_result = wireguard.add_user(user_name)
