@@ -32,7 +32,7 @@ class BotCommand(str, Enum):
     # Управление пользователями WireGuard
     ADD_USER = ("add_user", "Добавить пользователя")
     REMOVE_USER = ("remove_user", "Удалить пользователя")
-    COM_UNCOM_USER = ("com_uncom_user", "Закомментировать/раскомментировать")
+    COM_UNCOM_USER = ("com_uncom_user", "Комментировать пользователя")
     SHOW_USERS_STATE = ("show_users_state", "Состояние пользователей")
 
     # Привязка пользователей WireGuard
