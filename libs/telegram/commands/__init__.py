@@ -8,8 +8,6 @@ class BotCommand(str, Enum):
 
     def __init__(self, command: str, pretty_text: str) -> None:
         self.pretty_text: str = pretty_text
-    
-    from enum import Enum
 
     # Базовые команды
     START = ("start", "Старт")
