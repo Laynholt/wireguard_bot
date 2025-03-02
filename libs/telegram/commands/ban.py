@@ -150,6 +150,11 @@ class BanTelegramUserCommand(BaseCommand):
 
         if tid in self.telegram_user_ids_cache:
             self.telegram_user_ids_cache.remove(tid)
+        
+        await update.message.reply_text(
+            f'Пользователь {telegram_username} (<code>{tid}</code>) успешно заблокирован.',
+            parse_mode='HTML'
+        )
 
         return need_restart_wireguard
 

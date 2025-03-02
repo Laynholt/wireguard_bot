@@ -149,6 +149,12 @@ class UnbanTelegramUserCommand(BaseCommand):
                         logger.error(msg)
 
         self.telegram_user_ids_cache.add(tid)
+        
+        
+        await update.message.reply_text(
+            f'Пользователь {telegram_username} (<code>{tid}</code>) успешно разблокирован.',
+            parse_mode='HTML'
+        )
 
         return need_restart_wireguard
 
