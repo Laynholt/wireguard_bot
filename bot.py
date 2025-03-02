@@ -586,7 +586,7 @@ def main() -> None:
     )
     
     global text_command_handlers
-    text_command_handlers: Dict[str, HandlerFunc] = {
+    text_command_handlers = {
         BotCommand.START.pretty_text: start_command,
         BotCommand.HELP.pretty_text: help_command,
         BotCommand.MENU.pretty_text: menu_command,
