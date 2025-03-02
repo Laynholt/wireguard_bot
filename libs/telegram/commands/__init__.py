@@ -173,7 +173,8 @@ class BotCommandHandler:
         # Команды привязки и отвязки пользователей
         self.__command_wrapper[BotCommands.BIND_USER] = BindWireguardUserCommand(
             database,
-            config.telegram_admin_ids
+            config.telegram_admin_ids,
+            telegram_user_ids_cache
         )
         self.__command_wrapper[BotCommands.UNBIND_USER] = UnbindWireguardUserCommand(
             database,

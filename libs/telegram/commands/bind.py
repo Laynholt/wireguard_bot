@@ -29,7 +29,8 @@ class BindWireguardUserCommand(BaseCommand):
     def __init__(
         self,
         database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId]
+        telegram_admin_ids: Iterable[TelegramId],
+        telegram_user_ids_cache: set[TelegramId]
     ) -> None:
         super().__init__(
             database,
@@ -38,6 +39,7 @@ class BindWireguardUserCommand(BaseCommand):
     
         self.command_name = BotCommands.BIND_USER
         self.keyboard = BIND_KEYBOARD
+        self.telegram_user_ids_cache = telegram_user_ids_cache
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -110,8 +112,18 @@ class BindWireguardUserCommand(BaseCommand):
             if (curr_frame := inspect.currentframe()):
                 logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
             return
-
+        
         telegram_username = await telegram_utils.get_username_by_id(telegram_id, context)
+        
+        # Если пользователя нет в базе данных, то добавляем его
+        # Может быть, если мы его сами удалили, а он потом ничего не писал
+        if not self.database.is_telegram_user_exists(telegram_id):
+            logger.info(f'Добавляем пользователя {telegram_username} ({telegram_id}) в БД.')
+            if self.database.add_telegram_user(telegram_id):
+                self.telegram_user_ids_cache.add(telegram_id)
+            else:
+                logger.error(f'Не удалось добавить пользователя {telegram_username} ({telegram_id}) в БД.')
+                return
 
         for user_name in context.user_data["wireguard_users"]:
             if not self.database.is_user_exists(user_name):
