@@ -412,10 +412,21 @@ async def handle_update(update: Update, context: CallbackContext, delete_msg: bo
             )
 
 
+async def handle_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команд, отправленных пользователем.
+    """
+    await handle_update(update, context, delete_msg=True)
+
+
 async def handle_text(update: Update, context: CallbackContext) -> None:
     """
     Обработчик текстовых сообщений, в которых пользователи вводят имена
-    пользователей Wireguard или другие данные после команды.
+    пользователей WireGuard или другие данные после команды.
+    
+    Если введенный текст соответствует одной из зарегистрированных текстовых команд,
+    вызывается соответствующий обработчик.
+    В противном случае сообщение передается в общий обработчик.
     """
     if update.message is not None and update.message.text is not None:
         if update.message.text in text_command_handlers:
@@ -624,6 +635,7 @@ def main() -> None:
     }
 
     # Обработка сообщений
+    application.add_handler(MessageHandler(filters.COMMAND, handle_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.StatusUpdate.USER_SHARED, handle_user_request))
 
