@@ -139,7 +139,7 @@ class UnbanTelegramUserCommand(BaseCommand):
                 if ret_val is not None:
                     # Выводим сообщение с результатом (ошибка или успех)
                     msg = f'Для {telegram_username} ({tid}): {ret_val.description}'
-                    pretty_msg = f'Для {telegram_username} (<code>{tid}</code>): <em>{ret_val.description}</em>'
+                    pretty_msg = f'Для {telegram_username} (<code>{tid}</code>): {ret_val.description}'
                     
                     await update.message.reply_text(pretty_msg, parse_mode='HTML')
                     if ret_val.status:
