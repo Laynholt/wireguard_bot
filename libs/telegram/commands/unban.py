@@ -124,7 +124,8 @@ class UnbanTelegramUserCommand(BaseCommand):
         if not self.database.unban_telegram_user(tid):
             logger.error(f'Не удалось разблокировать пользователя {telegram_username} ({tid}).')
             await update.message.reply_text(
-                f'Не удалось разблокировать пользователя {telegram_username} (<code>{tid}</code>).'
+                f'Не удалось разблокировать пользователя {telegram_username} (<code>{tid}</code>).',
+                parse_mode='HTML'
             )
             return
         
@@ -140,7 +141,7 @@ class UnbanTelegramUserCommand(BaseCommand):
                     msg = f'Для {telegram_username} ({tid}): {ret_val.description}'
                     pretty_msg = f'Для {telegram_username} (<code>{tid}</code>): <em>{ret_val.description}</em>'
                     
-                    await update.message.reply_text(pretty_msg)
+                    await update.message.reply_text(pretty_msg, parse_mode='HTML')
                     if ret_val.status:
                         need_restart_wireguard = True
                         logger.info(msg)

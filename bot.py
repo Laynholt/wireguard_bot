@@ -149,7 +149,7 @@ async def get_telegram_users_command(update: Update, context: CallbackContext) -
     взаимодействовали с ботом (есть в БД).
     """
     await command_handler.command(
-        BotCommands.GET_USERS_BY_ID
+        BotCommands.GET_TELEGRAM_USERS
     ).execute(update, context)
 
 
