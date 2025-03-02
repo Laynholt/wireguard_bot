@@ -1,4 +1,5 @@
-stuff/user_config.json
+swap-pane
+stuff/
 *.db
 __pycache__/
 .vscode/
