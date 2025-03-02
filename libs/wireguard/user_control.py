@@ -693,4 +693,4 @@ def is_username_commented(user_name: str) -> bool:
     Returns:
         bool: True - закомментирован, иначе False.
     """
-    return user_name in get_usernames() and user_name.startswith('+')
+    return user_name in get_usernames() and user_name in get_inactive_usernames()
