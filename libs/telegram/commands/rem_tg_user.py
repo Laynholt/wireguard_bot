@@ -179,16 +179,19 @@ class RemoveTelegramUserCommand(BaseCommand):
             if self.database.delete_telegram_user(tid):
                 logger.info(f"Для {telegram_username} ({tid}): Пользователь успешно удален из бд.")
                 await update.message.reply_text(
-                    f"Для {telegram_username} (<code>{tid}</code>): Пользователь успешно удален из бд."
+                    f"Для {telegram_username} (<code>{tid}</code>): Пользователь успешно удален из бд.",
+                    parse_mode='HTML'
                 )
             else:
                 logger.error(f"Для {telegram_username} ({tid}): Не удалось удалить пользователя из бд.")
                 await update.message.reply_text(
-                    f"Для {telegram_username} (<code>{tid}</code>): Не удалось удалить пользователя из бд."
+                    f"Для {telegram_username} (<code>{tid}</code>): Не удалось удалить пользователя из бд.",
+                    parse_mode='HTML'
                 )
         
         # Удаляем его id из кэша
-        self.telegram_user_ids_cache.remove(tid)
+        if tid in self.telegram_user_ids_cache:
+            self.telegram_user_ids_cache.remove(tid)
 
         return need_restart_wireguard
 

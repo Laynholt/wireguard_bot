@@ -147,7 +147,8 @@ class BanTelegramUserCommand(BaseCommand):
                     else:
                         logger.error(msg)
 
-        self.telegram_user_ids_cache.remove(tid)
+        if tid in self.telegram_user_ids_cache:
+            self.telegram_user_ids_cache.remove(tid)
 
         return need_restart_wireguard
 

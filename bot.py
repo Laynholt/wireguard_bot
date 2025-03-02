@@ -55,12 +55,7 @@ TELEGRAM_USER_IDS_CACHE: set[TelegramId]
 TELEGRAM_USER_IDS_CACHE = set()
 
 
-command_handler = BotCommandHandler(
-    config=config,
-    database=database,
-    semaphore=semaphore,
-    telegram_user_ids_cache=TELEGRAM_USER_IDS_CACHE
-)
+command_handler: BotCommandHandler
 
 
 # ---------------------- Команды бота ----------------------
@@ -561,6 +556,14 @@ def main() -> None:
     TELEGRAM_USER_IDS_CACHE = set([
         tid for tid, ban_status in database.get_all_telegram_users() if not ban_status
     ])
+    
+    global command_handler
+    command_handler = BotCommandHandler(
+        config=config,
+        database=database,
+        semaphore=semaphore,
+        telegram_user_ids_cache=TELEGRAM_USER_IDS_CACHE
+    )
 
     application = (
         ApplicationBuilder()

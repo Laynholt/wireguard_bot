@@ -57,9 +57,13 @@ class SendConfigCommand(BaseCommand):
             await self._end_command(update, context)
             return
         
-        # Если пользователь вызвал команду сам, а не через add_user
-        if len(context.user_data["wireguard_users"]) > 0:
+        if update.message.users_shared is not None:
+            for shared_user in update.message.users_shared.users:
+                await self.__send_config(update, context, shared_user.user_id)
             
+            await self._end_command(update, context)
+        
+        else:    
             entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
                 ret_val = await self._create_list_of_wireguard_users(
@@ -84,16 +88,6 @@ class SendConfigCommand(BaseCommand):
                     reply_markup=ReplyKeyboardMarkup(self.keyboard, one_time_keyboard=True),
                 )
         
-        else:
-            if update.message.users_shared is None:
-                await self._end_command(update, context)
-                return
-            
-            for shared_user in update.message.users_shared.users:
-                await self.__send_config(update, context, shared_user.user_id)
-            
-            await self._end_command(update, context)
-
 
     async def __send_config(
         self, 

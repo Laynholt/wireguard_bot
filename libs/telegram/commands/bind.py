@@ -63,9 +63,13 @@ class BindWireguardUserCommand(BaseCommand):
             await self._end_command(update, context)
             return
         
-        # Если пользователь вызвал команду сам, а не через add_user
-        if len(context.user_data["wireguard_users"]) > 0:
-            
+        # Если мы попали сюда через add_user
+        if update.message.users_shared is not None:
+            for shared_user in update.message.users_shared.users:
+                await self.__bind_users(update, context, shared_user.user_id)
+            await self._end_command(update, context)
+        
+        else:
             entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
                 ret_val = await self._create_list_of_wireguard_users(update, context, entry)
@@ -87,17 +91,6 @@ class BindWireguardUserCommand(BaseCommand):
                     ),
                     reply_markup=ReplyKeyboardMarkup(self.keyboard),
                 )
-        
-        else:
-            try:
-                if update.message.users_shared is None:
-                    return
-                
-                for shared_user in update.message.users_shared.users:
-                    await self.__bind_users(update, context, shared_user.user_id)
-            
-            finally:
-                await self._end_command(update, context)
 
 
     async def __bind_users(

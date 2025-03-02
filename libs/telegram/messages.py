@@ -90,7 +90,7 @@ ENTER_TELEGRAM_IDS_MESSAGE = (
 )
 
 SELECT_TELEGRAM_USER = (
-    f"Выберете пользователя телеграм через кнопку '{BUTTON_SELECT_TELEGRAM_USER}'.\n"
+    f"Выберете пользователя телеграм через кнопку '{BUTTON_SELECT_TELEGRAM_USER}'.\n\n"
     f"Для выбора нескольких пользователей можете нажать '{BUTTON_ENTER_TELEGRAM_ID}'"
     " и ввести их TID через пробел.\n\n"
     f"Чтобы отменить команду, нажмите {BUTTON_CLOSE}."

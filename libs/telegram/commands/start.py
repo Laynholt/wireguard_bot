@@ -31,7 +31,7 @@ class StartCommand(BaseCommand):
             return
         
         if telegram_id not in self.telegram_user_ids_cache:
-            telegram_username = telegram_utils.get_username_by_id(telegram_id, context)
+            telegram_username = await telegram_utils.get_username_by_id(telegram_id, context)
             text = (
                 update.message.text
                 if update.message is not None and update.message.text is not None
