@@ -416,7 +416,10 @@ async def handle_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик команд, отправленных пользователем.
     """
-    await handle_update(update, context)
+    if update.message is not None and update.message.text is not None:
+        await text_command_handlers[
+            BotCommand.from_command(update.message.text)
+        ](update, context)
 
 
 async def handle_text(update: Update, context: CallbackContext) -> None:
@@ -602,6 +605,7 @@ def main() -> None:
         BotCommand.HELP.pretty_text: help_command,
         BotCommand.MENU.pretty_text: menu_command,
         BotCommand.CANCEL.pretty_text: cancel_command,
+        BotCommand.UNKNOWN.pretty_text: unknown_command,
         
         BotCommand.ADD_USER.pretty_text: add_user_command,
         BotCommand.REMOVE_USER.pretty_text: remove_user_command,
@@ -635,9 +639,9 @@ def main() -> None:
     }
 
     # Обработка сообщений
+    application.add_handler(MessageHandler(filters.COMMAND, handle_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.StatusUpdate.USER_SHARED, handle_user_request))
-    application.add_handler(MessageHandler(filters.COMMAND, handle_command))
 
     # Обработчик ошибок
     application.add_error_handler(error_handler)

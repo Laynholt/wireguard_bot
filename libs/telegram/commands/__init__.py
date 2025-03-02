@@ -8,6 +8,19 @@ class BotCommand(str, Enum):
 
     def __init__(self, command: str, pretty_text: str) -> None:
         self.pretty_text: str = pretty_text
+    
+    @classmethod
+    def from_command(cls, command_str: str) -> "BotCommand":
+        """
+        Преобразует входящую строку (например, "/start" или "start")
+        в объект BotCommand. Если команда неизвестна, возвращает BotCommand.UNKNOWN.
+        """
+        command_str = command_str.lstrip('/')
+        for cmd in cls:
+            if cmd.value == command_str:
+                return cmd
+        return cls.UNKNOWN
+
 
     # Базовые команды
     START = ("start", "Старт")
