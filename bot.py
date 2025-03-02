@@ -416,7 +416,7 @@ async def handle_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик команд, отправленных пользователем.
     """
-    await handle_update(update, context, delete_msg=True)
+    await handle_update(update, context)
 
 
 async def handle_text(update: Update, context: CallbackContext) -> None:
