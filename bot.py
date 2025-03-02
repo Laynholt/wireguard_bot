@@ -418,7 +418,7 @@ async def handle_command(update: Update, context: CallbackContext) -> None:
     """
     if update.message is not None and update.message.text is not None:
         await text_command_handlers[
-            BotCommand.from_command(update.message.text)
+            BotCommand.from_command(update.message.text).pretty_text
         ](update, context)
 
 
