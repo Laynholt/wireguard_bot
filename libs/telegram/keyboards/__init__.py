@@ -47,6 +47,7 @@ ADMIN_MENU = ReplyKeyboardMarkup(
             f"{BotCommand.RELOAD_WG_SERVER.pretty_text}",
         ),
     ),
+    resize_keyboard=True,
     one_time_keyboard=True,
 )
 
@@ -63,5 +64,5 @@ USER_MENU = ReplyKeyboardMarkup(
             f"{BotCommand.HELP.pretty_text}",
         ),
     ),
-    one_time_keyboard=True,
+    one_time_keyboard=False,
 )
