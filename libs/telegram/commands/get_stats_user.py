@@ -23,7 +23,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.GET_MY_STATS if return_own_stats else BotCommands.GET_USER_STATS
+        self.command_name = BotCommand.GET_MY_STATS if return_own_stats else BotCommand.GET_USER_STATS
         self.keyboard = ((
                 KeyboardButton(
                     text=keyboards.BUTTON_TELEGRAM_USER.text,
@@ -49,7 +49,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
         
         Команда /get_my_stats: выводит статистику по вашим конфигам WireGuard.
         """
-        if self.command_name == BotCommands.GET_MY_STATS:
+        if self.command_name == BotCommand.GET_MY_STATS:
             if update.effective_user is None:
                 if (curr_frame := inspect.currentframe()):
                     logger.error(f'Update effective_user is None в функции {curr_frame.f_code.co_name}')
@@ -152,7 +152,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
             if own_stats:
                 await update.message.reply_text(
                     "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
-                    f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+                    f"📝 <em>Используйте /{BotCommand.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
                     f"администратору на создание новой конфигурации.</em>",
                     parse_mode="HTML"
                 )

@@ -20,7 +20,7 @@ class BanTelegramUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.BAN_TELEGRAM_USER
+        self.command_name = BotCommand.BAN_TELEGRAM_USER
         self.keyboard = ((
                 KeyboardButton(
                     text=keyboards.BUTTON_SELECT_TELEGRAM_USER.text,

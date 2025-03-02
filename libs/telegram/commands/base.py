@@ -9,7 +9,7 @@ from telegram.ext import CallbackContext
 from telegram.error import TelegramError
 
 from libs.telegram import keyboards
-from libs.telegram.commands import BotCommands
+from libs.telegram.commands import BotCommand
 from libs.telegram.types import TelegramId, WireguardUserName
 from libs.telegram.database import UserDatabase
 
@@ -31,7 +31,7 @@ class BaseCommand(ABC):
         self.database = database
         self.telegram_admin_ids = telegram_admin_ids
 
-        self.command_name: Optional[BotCommands] = None  
+        self.command_name: Optional[BotCommand] = None  
         self.keyboard: Tuple[Any, ...] = ()
     
 
@@ -79,7 +79,7 @@ class BaseCommand(ABC):
 
         if update.message is not None and update.effective_user is not None:
             await update.message.reply_text(
-                f"Команда завершена. Выбрать новую команду можно из меню (/{BotCommands.MENU}).",
+                f"Команда завершена. Выбрать новую команду можно из меню (/{BotCommand.MENU}).",
                 reply_markup=(
                     keyboards.ADMIN_MENU
                     if update.effective_user.id in self.telegram_admin_ids

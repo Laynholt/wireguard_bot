@@ -10,7 +10,7 @@ class MenuCommand(BaseCommand):
             database,
             telegram_admin_ids
         )
-        self.command_name = BotCommands.MENU
+        self.command_name = BotCommand.MENU
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

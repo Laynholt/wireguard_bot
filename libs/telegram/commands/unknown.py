@@ -11,7 +11,7 @@ class UnknownCommand(BaseCommand):
             database,
             telegram_admin_ids
         )
-        self.command_name = BotCommands.HELP
+        self.command_name = BotCommand.HELP
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -20,6 +20,6 @@ class UnknownCommand(BaseCommand):
         """
         if update.message is not None:
             await update.message.reply_text(
-                f"Неизвестная команда. Используйте /{BotCommands.HELP}"
+                f"Неизвестная команда. Используйте /{BotCommand.HELP}"
                 " для просмотра доступных команд."
             )

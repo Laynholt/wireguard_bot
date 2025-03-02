@@ -13,7 +13,7 @@ class UnbindWireguardUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.UNBIND_USER
+        self.command_name = BotCommand.UNBIND_USER
     
     
     async def request_input(self, update: Update, context: CallbackContext):

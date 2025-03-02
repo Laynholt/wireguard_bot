@@ -20,7 +20,7 @@ class RemoveTelegramUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.REMOVE_TELEGRAM_USER
+        self.command_name = BotCommand.REMOVE_TELEGRAM_USER
         self.keyboard = ((
                 KeyboardButton(
                     text=keyboards.BUTTON_SELECT_TELEGRAM_USER.text,

@@ -18,7 +18,7 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.GET_USERS_BY_ID
+        self.command_name = BotCommand.GET_USERS_BY_ID
         self.keyboard = ((
                 KeyboardButton(
                     text=keyboards.BUTTON_TELEGRAM_USER.text,

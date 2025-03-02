@@ -12,7 +12,7 @@ class HelpCommand(BaseCommand):
             database,
             telegram_admin_ids
         )
-        self.command_name = BotCommands.HELP
+        self.command_name = BotCommand.HELP
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

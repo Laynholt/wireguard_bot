@@ -11,7 +11,7 @@ class RequestNewConfigCommand(BaseCommand):
             database,
             telegram_admin_ids
         )
-        self.command_name = BotCommands.REQUEST_NEW_CONFIG
+        self.command_name = BotCommand.REQUEST_NEW_CONFIG
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

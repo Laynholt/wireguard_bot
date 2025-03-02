@@ -13,7 +13,7 @@ class SendMessageCommand(BaseCommand):
             telegram_admin_ids,
         )
         self.telegram_user_ids_cache = telegram_user_ids_cache
-        self.command_name = BotCommands.SEND_MESSAGE
+        self.command_name = BotCommand.SEND_MESSAGE
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -24,7 +24,7 @@ class SendMessageCommand(BaseCommand):
             await update.message.reply_text(
                 (
                     "Введите текст для рассылки.\n\n"
-                    f"Чтобы отменить ввод, используйте команду /{BotCommands.CANCEL}."
+                    f"Чтобы отменить ввод, используйте команду /{BotCommand.CANCEL}."
                 )
             )
         if context.user_data is not None:

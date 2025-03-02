@@ -11,7 +11,7 @@ class ReloadWireguardServerCommand(BaseCommand):
             database,
             telegram_admin_ids
         )
-        self.command_name = BotCommands.RELOAD_WG_SERVER
+        self.command_name = BotCommand.RELOAD_WG_SERVER
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

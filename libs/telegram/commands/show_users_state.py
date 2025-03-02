@@ -14,7 +14,7 @@ class ShowWireguardUsersStateCommand(BaseCommand):
             telegram_admin_ids
         )
         self.semaphore = semaphore
-        self.command_name = BotCommands.SHOW_USERS_STATE
+        self.command_name = BotCommand.SHOW_USERS_STATE
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

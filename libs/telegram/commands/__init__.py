@@ -1,41 +1,59 @@
 from enum import Enum
 
-class BotCommands(str, Enum):
-    START = "start"
-    HELP = "help"
-    MENU = "menu"
-    CANCEL = "cancel"
-    UNKNOWN = "unknown"
+class BotCommand(str, Enum):
+    def __new__(cls, command: str, pretty_text: str) -> "BotCommand":
+        obj = str.__new__(cls, command)
+        obj._value_ = command
+        return obj
+
+    def __init__(self, command: str, pretty_text: str) -> None:
+        self.pretty_text: str = pretty_text
     
-    ADD_USER = "add_user"
-    REMOVE_USER = "remove_user"
-    COM_UNCOM_USER = "com_uncom_user"
-    SHOW_USERS_STATE = "show_users_state"
-    
-    BIND_USER = "bind_user"
-    UNBIND_USER = "unbind_user"
-    UNBIND_TELEGRAM_ID = "unbind_telegram_id"
-    GET_USERS_BY_ID = "get_users_by_id"
-    SHOW_ALL_BINDINGS = "show_all_bindings"
-    
-    BAN_TELEGRAM_USER = "ban_telegram_user"
-    UNBAN_TELEGRAM_USER = "unban_telegram_user"
-    REMOVE_TELEGRAM_USER = "remove_telegram_user"
-    
-    GET_CONFIG = "get_config"
-    GET_QRCODE = "get_qrcode"
-    REQUEST_NEW_CONFIG = "request_new_config"
-    SEND_CONFIG = "send_config"
-    
-    GET_TELEGRAM_ID = "get_telegram_id"
-    GET_TELEGRAM_USERS = "get_telegram_users"
-    SEND_MESSAGE = "send_message"
-    
-    GET_MY_STATS = "get_my_stats"
-    GET_USER_STATS = "get_user_stats"
-    GET_ALL_STATS = "get_all_stats"
-    
-    RELOAD_WG_SERVER = "reload_wg_server"
+    from enum import Enum
+
+    # Базовые команды
+    START = ("start", "Старт")
+    HELP = ("help", "Помощь")
+    MENU = ("menu", "Меню")
+    CANCEL = ("cancel", "Отмена")
+    UNKNOWN = ("unknown", "Неизвестная команда")
+
+    # Управление пользователями WireGuard
+    ADD_USER = ("add_user", "Добавить пользователя")
+    REMOVE_USER = ("remove_user", "Удалить пользователя")
+    COM_UNCOM_USER = ("com_uncom_user", "Закомментировать/раскомментировать")
+    SHOW_USERS_STATE = ("show_users_state", "Состояние пользователей")
+
+    # Привязка пользователей WireGuard
+    BIND_USER = ("bind_user", "Привязать пользователя")
+    UNBIND_USER = ("unbind_user", "Отвязать пользователя")
+    UNBIND_TELEGRAM_ID = ("unbind_telegram_id", "Отвязать Telegram ID")
+    GET_USERS_BY_ID = ("get_users_by_id", "Пользователи по ID")
+    SHOW_ALL_BINDINGS = ("show_all_bindings", "Показать привязки")
+
+    # Управление Telegram-пользователями
+    BAN_TELEGRAM_USER = ("ban_telegram_user", "Забанить пользователя")
+    UNBAN_TELEGRAM_USER = ("unban_telegram_user", "Разбанить пользователя")
+    REMOVE_TELEGRAM_USER = ("remove_telegram_user", "Удалить Telegram пользователя")
+
+    # Конфигурационные команды WireGuard
+    GET_CONFIG = ("get_config", "Получить конфиг")
+    GET_QRCODE = ("get_qrcode", "Получить QR-код")
+    REQUEST_NEW_CONFIG = ("request_new_config", "Запрос нового конфига")
+    SEND_CONFIG = ("send_config", "Отправить конфиг")
+
+    # Информация, связанная с Telegram
+    GET_TELEGRAM_ID = ("get_telegram_id", "Получить Telegram ID")
+    GET_TELEGRAM_USERS = ("get_telegram_users", "Показать пользователей Telegram")
+    SEND_MESSAGE = ("send_message", "Рассылка сообщения")
+
+    # Статистика WireGuard
+    GET_MY_STATS = ("get_my_stats", "Моя статистика")
+    GET_USER_STATS = ("get_user_stats", "Статистика пользователя")
+    GET_ALL_STATS = ("get_all_stats", "Вся статистика")
+
+    # Дополнительные команды
+    RELOAD_WG_SERVER = ("reload_wg_server", "Перезагрузить сервер")
     
 
 
@@ -101,10 +119,10 @@ class BotCommandHandler:
             semaphore (Semaphore): Семафор для ограничения одновременных запросов.
             telegram_user_ids_cache (set[TelegramId]): Кеш Telegram ID пользователей.
         """
-        self.__command_wrapper: Dict[BotCommands, BaseCommand] = {}  # Словарь для хранения команд.
+        self.__command_wrapper: Dict[BotCommand, BaseCommand] = {}  # Словарь для хранения команд.
         self.__init_commands(config, database, semaphore, telegram_user_ids_cache)
 
-    def command(self, bot_command: BotCommands) -> BaseCommand:
+    def command(self, bot_command: BotCommand) -> BaseCommand:
         """
         Получает обработчик команды по её идентификатору.
 
@@ -115,7 +133,7 @@ class BotCommandHandler:
             BaseCommand: Обработчик команды.
         """
         if bot_command not in self.__command_wrapper:    
-            return self.__command_wrapper[BotCommands.UNKNOWN]
+            return self.__command_wrapper[BotCommand.UNKNOWN]
         return self.__command_wrapper[bot_command]
     
     def __init_commands(
@@ -129,140 +147,140 @@ class BotCommandHandler:
         Инициализация всех команд бота.
         """
         # Базовые команды
-        self.__command_wrapper[BotCommands.START] = StartCommand(
+        self.__command_wrapper[BotCommand.START] = StartCommand(
             database,
             config.telegram_admin_ids,
             telegram_user_ids_cache
         )
-        self.__command_wrapper[BotCommands.HELP] = HelpCommand(
+        self.__command_wrapper[BotCommand.HELP] = HelpCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.MENU] = MenuCommand(
+        self.__command_wrapper[BotCommand.MENU] = MenuCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.CANCEL] = CancelCommand(
+        self.__command_wrapper[BotCommand.CANCEL] = CancelCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.UNKNOWN] = UnknownCommand(
+        self.__command_wrapper[BotCommand.UNKNOWN] = UnknownCommand(
             database,
             config.telegram_admin_ids
         )
         
         # Команды управления пользователями WireGuard
-        self.__command_wrapper[BotCommands.ADD_USER] = AddWireguardUserCommand(
+        self.__command_wrapper[BotCommand.ADD_USER] = AddWireguardUserCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.REMOVE_USER] = RemoveWireguardUserCommand(
+        self.__command_wrapper[BotCommand.REMOVE_USER] = RemoveWireguardUserCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.COM_UNCOM_USER] = CommentWireguardUserCommand(
+        self.__command_wrapper[BotCommand.COM_UNCOM_USER] = CommentWireguardUserCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.SHOW_USERS_STATE] = ShowWireguardUsersStateCommand(
+        self.__command_wrapper[BotCommand.SHOW_USERS_STATE] = ShowWireguardUsersStateCommand(
             database,
             config.telegram_admin_ids,
             semaphore
         )
         
         # Команды привязки и отвязки пользователей
-        self.__command_wrapper[BotCommands.BIND_USER] = BindWireguardUserCommand(
+        self.__command_wrapper[BotCommand.BIND_USER] = BindWireguardUserCommand(
             database,
             config.telegram_admin_ids,
             telegram_user_ids_cache
         )
-        self.__command_wrapper[BotCommands.UNBIND_USER] = UnbindWireguardUserCommand(
+        self.__command_wrapper[BotCommand.UNBIND_USER] = UnbindWireguardUserCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.UNBIND_TELEGRAM_ID] = UnbindTelegramUserCommand(
+        self.__command_wrapper[BotCommand.UNBIND_TELEGRAM_ID] = UnbindTelegramUserCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.GET_USERS_BY_ID] = GetWireguardUsersByTIdCommand(
+        self.__command_wrapper[BotCommand.GET_USERS_BY_ID] = GetWireguardUsersByTIdCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.SHOW_ALL_BINDINGS] = ShowAllBindingsCommand(
+        self.__command_wrapper[BotCommand.SHOW_ALL_BINDINGS] = ShowAllBindingsCommand(
             database,
             config.telegram_admin_ids,
             semaphore
         )
         
         # Команды управления пользователями Telegram
-        self.__command_wrapper[BotCommands.BAN_TELEGRAM_USER] = BanTelegramUserCommand(
+        self.__command_wrapper[BotCommand.BAN_TELEGRAM_USER] = BanTelegramUserCommand(
             database,
             config.telegram_admin_ids,
             telegram_user_ids_cache
         )
-        self.__command_wrapper[BotCommands.UNBAN_TELEGRAM_USER] = UnbanTelegramUserCommand(
+        self.__command_wrapper[BotCommand.UNBAN_TELEGRAM_USER] = UnbanTelegramUserCommand(
             database,
             config.telegram_admin_ids,
             telegram_user_ids_cache
         )
-        self.__command_wrapper[BotCommands.REMOVE_TELEGRAM_USER] = RemoveTelegramUserCommand(
+        self.__command_wrapper[BotCommand.REMOVE_TELEGRAM_USER] = RemoveTelegramUserCommand(
             database,
             config.telegram_admin_ids,
             telegram_user_ids_cache
         )
         
         # Команды управления конфигурацией WireGuard
-        self.__command_wrapper[BotCommands.GET_CONFIG] = GetWireguardConfigOrQrcodeCommand(
+        self.__command_wrapper[BotCommand.GET_CONFIG] = GetWireguardConfigOrQrcodeCommand(
             database,
             config.telegram_admin_ids,
             return_config=True
         )
-        self.__command_wrapper[BotCommands.GET_QRCODE] = GetWireguardConfigOrQrcodeCommand(
+        self.__command_wrapper[BotCommand.GET_QRCODE] = GetWireguardConfigOrQrcodeCommand(
             database,
             config.telegram_admin_ids,
             return_config=False
         )
-        self.__command_wrapper[BotCommands.REQUEST_NEW_CONFIG] = RequestNewConfigCommand(
+        self.__command_wrapper[BotCommand.REQUEST_NEW_CONFIG] = RequestNewConfigCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.SEND_CONFIG] = SendConfigCommand(
+        self.__command_wrapper[BotCommand.SEND_CONFIG] = SendConfigCommand(
             database,
             config.telegram_admin_ids
         )
         
         # Команды работы с Telegram ID
-        self.__command_wrapper[BotCommands.GET_TELEGRAM_ID] = GetTelegramIdCommand(
+        self.__command_wrapper[BotCommand.GET_TELEGRAM_ID] = GetTelegramIdCommand(
             database,
             config.telegram_admin_ids
         )
-        self.__command_wrapper[BotCommands.GET_TELEGRAM_USERS] = GetTelegramUsersCommand(
+        self.__command_wrapper[BotCommand.GET_TELEGRAM_USERS] = GetTelegramUsersCommand(
             database,
             config.telegram_admin_ids,
             semaphore
         )
-        self.__command_wrapper[BotCommands.SEND_MESSAGE] = SendMessageCommand(
+        self.__command_wrapper[BotCommand.SEND_MESSAGE] = SendMessageCommand(
             database,
             config.telegram_admin_ids,
             telegram_user_ids_cache
         )
         
         # Команды получения статистики WireGuard
-        self.__command_wrapper[BotCommands.GET_MY_STATS] = GetWireguardUserStatsCommand(
+        self.__command_wrapper[BotCommand.GET_MY_STATS] = GetWireguardUserStatsCommand(
             database,
             config.telegram_admin_ids,
             config.wireguard_config_filepath,
             config.wireguard_log_filepath,
             return_own_stats=True
         )
-        self.__command_wrapper[BotCommands.GET_USER_STATS] = GetWireguardUserStatsCommand(
+        self.__command_wrapper[BotCommand.GET_USER_STATS] = GetWireguardUserStatsCommand(
             database,
             config.telegram_admin_ids,
             config.wireguard_config_filepath,
             config.wireguard_log_filepath,
             return_own_stats=False
         )
-        self.__command_wrapper[BotCommands.GET_ALL_STATS] = GetAllWireguardUsersStatsCommand(
+        self.__command_wrapper[BotCommand.GET_ALL_STATS] = GetAllWireguardUsersStatsCommand(
             database,
             config.telegram_admin_ids,
             semaphore,
@@ -271,7 +289,7 @@ class BotCommandHandler:
         )
         
         # Команда перезапуска сервера WireGuard
-        self.__command_wrapper[BotCommands.RELOAD_WG_SERVER] = ReloadWireguardServerCommand(
+        self.__command_wrapper[BotCommand.RELOAD_WG_SERVER] = ReloadWireguardServerCommand(
             database,
             config.telegram_admin_ids
         )

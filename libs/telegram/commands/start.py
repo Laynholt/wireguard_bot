@@ -14,7 +14,7 @@ class StartCommand(BaseCommand):
             telegram_admin_ids
         )
         self.telegram_user_ids_cache = telegram_user_ids_cache
-        self.command_name = BotCommands.START
+        self.command_name = BotCommand.START
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

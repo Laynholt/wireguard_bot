@@ -19,7 +19,7 @@ class SendConfigCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.SEND_CONFIG
+        self.command_name = BotCommand.SEND_CONFIG
         self.keyboard = ((
                 KeyboardButton(
                     text=keyboards.BUTTON_SELECT_TELEGRAM_USER.text,

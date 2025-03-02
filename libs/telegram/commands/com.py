@@ -13,7 +13,7 @@ class CommentWireguardUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.COM_UNCOM_USER
+        self.command_name = BotCommand.COM_UNCOM_USER
     
     
     async def request_input(self, update: Update, context: CallbackContext):

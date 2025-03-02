@@ -37,7 +37,7 @@ class BindWireguardUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.BIND_USER
+        self.command_name = BotCommand.BIND_USER
         self.keyboard = BIND_KEYBOARD
         self.telegram_user_ids_cache = telegram_user_ids_cache
     

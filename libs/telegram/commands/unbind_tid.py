@@ -18,7 +18,7 @@ class UnbindTelegramUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.UNBIND_TELEGRAM_ID
+        self.command_name = BotCommand.UNBIND_TELEGRAM_ID
         self.keyboard = ((
                 KeyboardButton(
                     text=keyboards.BUTTON_UNBIND_FROM_TG_USER.text,

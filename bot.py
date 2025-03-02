@@ -3,6 +3,7 @@ import inspect
 import logging
 import asyncio
 import threading
+from typing import Awaitable, Callable, Dict, Set
 
 from telegram import Update
 from telegram.ext import (
@@ -26,7 +27,7 @@ from libs.wireguard import utils as wireguard_utils
 from libs.telegram.types import *
 from libs.telegram.database import UserDatabase
 from libs.telegram import wrappers, keyboards
-from libs.telegram.commands import BotCommands, BotCommandHandler
+from libs.telegram.commands import BotCommand, BotCommandHandler
 
 
 
@@ -48,25 +49,28 @@ file_handler.setFormatter(logging.Formatter(logger_fmt))
 logger.addHandler(file_handler)
 
 
-database = UserDatabase(config.users_database_path)
-semaphore = asyncio.Semaphore(config.telegram_max_concurrent_messages)
+user_database = UserDatabase(config.users_database_path)
+telegram_message_semaphore = asyncio.Semaphore(config.telegram_max_concurrent_messages)
 
-TELEGRAM_USER_IDS_CACHE: set[TelegramId]
-TELEGRAM_USER_IDS_CACHE = set()
+telegram_user_ids_cache: Set[TelegramId] = set()
 
+bot_command_handler: BotCommandHandler
 
-command_handler: BotCommandHandler
+# Определяем тип для асинхронных функций-обработчиков, которые принимают 
+# update и context и возвращают coroutine с результатом None.
+HandlerFunc = Callable[[Update, CallbackContext], Awaitable[None]]
+text_command_handlers: Dict[str, HandlerFunc] = {}
 
 
 # ---------------------- Команды бота ----------------------
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def unknown_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик неизвестных команд.
     """
-    await command_handler.command(
-        BotCommands.UNKNOWN
+    await bot_command_handler.command(
+        BotCommand.UNKNOWN
     ).execute(update, context)
     
 
@@ -74,72 +78,72 @@ async def start_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /start: приветствие и первичная регистрация пользователя в базе.
     """
-    await command_handler.command(
-        BotCommands.START
+    await bot_command_handler.command(
+        BotCommand.START
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def help_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /help: показывает помощь по доступным командам.
     """
-    await command_handler.command(
-        BotCommands.HELP
+    await bot_command_handler.command(
+        BotCommand.HELP
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def menu_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /menu: выводит меню в зависимости от прав пользователя.
     """
-    await command_handler.command(
-        BotCommands.MENU
+    await bot_command_handler.command(
+        BotCommand.MENU
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def get_telegram_id_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /get_telegram_id: выводит телеграм-ID пользователя.
     """
-    await command_handler.command(
-        BotCommands.GET_TELEGRAM_ID
+    await bot_command_handler.command(
+        BotCommand.GET_TELEGRAM_ID
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def request_new_config_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /request_new_config: пользователь запрашивает у админов новый конфиг.
     """
-    await command_handler.command(
-        BotCommands.REQUEST_NEW_CONFIG
+    await bot_command_handler.command(
+        BotCommand.REQUEST_NEW_CONFIG
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 @wrappers.command_lock
 async def get_config_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /get_config: выдаёт пользователю .zip конфигурации Wireguard.
     Если пользователь администратор — позволяет выбрать, чьи конфиги получать.
     """
-    await command_handler.command(
-        BotCommands.GET_CONFIG
+    await bot_command_handler.command(
+        BotCommand.GET_CONFIG
     ).request_input(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 @wrappers.command_lock
 async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /get_qrcode: выдаёт пользователю QR-код конфигурации Wireguard.
     Если пользователь администратор — позволяет выбрать, чьи QR-коды получать.
     """
-    await command_handler.command(
-        BotCommands.GET_QRCODE
+    await bot_command_handler.command(
+        BotCommand.GET_QRCODE
     ).request_input(update, context)
 
 @wrappers.admin_required
@@ -148,8 +152,8 @@ async def get_telegram_users_command(update: Update, context: CallbackContext) -
     Команда /get_telegram_users: выводит всех телеграм-пользователей, которые
     взаимодействовали с ботом (есть в БД).
     """
-    await command_handler.command(
-        BotCommands.GET_TELEGRAM_USERS
+    await bot_command_handler.command(
+        BotCommand.GET_TELEGRAM_USERS
     ).execute(update, context)
 
 
@@ -159,8 +163,8 @@ async def add_user_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /add_user: добавляет нового пользователя Wireguard.
     """
-    await command_handler.command(
-        BotCommands.ADD_USER
+    await bot_command_handler.command(
+        BotCommand.ADD_USER
     ).request_input(update, context)
 
 
@@ -170,8 +174,8 @@ async def remove_user_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /remove_user: удаляет существующего пользователя Wireguard.
     """
-    await command_handler.command(
-        BotCommands.REMOVE_USER
+    await bot_command_handler.command(
+        BotCommand.REMOVE_USER
     ).request_input(update, context)
 
 
@@ -182,8 +186,8 @@ async def com_uncom_user_command(update: Update, context: CallbackContext) -> No
     Команда /com_uncom_user: комментирует/раскомментирует (блокирует/разблокирует)
     пользователей Wireguard (путём комментирования в конфиге).
     """
-    await command_handler.command(
-        BotCommands.COM_UNCOM_USER
+    await bot_command_handler.command(
+        BotCommand.COM_UNCOM_USER
     ).request_input(update, context)
 
 
@@ -193,8 +197,8 @@ async def bind_user_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /bind_user: привязывает существующие конфиги Wireguard к Telegram-пользователю.
     """
-    await command_handler.command(
-        BotCommands.BIND_USER
+    await bot_command_handler.command(
+        BotCommand.BIND_USER
     ).request_input(update, context)
 
 
@@ -204,8 +208,8 @@ async def unbind_user_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /unbind_user: отвязывает конфиги Wireguard от Telegram-пользователя (по user_name).
     """
-    await command_handler.command(
-        BotCommands.UNBIND_USER
+    await bot_command_handler.command(
+        BotCommand.UNBIND_USER
     ).request_input(update, context)
 
 
@@ -215,8 +219,8 @@ async def send_message_command(update: Update, context: CallbackContext) -> None
     """
     Команда /send_message: рассылает произвольное сообщение всем зарегистрированным в БД.
     """
-    await command_handler.command(
-        BotCommands.SEND_MESSAGE
+    await bot_command_handler.command(
+        BotCommand.SEND_MESSAGE
     ).request_input(update, context)
 
 
@@ -225,8 +229,8 @@ async def cancel_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /cancel: универсальная отмена действия для администратора.
     """
-    await command_handler.command(
-        BotCommands.CANCEL
+    await bot_command_handler.command(
+        BotCommand.CANCEL
     ).execute(update, context)
 
 
@@ -236,8 +240,8 @@ async def unbind_telegram_id_command(update: Update, context: CallbackContext) -
     """
     Команда /unbind_telegram_id: отвязывает все конфиги Wireguard по конкретному Telegram ID.
     """
-    await command_handler.command(
-        BotCommands.UNBIND_TELEGRAM_ID
+    await bot_command_handler.command(
+        BotCommand.UNBIND_TELEGRAM_ID
     ).request_input(update, context)
 
 
@@ -247,8 +251,8 @@ async def get_bound_users_by_telegram_id_command(update: Update, context: Callba
     """
     Команда /get_users_by_id: показать, какие конфиги Wireguard привязаны к Telegram ID.
     """
-    await command_handler.command(
-        BotCommands.GET_USERS_BY_ID
+    await bot_command_handler.command(
+        BotCommand.GET_USERS_BY_ID
     ).request_input(update, context)
 
 
@@ -258,8 +262,8 @@ async def send_config_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /send_config: администратор отправляет конкретные конфиги Wireguard выбранным пользователям.
     """
-    await command_handler.command(
-        BotCommands.SEND_CONFIG
+    await bot_command_handler.command(
+        BotCommand.SEND_CONFIG
     ).request_input(update, context)
 
 
@@ -268,8 +272,8 @@ async def show_users_state_command(update: Update, context: CallbackContext) -> 
     """
     Команда /show_users_state: отображает состояние пользователей (активные/отключённые).
     """
-    await command_handler.command(
-        BotCommands.SHOW_USERS_STATE
+    await bot_command_handler.command(
+        BotCommand.SHOW_USERS_STATE
     ).execute(update, context)
 
 
@@ -281,8 +285,8 @@ async def show_all_bindings_command(update: Update, context: CallbackContext) ->
     - Список непривязанных Telegram ID,
     - Список непривязанных user_name.
     """
-    await command_handler.command(
-        BotCommands.SHOW_ALL_BINDINGS
+    await bot_command_handler.command(
+        BotCommand.SHOW_ALL_BINDINGS
     ).execute(update, context)
 
 
@@ -293,8 +297,8 @@ async def ban_user_command(update: Update, context: CallbackContext) -> None:
     Команда /ban_telegram_user: блокирует пользователя Telegram (игнорирует его сообщения) 
     и комментирует его файлы конфигурации Wireguard.
     """    
-    await command_handler.command(
-        BotCommands.BAN_TELEGRAM_USER
+    await bot_command_handler.command(
+        BotCommand.BAN_TELEGRAM_USER
     ).request_input(update, context)
 
 
@@ -305,8 +309,8 @@ async def unban_user_command(update: Update, context: CallbackContext) -> None:
     Команда /unban_telegram_user: разблокирует пользователя Telegram 
     и раскомментирует его файлы конфигурации Wireguard.
     """    
-    await command_handler.command(
-        BotCommands.UNBAN_TELEGRAM_USER
+    await bot_command_handler.command(
+        BotCommand.UNBAN_TELEGRAM_USER
     ).request_input(update, context)
 
 
@@ -317,12 +321,12 @@ async def remove_telegram_user_command(update: Update, context: CallbackContext)
     Команда /remove_telegram_user: удаляет пользователя Telegram 
     вместе с его файлами конфигурации Wireguard.
     """    
-    await command_handler.command(
-        BotCommands.REMOVE_TELEGRAM_USER
+    await bot_command_handler.command(
+        BotCommand.REMOVE_TELEGRAM_USER
     ).request_input(update, context)
         
 
-@wrappers.check_user_not_blocked(lambda: TELEGRAM_USER_IDS_CACHE)
+@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def get_my_stats_command(update: Update, context: CallbackContext) -> None:
     """
     Команда для пользователей (доступна всем).
@@ -330,8 +334,8 @@ async def get_my_stats_command(update: Update, context: CallbackContext) -> None
     Если конфиг недоступен или отсутствует (удалён), информация об этом
     выводится в сообщении. При необходимости лишние записи удаляются из БД.
     """
-    await command_handler.command(
-        BotCommands.GET_MY_STATS
+    await bot_command_handler.command(
+        BotCommand.GET_MY_STATS
     ).request_input(update, context)
 
 
@@ -342,8 +346,8 @@ async def get_user_stats_command(update: Update, context: CallbackContext) -> No
     Команда для администраторов.
     Выводит статистику для конкретного пользователя телеграмм или конкретного конфига WireGuard.
     """
-    await command_handler.command(
-        BotCommands.GET_USER_STATS
+    await bot_command_handler.command(
+        BotCommand.GET_USER_STATS
     ).request_input(update, context)
 
 
@@ -354,8 +358,8 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     Выводит статистику для всех конфигов WireGuard, включая информацию о владельце
     (Telegram ID и username). Если владелец не привязан, выводит соответствующую пометку.
     """
-    await command_handler.command(
-        BotCommands.GET_ALL_STATS
+    await bot_command_handler.command(
+        BotCommand.GET_ALL_STATS
     ).execute(update, context)
 
 
@@ -364,8 +368,8 @@ async def reload_wireguard_server_command(update: Update, context: CallbackConte
     """
     Обработчик команды перезагрузки сервера Wireguard.
     """
-    await command_handler.command(
-        BotCommands.RELOAD_WG_SERVER
+    await bot_command_handler.command(
+        BotCommand.RELOAD_WG_SERVER
     ).execute(update, context)
 
 # ---------------------- Обработка входящих сообщений ----------------------
@@ -397,7 +401,7 @@ async def handle_update(update: Update, context: CallbackContext, delete_msg: bo
             return
 
         # Если требуется перезапуск WireGuard после изменений
-        if await command_handler.command(current_command).execute(update, context):
+        if await bot_command_handler.command(current_command).execute(update, context):
             threading.Thread(target=wireguard_utils.log_and_restart_wireguard, daemon=True).start()
     
     except Exception as e:
@@ -413,6 +417,11 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
     Обработчик текстовых сообщений, в которых пользователи вводят имена
     пользователей Wireguard или другие данные после команды.
     """
+    if update.message is not None and update.message.text is not None:
+        if update.message.text in text_command_handlers:
+            await text_command_handlers[update.message.text](update, context)
+            return
+    
     await handle_update(update, context)
 
 
@@ -444,7 +453,7 @@ async def __send_menu(update: Update) -> None:
     """
     if update.effective_user is not None and update.message is not None:
         await update.message.reply_text(
-            f"Пожалуйста, выберите команду из меню. (/{BotCommands.MENU})",
+            f"Пожалуйста, выберите команду из меню. (/{BotCommand.MENU})",
             reply_markup=(
                 keyboards.ADMIN_MENU if update.effective_user.id in config.telegram_admin_ids else keyboards.USER_MENU
             )
@@ -552,17 +561,17 @@ def main() -> None:
     scheduler_thread.start()
 
     # Загружаем текущих пользователей Telegram в кэш
-    global TELEGRAM_USER_IDS_CACHE
-    TELEGRAM_USER_IDS_CACHE = set([
-        tid for tid, ban_status in database.get_all_telegram_users() if not ban_status
+    global telegram_user_ids_cache
+    telegram_user_ids_cache = set([
+        tid for tid, ban_status in user_database.get_all_telegram_users() if not ban_status
     ])
     
-    global command_handler
-    command_handler = BotCommandHandler(
+    global bot_command_handler
+    bot_command_handler = BotCommandHandler(
         config=config,
-        database=database,
-        semaphore=semaphore,
-        telegram_user_ids_cache=TELEGRAM_USER_IDS_CACHE
+        database=user_database,
+        semaphore=telegram_message_semaphore,
+        telegram_user_ids_cache=telegram_user_ids_cache
     )
 
     application = (
@@ -575,53 +584,48 @@ def main() -> None:
         .get_updates_read_timeout(30)    # Время ожидания при использовании Long Polling
         .build()
     )
+    
+    global text_command_handlers
+    text_command_handlers: Dict[str, HandlerFunc] = {
+        BotCommand.START.pretty_text: start_command,
+        BotCommand.HELP.pretty_text: help_command,
+        BotCommand.MENU.pretty_text: menu_command,
+        BotCommand.CANCEL.pretty_text: cancel_command,
+        
+        BotCommand.ADD_USER.pretty_text: add_user_command,
+        BotCommand.REMOVE_USER.pretty_text: remove_user_command,
+        BotCommand.COM_UNCOM_USER.pretty_text: com_uncom_user_command,
+        BotCommand.SHOW_USERS_STATE.pretty_text: show_users_state_command,
 
-    # Базовые команды
-    application.add_handler(CommandHandler(BotCommands.START, start_command))
-    application.add_handler(CommandHandler(BotCommands.HELP, help_command))
-    application.add_handler(CommandHandler(BotCommands.MENU, menu_command))
-    application.add_handler(CommandHandler(BotCommands.CANCEL, cancel_command))
+        BotCommand.BIND_USER.pretty_text: bind_user_command,
+        BotCommand.UNBIND_USER.pretty_text: unbind_user_command,
+        BotCommand.UNBIND_TELEGRAM_ID.pretty_text: unbind_telegram_id_command,
+        BotCommand.GET_USERS_BY_ID.pretty_text: get_bound_users_by_telegram_id_command,
+        BotCommand.SHOW_ALL_BINDINGS.pretty_text: show_all_bindings_command,
 
-    # Команды управления пользователями Wireguard
-    application.add_handler(CommandHandler(BotCommands.ADD_USER, add_user_command))
-    application.add_handler(CommandHandler(BotCommands.REMOVE_USER, remove_user_command))
-    application.add_handler(CommandHandler(BotCommands.COM_UNCOM_USER, com_uncom_user_command))
-    application.add_handler(CommandHandler(BotCommands.SHOW_USERS_STATE, show_users_state_command))
+        BotCommand.BAN_TELEGRAM_USER.pretty_text: ban_user_command,
+        BotCommand.UNBAN_TELEGRAM_USER.pretty_text: unban_user_command,
+        BotCommand.REMOVE_TELEGRAM_USER.pretty_text: remove_telegram_user_command,
 
-    # Команды управления привязкой пользователей
-    application.add_handler(CommandHandler(BotCommands.BIND_USER, bind_user_command))
-    application.add_handler(CommandHandler(BotCommands.UNBIND_USER, unbind_user_command))
-    application.add_handler(CommandHandler(BotCommands.UNBIND_TELEGRAM_ID, unbind_telegram_id_command))
-    application.add_handler(CommandHandler(BotCommands.GET_USERS_BY_ID, get_bound_users_by_telegram_id_command))
-    application.add_handler(CommandHandler(BotCommands.SHOW_ALL_BINDINGS, show_all_bindings_command))
+        BotCommand.GET_CONFIG.pretty_text: get_config_command,
+        BotCommand.GET_QRCODE.pretty_text: get_qrcode_command,
+        BotCommand.REQUEST_NEW_CONFIG.pretty_text: request_new_config_command,
+        BotCommand.SEND_CONFIG.pretty_text: send_config_command,
 
-    # Команды конфигурации
-    application.add_handler(CommandHandler(BotCommands.GET_CONFIG, get_config_command))
-    application.add_handler(CommandHandler(BotCommands.GET_QRCODE, get_qrcode_command))
-    application.add_handler(CommandHandler(BotCommands.REQUEST_NEW_CONFIG, request_new_config_command))
-    application.add_handler(CommandHandler(BotCommands.SEND_CONFIG, send_config_command))
+        BotCommand.GET_TELEGRAM_ID.pretty_text: get_telegram_id_command,
+        BotCommand.GET_TELEGRAM_USERS.pretty_text: get_telegram_users_command,
+        BotCommand.SEND_MESSAGE.pretty_text: send_message_command,
 
-    # Команды для телеграм-пользователей
-    application.add_handler(CommandHandler(BotCommands.GET_TELEGRAM_ID, get_telegram_id_command))
-    application.add_handler(CommandHandler(BotCommands.GET_TELEGRAM_USERS, get_telegram_users_command))
-    application.add_handler(CommandHandler(BotCommands.SEND_MESSAGE, send_message_command))
+        BotCommand.GET_MY_STATS.pretty_text: get_my_stats_command,
+        BotCommand.GET_USER_STATS.pretty_text: get_user_stats_command,
+        BotCommand.GET_ALL_STATS.pretty_text: get_all_stats_command,
 
-    application.add_handler(CommandHandler(BotCommands.BAN_TELEGRAM_USER, ban_user_command))
-    application.add_handler(CommandHandler(BotCommands.UNBAN_TELEGRAM_USER, unban_user_command))
-    application.add_handler(CommandHandler(BotCommands.REMOVE_TELEGRAM_USER, remove_telegram_user_command))
-
-    # Команды для получения статистики по Wireguard
-    application.add_handler(CommandHandler(BotCommands.GET_MY_STATS, get_my_stats_command))
-    application.add_handler(CommandHandler(BotCommands.GET_USER_STATS, get_user_stats_command))
-    application.add_handler(CommandHandler(BotCommands.GET_ALL_STATS, get_all_stats_command))
-
-    # Перезагрузка сервера
-    application.add_handler(CommandHandler(BotCommands.RELOAD_WG_SERVER, reload_wireguard_server_command))
+        BotCommand.RELOAD_WG_SERVER.pretty_text: reload_wireguard_server_command,
+    }
 
     # Обработка сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.StatusUpdate.USER_SHARED, handle_user_request))
-    application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     # Обработчик ошибок
     application.add_error_handler(error_handler)
@@ -632,7 +636,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     try:
-        if not database.db_loaded:
+        if not user_database.db_loaded:
             logger.error(f"Не удалось подключиться к базе данных: [{config.users_database_path}]!")
         else:
             main()

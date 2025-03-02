@@ -17,7 +17,7 @@ class AddWireguardUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.ADD_USER
+        self.command_name = BotCommand.ADD_USER
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -64,7 +64,7 @@ class AddWireguardUserCommand(BaseCommand):
                 ),
                 reply_markup=ReplyKeyboardMarkup(BIND_KEYBOARD),
             )
-            context.user_data["command"] = BotCommands.BIND_USER
+            context.user_data["command"] = BotCommand.BIND_USER
         
         return need_restart_wireguard
 

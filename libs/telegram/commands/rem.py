@@ -13,7 +13,7 @@ class RemoveWireguardUserCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.REMOVE_USER
+        self.command_name = BotCommand.REMOVE_USER
     
     
     async def request_input(self, update: Update, context: CallbackContext):

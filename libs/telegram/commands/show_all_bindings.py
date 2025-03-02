@@ -14,7 +14,7 @@ class ShowAllBindingsCommand(BaseCommand):
             telegram_admin_ids
         )
         self.semaphore = semaphore
-        self.command_name = BotCommands.SHOW_ALL_BINDINGS
+        self.command_name = BotCommand.SHOW_ALL_BINDINGS
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

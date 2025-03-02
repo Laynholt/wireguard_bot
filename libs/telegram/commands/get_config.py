@@ -20,7 +20,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             telegram_admin_ids,
         )
     
-        self.command_name = BotCommands.GET_CONFIG if return_config else BotCommands.GET_QRCODE
+        self.command_name = BotCommand.GET_CONFIG if return_config else BotCommand.GET_QRCODE
         self.keyboard = ((
                 KeyboardButton(
                     text=keyboards.BUTTON_TELEGRAM_USER.text,
@@ -60,7 +60,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 context.user_data["command"] = self.command_name
             
             message=(
-                f"Выберете, чьи {'Qr-код файлы' if self.command_name == BotCommands.GET_QRCODE else 'файлы конфигурации'}"
+                f"Выберете, чьи {'Qr-код файлы' if self.command_name == BotCommand.GET_QRCODE else 'файлы конфигурации'}"
                 " вы хотите получить.\n\n"
                 f"Для отмены действия нажмите кнопку '{keyboards.BUTTON_CLOSE}'."
             )    
@@ -131,7 +131,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             logger.info(f"Пользователь Tid [{telegram_id}] не привязан ни к одной конфигурации.")
             await update.message.reply_text(
                 "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
-                f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+                f"📝 <em>Используйте /{BotCommand.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
                 f"администратору на создание новой конфигурации.</em>",
                 parse_mode="HTML"
             )
@@ -167,7 +167,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             logger.error(f"Конфиг [{user_name}] не найден. Удаляю привязку.")
             await update.message.reply_text(
                 f"🚫 Конфигурация {formatted_user} была удалена!\n\n"
-                f"📝 <em>Используйте /{BotCommands.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+                f"📝 <em>Используйте /{BotCommand.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
                 f"администратору на создание новой конфигурации.</em>",
                 parse_mode="HTML"
             )
@@ -183,7 +183,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             )
             return
 
-        if self.command_name == BotCommands.GET_CONFIG:
+        if self.command_name == BotCommand.GET_CONFIG:
             logger.info(
                 f"Создаю и отправляю Zip-архив пользователя Wireguard [{user_name}] "
                 f"пользователю Tid [{requester_telegram_id}]."
@@ -223,7 +223,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                     parse_mode="HTML"
                 )
 
-        elif self.command_name == BotCommands.GET_QRCODE:
+        elif self.command_name == BotCommand.GET_QRCODE:
             logger.info(
                 f"Создаю и отправляю Qr-код пользователя Wireguard [{user_name}] "
                 f"пользователю Tid [{requester_telegram_id}]."

@@ -17,7 +17,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             database,
             telegram_admin_ids
         )
-        self.command_name = BotCommands.GET_ALL_STATS
+        self.command_name = BotCommand.GET_ALL_STATS
         self.semaphore = semaphore
         self.wireguard_config_path = wireguard_config_path
         self.wireguard_log_path = wireguard_log_path

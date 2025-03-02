@@ -13,7 +13,7 @@ class GetTelegramUsersCommand(BaseCommand):
             telegram_admin_ids
         )
         self.semaphore = semaphore
-        self.command_name = BotCommands.GET_TELEGRAM_USERS
+        self.command_name = BotCommand.GET_TELEGRAM_USERS
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

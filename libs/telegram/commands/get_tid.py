@@ -11,7 +11,7 @@ class GetTelegramIdCommand(BaseCommand):
             database,
             telegram_admin_ids
         )
-        self.command_name = BotCommands.GET_TELEGRAM_ID
+        self.command_name = BotCommand.GET_TELEGRAM_ID
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
