@@ -48,6 +48,11 @@ class KeyboardManager:
         Returns:
             Optional[Keyboard]: Найденный объект Keyboard или None, если индекс некорректный.
         """
+        if index == self.__admin_keyboard.id:
+            return self.__admin_keyboard
+        if index == self.__user_keyboard.id:
+            return self.__user_keyboard
+        
         result = self.__user_keyboard.get_descendant_by_id(index)
         return result if result is not None else self.__admin_keyboard.get_descendant_by_id(index)
 
