@@ -461,19 +461,8 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             )
             return
         
-        print(current_keyboard, f'{update.message.text in current_keyboard=}')
         # Если это подменю нашей клавиатуры
         if update.message.text in current_keyboard:
-            # Если это кнопка вернуться, то возвращаемся
-            if await __turn_back_button_handler(update, context):
-                return
-            
-            # Если это команда, то выполняем ее
-            if update.message.text in text_command_handlers:
-                await text_command_handlers[update.message.text](update, context)
-                return
-    
-            # В ином случае это подменю
             child_menus = [child for child in current_keyboard.children if child.is_menu is True]
             
             for child_menu in child_menus:
@@ -483,6 +472,15 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
                         f"Переходим в {child_menu.title}.", reply_markup=child_menu.reply_keyboard
                     )
                     return
+        
+        # Если это кнопка вернуться, то возвращаемся
+        if await __turn_back_button_handler(update, context):
+            return
+        
+        # Если это команда, то выполняем ее
+        if update.message.text in text_command_handlers:
+            await text_command_handlers[update.message.text](update, context)
+            return
     
     await handle_update(update, context)
 
@@ -545,6 +543,12 @@ async def __turn_back_button_handler(update: Update, context: CallbackContext) -
         
         if update.message is None or update.message.text != keyboards.ButtonText.TURN_BACK:
             return False
+        
+        # Если получили назад во время выполнения какой-либо команды, то отменяем ее
+        if context.user_data.get(ContextDataKeys.COMMAND) is not None:
+            await bot_command_handler.command(
+                BotCommand.CANCEL
+            ).execute(update, context)
         
         keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(context.user_data[ContextDataKeys.CURRENT_MENU])
         if keyboard is None:
