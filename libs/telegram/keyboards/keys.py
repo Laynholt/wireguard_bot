@@ -31,21 +31,21 @@ class KeyText:
 
 class ButtonText(Enum):
     # Кнопки, используемые в разных меню
-    BIND_WITH_TG_USER = KeyText(text="Связать с пользователем")
-    BIND_TO_YOURSELF = KeyText(text="Привязать к себе")
+    BIND_WITH_TG_USER = KeyText(text="🔗 Связать с пользователем")
+    BIND_TO_YOURSELF = KeyText(text="🙋‍♂️ Привязать к себе")
 
-    UNBIND_FROM_TG_USER = KeyText(text="Отвязать от пользователя")
-    UNBIND_FROM_YOURSELF = KeyText(text="Отвязать от себя")
+    UNBIND_FROM_TG_USER = KeyText(text="🚫 Отвязать от пользователя")
+    UNBIND_FROM_YOURSELF = KeyText(text="🔓 Отвязать от себя")
 
-    CANCEL = KeyText(text="Отменить")
-    TURN_BACK = KeyText(text="Назад")
+    CANCEL = KeyText(text="❌ Отменить")
+    TURN_BACK = KeyText(text="◀️ Назад")
 
-    OWN = KeyText(text="Свои")
-    WIREGUARD_USER = KeyText(text="Пользователя Wireguard")
-    TELEGRAM_USER = KeyText(text="Пользователя Telegram")
+    OWN = KeyText(text="👤 Свои")
+    WIREGUARD_USER = KeyText(text="🛡 Пользователя Wireguard")
+    TELEGRAM_USER = KeyText(text="📩 Пользователя Telegram")
 
-    SELECT_TELEGRAM_USER = KeyText(text="Выбрать пользователя")
-    ENTER_TELEGRAM_ID = KeyText(text="Ввести TID")
+    SELECT_TELEGRAM_USER = KeyText(text="📌 Выбрать пользователя")
+    ENTER_TELEGRAM_ID = KeyText(text="🔢 Ввести TID")
     
     def __eq__(self, other: object) -> bool:
         if isinstance(other, KeyText):
