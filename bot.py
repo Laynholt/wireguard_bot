@@ -397,7 +397,7 @@ async def handle_update(update: Update, context: CallbackContext, delete_msg: bo
         
         # Если нет команды, предлагаем меню
         if not current_command:
-            await __send_menu(update)
+            await __send_menu(update, context)
             return
 
         # Если требуется перезапуск WireGuard после изменений
@@ -508,18 +508,29 @@ async def __delete_message(update: Update, context: CallbackContext) -> None:
             logger.error(f"Не удалось удалить сообщение: {e}")
             
 
-async def __send_menu(update: Update) -> None:
+async def __send_menu(update: Update, context: CallbackContext) -> None:
     """
     Отправляет меню с кнопками в зависимости от прав пользователя.
     """
-    if update.effective_user is not None and update.message is not None:
+    if update.effective_user is not None and update.message is not None and context.user_data is not None:
+        current_keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(
+            context.user_data[ContextDataKeys.CURRENT_MENU]
+        )
+        
+        if current_keyboard is None:
+            logger.error(
+                f'Не удалось получить клавиатуру с id'
+                f' {context.user_data[ContextDataKeys.CURRENT_MENU]}.'
+            )
+            current_keyboard = (
+                keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard() 
+                if update.effective_user.id in config.telegram_admin_ids
+                else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard()
+            )
+        
         await update.message.reply_text(
             f"Пожалуйста, выберите команду из меню. (/{BotCommand.MENU})",
-            reply_markup=(
-                keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard().reply_keyboard 
-                if update.effective_user.id in config.telegram_admin_ids
-                else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard().reply_keyboard
-            )
+            reply_markup=current_keyboard.reply_keyboard
         )
 
 
