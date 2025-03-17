@@ -3,7 +3,7 @@ import logging
 
 from enum import Enum
 from abc import ABC, abstractmethod
-from typing import Any, Iterable, List, Optional, Tuple, Union, TYPE_CHECKING
+from typing import Any, Iterable, List, Optional, Tuple, Union
 
 from telegram import Update
 from telegram.ext import CallbackContext
@@ -11,8 +11,7 @@ from telegram.error import TelegramError
 
 from libs.telegram import keyboards
 from libs.telegram.commands import BotCommand
-if TYPE_CHECKING:
-    from libs.telegram.keyboards.keyboards import Keyboard
+from libs.telegram.keyboards import Keyboard
 from libs.telegram.types import TelegramId, WireguardUserName
 from libs.telegram.database import UserDatabase
 
