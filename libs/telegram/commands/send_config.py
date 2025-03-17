@@ -19,7 +19,7 @@ class SendConfigCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.SEND_CONFIG
-        self.keyboard = keyboards.Keyboard(
+        self.keyboard = Keyboard(
             title=BotCommand.SEND_CONFIG.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 (

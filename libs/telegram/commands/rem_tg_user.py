@@ -20,7 +20,7 @@ class RemoveTelegramUserCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.REMOVE_TELEGRAM_USER
-        self.keyboard = keyboards.Keyboard(
+        self.keyboard = Keyboard(
             title=BotCommand.REMOVE_TELEGRAM_USER.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 ((

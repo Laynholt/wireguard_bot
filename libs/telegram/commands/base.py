@@ -9,6 +9,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 from telegram.error import TelegramError
 
+from libs.telegram.keyboards.menu_keyboard import Keyboard
 from libs.telegram import keyboards
 from libs.telegram.commands import BotCommand
 from libs.telegram.types import TelegramId, WireguardUserName
@@ -37,7 +38,7 @@ class BaseCommand(ABC):
         self.database = database
 
         self.command_name: Optional[BotCommand] = None
-        self.keyboard: Optional[keyboards.Keyboard] = None
+        self.keyboard: Optional[Keyboard] = None
     
 
     async def request_input(self, update: Update, context: CallbackContext) -> None:

@@ -17,7 +17,7 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.GET_USERS_BY_ID
-        self.keyboard = keyboards.Keyboard(
+        self.keyboard = Keyboard(
             title=BotCommand.GET_USERS_BY_ID.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 ((
