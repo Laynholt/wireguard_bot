@@ -3,7 +3,7 @@ import logging
 
 from enum import Enum
 from abc import ABC, abstractmethod
-from typing import Optional, Union, TYPE_CHECKING
+from typing import Any, Iterable, List, Optional, Tuple, Union, TYPE_CHECKING
 
 from telegram import Update
 from telegram.ext import CallbackContext
