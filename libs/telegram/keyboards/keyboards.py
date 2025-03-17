@@ -1,4 +1,4 @@
-from libs.telegram.commands.commands import BotCommand
+from libs.telegram.commands import BotCommand
 from libs.telegram.keyboards import keys
 from libs.telegram.keyboards.menu_keyboard import *
 
