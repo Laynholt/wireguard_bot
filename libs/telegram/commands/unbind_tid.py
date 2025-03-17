@@ -10,45 +10,54 @@ from telegram import (
 class UnbindTelegramUserCommand(BaseCommand):
     def __init__(
         self,
-        database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId]
+        database: UserDatabase
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.UNBIND_TELEGRAM_ID
-        self.keyboard = ((
-                KeyboardButton(
-                    text=keyboards.BUTTON_UNBIND_FROM_TG_USER.text,
-                    request_users=KeyboardButtonRequestUsers(
-                        request_id=0,
-                        user_is_bot=False,
-                        request_username=True,
+        self.keyboard = Keyboard(
+            title=BotCommand.UNBIND_TELEGRAM_ID.pretty_text,
+            reply_keyboard=ReplyKeyboardMarkup(
+                (
+                    (
+                        KeyboardButton(
+                            text=keyboards.ButtonText.UNBIND_FROM_TG_USER.value.text,
+                            request_users=KeyboardButtonRequestUsers(
+                                request_id=0,
+                                user_is_bot=False,
+                                request_username=True,
+                            )
+                        ),
+                        keyboards.ButtonText.UNBIND_FROM_YOURSELF.value.text
+                    ), (
+                        keyboards.ButtonText.CANCEL.value.text,
                     )
                 ),
-                keyboards.BUTTON_UNBIND_FROM_YOURSELF.text
-            ), (
-                keyboards.BUTTON_CLOSE.text,
+                one_time_keyboard=True
             )
         )
+        self.keyboard.add_parent(keyboards.WIREGUARD_BINDINGS_KEYBOARD)
     
     
     async def request_input(self, update: Update, context: CallbackContext):
         """
         Команда /unbind_telegram_id: отвязывает все конфиги Wireguard по конкретному Telegram ID.
         """
+        if self.keyboard is None:
+            return
+        
         if update.message is not None:
             await update.message.reply_text(
                 (
                     "Пожалуйста, выберите пользователя Telegram, которого хотите отвязать.\n\n"
                     "Для отмены действия нажмите кнопку Закрыть."
                 ),
-                reply_markup=ReplyKeyboardMarkup(self.keyboard, one_time_keyboard=True),
+                reply_markup=self.keyboard.reply_keyboard
             )
         if context.user_data is not None:
-            context.user_data["command"] = self.command_name
+            context.user_data[ContextDataKeys.COMMAND] = self.command_name
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -126,10 +135,10 @@ class UnbindTelegramUserCommand(BaseCommand):
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self._close_button_handler(update, context):
+        if await self._cancel_button_handler(update, context):
             return True
         
-        if update.message is not None and update.message.text == keyboards.BUTTON_UNBIND_FROM_YOURSELF:
+        if update.message is not None and update.message.text == keyboards.ButtonText.UNBIND_FROM_YOURSELF:
             if update.effective_user is not None:
                 await self._delete_message(update, context)
                 await self.__unbind_telegram_id(

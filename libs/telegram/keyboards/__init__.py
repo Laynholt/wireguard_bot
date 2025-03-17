@@ -1,68 +1,71 @@
-from telegram import ReplyKeyboardMarkup
-
-# Импорт вашего перечисления команд
+from typing import Final
 from .keys import *
-from libs.telegram.commands import BotCommand
+from .keyboards import *
 
 
-ADMIN_MENU = ReplyKeyboardMarkup(
-    (
-        (
-            f"{BotCommand.ADD_USER.pretty_text}",
-            f"{BotCommand.REMOVE_USER.pretty_text}",
-            f"{BotCommand.COM_UNCOM_USER.pretty_text}",
-            f"{BotCommand.SHOW_USERS_STATE.pretty_text}",
-        ),
-        (
-            f"{BotCommand.BIND_USER.pretty_text}",
-            f"{BotCommand.UNBIND_USER.pretty_text}",
-            f"{BotCommand.UNBIND_TELEGRAM_ID.pretty_text}",
-            f"{BotCommand.GET_USERS_BY_ID.pretty_text}",
-            f"{BotCommand.SHOW_ALL_BINDINGS.pretty_text}",
-        ),
-        (
-            f"{BotCommand.BAN_TELEGRAM_USER.pretty_text}",
-            f"{BotCommand.UNBAN_TELEGRAM_USER.pretty_text}",
-            f"{BotCommand.REMOVE_TELEGRAM_USER.pretty_text}",
-        ),
-        (
-            f"{BotCommand.GET_CONFIG.pretty_text}",
-            f"{BotCommand.GET_QRCODE.pretty_text}",
-            f"{BotCommand.SEND_CONFIG.pretty_text}",
-        ),
-        (
-            f"{BotCommand.GET_TELEGRAM_ID.pretty_text}",
-            f"{BotCommand.GET_TELEGRAM_USERS.pretty_text}",
-        ),
-        (
-            f"{BotCommand.GET_MY_STATS.pretty_text}",
-            f"{BotCommand.GET_USER_STATS.pretty_text}",
-            f"{BotCommand.GET_ALL_STATS.pretty_text}",
-        ),
-        (
-            f"{BotCommand.SEND_MESSAGE.pretty_text}",
-            f"{BotCommand.HELP.pretty_text}",
-        ),
-        (
-            f"{BotCommand.RELOAD_WG_SERVER.pretty_text}",
-        ),
-    ),
-    resize_keyboard=True,
-    one_time_keyboard=True,
-)
+class KeyboardManager:
+    def __init__(self) -> None:
+        """Инициализация менеджера клавиатур."""
+        self.__admin_keyboard: Keyboard = Keyboard(
+            title='Главное меню Администратора',
+            is_menu=True
+        )
+        self.__user_keyboard: Keyboard = Keyboard(
+            title='Главное меню Пользователя',
+            is_menu=True
+        )
 
-USER_MENU = ReplyKeyboardMarkup(
-    (
-        (
-            f"{BotCommand.GET_CONFIG.pretty_text}",
-            f"{BotCommand.GET_QRCODE.pretty_text}",
-            f"{BotCommand.REQUEST_NEW_CONFIG.pretty_text}",
-        ),
-        (
-            f"{BotCommand.GET_TELEGRAM_ID.pretty_text}",
-            f"{BotCommand.GET_MY_STATS.pretty_text}",
-            f"{BotCommand.HELP.pretty_text}",
-        ),
-    ),
-    one_time_keyboard=False,
-)
+    def __add_to_keyboard(self, keyboard: Keyboard, is_admin_keyboard: bool = False) -> None:
+        kb = self.__admin_keyboard if is_admin_keyboard else self.__user_keyboard
+        kb.add_child(keyboard)
+        kb.reply_keyboard = ReplyKeyboardMarkup(
+            tuple([
+                (child.title,) for child in kb.children
+            ]),
+            resize_keyboard=True,
+            one_time_keyboard=False,
+        )
+
+    def add_to_admin_keyboard(self, keyboard: Keyboard) -> None:
+        """
+        Добавляет клавиатуру в админское меню.
+        """
+        self.__add_to_keyboard(keyboard, is_admin_keyboard=True)
+        
+    def add_to_user_keyboard(self, keyboard: Keyboard) -> None:
+        """
+        Добавляет клавиатуру в пользовательском меню.
+        """
+        self.__add_to_keyboard(keyboard)
+
+    def get_keyboard(self, index: KeyboardId) -> Optional[Keyboard]:
+        """
+        Возвращает объект Keyboard по индексу.
+
+        Args:
+            index (KeyboardIndex): Индекс в списке клавиатур.
+
+        Returns:
+            Optional[Keyboard]: Найденный объект Keyboard или None, если индекс некорректный.
+        """
+        result = self.__user_keyboard.get_descendant_by_id(index)
+        return result if result is not None else self.__admin_keyboard.get_descendant_by_id(index)
+
+    def get_admin_main_keyboard(self) -> Keyboard:
+        return self.__admin_keyboard
+    
+    def get_user_main_keyboard(self) -> Keyboard:
+        return self.__user_keyboard
+    
+
+KEYBOARD_MANAGER: Final = KeyboardManager()
+KEYBOARD_MANAGER.add_to_admin_keyboard(WIREGUARD_ACTIONS_KEYBOARD)
+KEYBOARD_MANAGER.add_to_admin_keyboard(WIREGUARD_BINDINGS_KEYBOARD)
+KEYBOARD_MANAGER.add_to_admin_keyboard(WIREGUARD_CONFIG_KEYBOARD)
+KEYBOARD_MANAGER.add_to_admin_keyboard(WIREGUARD_STATS_KEYBOARD)
+KEYBOARD_MANAGER.add_to_admin_keyboard(TELEGRAM_ACTIONS_KEYBOARD)
+KEYBOARD_MANAGER.add_to_admin_keyboard(TELEGRAM_INFO_KEYBOARD)
+KEYBOARD_MANAGER.add_to_admin_keyboard(GENERAL_COMMANDS_KEYBOARD)
+
+KEYBOARD_MANAGER.add_to_user_keyboard(USER_WIREGUARD_CONFIG_KEYBOARD)
+KEYBOARD_MANAGER.add_to_user_keyboard(USER_GENERAL_COMMANDS_KEYBOARD)

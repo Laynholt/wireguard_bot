@@ -13,31 +13,37 @@ class GetWireguardUserStatsCommand(BaseCommand):
     def __init__(
         self,
         database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId],
         wireguard_config_path: str,
         wireguard_log_path: str,
         return_own_stats: bool
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.GET_MY_STATS if return_own_stats else BotCommand.GET_USER_STATS
-        self.keyboard = ((
-                KeyboardButton(
-                    text=keyboards.BUTTON_TELEGRAM_USER.text,
-                    request_users=KeyboardButtonRequestUsers(
-                        request_id=0,
-                        user_is_bot=False,
-                        request_username=True,
+        self.keyboard = Keyboard(
+            title=BotCommand.GET_MY_STATS.pretty_text if return_own_stats else BotCommand.GET_USER_STATS.pretty_text,
+            reply_keyboard=ReplyKeyboardMarkup(
+                ((
+                    KeyboardButton(
+                        text=keyboards.ButtonText.TELEGRAM_USER.value.text,
+                        request_users=KeyboardButtonRequestUsers(
+                            request_id=0,
+                            user_is_bot=False,
+                            request_username=True,
+                        )
+                    ),
+                    keyboards.ButtonText.WIREGUARD_USER.value.text
+                    ), (
+                        keyboards.ButtonText.CANCEL.value.text,
                     )
                 ),
-                keyboards.BUTTON_WIREGUARD_USER.text
-            ), (
-                keyboards.BUTTON_CLOSE.text,
+                one_time_keyboard=True
             )
         )
+        self.keyboard.add_parent(keyboards.WIREGUARD_STATS_KEYBOARD)
+        
         self.wireguard_config_path = wireguard_config_path
         self.wireguard_log_path = wireguard_log_path
     
@@ -58,7 +64,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
             telegram_id = update.effective_user.id
             
             if context.user_data is not None:
-                context.user_data["wireguard_users"] = []
+                context.user_data[ContextDataKeys.WIREGUARD_USERS] = []
             
             await self._create_list_of_wireguard_users_by_telegram_id(
                 update, context, telegram_id
@@ -68,17 +74,20 @@ class GetWireguardUserStatsCommand(BaseCommand):
 
         # Иначе /get_user_stats
         else:
+            if self.keyboard is None:
+                return
+            
             if update.message is not None:
                 await update.message.reply_text(
                     text=(
                         "Выберете, чью статистику вы хотите получить.\n\n"
-                        f"Для отмены нажмите кнопку {keyboards.BUTTON_CLOSE}."
+                        f"Для отмены нажмите кнопку {keyboards.ButtonText.CANCEL}."
                     ),
-                    reply_markup=ReplyKeyboardMarkup(self.keyboard, one_time_keyboard=True)
+                    reply_markup=self.keyboard.reply_keyboard
                 )
             if context.user_data is not None:
-                context.user_data["command"] = self.command_name
-                context.user_data["wireguard_users"] = []
+                context.user_data[ContextDataKeys.COMMAND] = self.command_name
+                context.user_data[ContextDataKeys.WIREGUARD_USERS] = []
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -147,7 +156,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
         if not await self._check_database_state(update):
             return
 
-        wireguard_users = context.user_data["wireguard_users"]
+        wireguard_users = context.user_data[ContextDataKeys.WIREGUARD_USERS]
         if not wireguard_users:
             if own_stats:
                 await update.message.reply_text(
@@ -257,13 +266,13 @@ class GetWireguardUserStatsCommand(BaseCommand):
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self._close_button_handler(update, context):
+        if await self._cancel_button_handler(update, context):
             await self._end_command(update, context)
             return True
         
         if (
             update.message is not None
-            and update.message.text == keyboards.BUTTON_WIREGUARD_USER
+            and update.message.text == keyboards.ButtonText.WIREGUARD_USER
         ):
             if update.effective_user is not None:
                 await self._delete_message(update, context)

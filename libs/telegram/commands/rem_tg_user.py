@@ -16,25 +16,33 @@ class RemoveTelegramUserCommand(BaseCommand):
         telegram_user_ids_cache: set[TelegramId]
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.REMOVE_TELEGRAM_USER
-        self.keyboard = ((
-                KeyboardButton(
-                    text=keyboards.BUTTON_SELECT_TELEGRAM_USER.text,
-                    request_users=KeyboardButtonRequestUsers(
-                        request_id=0,
-                        user_is_bot=False,
-                        request_username=True,
+        self.keyboard = Keyboard(
+            title=BotCommand.REMOVE_TELEGRAM_USER.pretty_text,
+            reply_keyboard=ReplyKeyboardMarkup(
+                ((
+                    KeyboardButton(
+                        text=keyboards.ButtonText.SELECT_TELEGRAM_USER.text,
+                        request_users=KeyboardButtonRequestUsers(
+                            request_id=0,
+                            user_is_bot=False,
+                            request_username=True,
+                        )
+                    ),
+                    keyboards.ButtonText.ENTER_TELEGRAM_ID.text
+                    ), (
+                        keyboards.ButtonText.CANCEL.text,
                     )
                 ),
-                keyboards.BUTTON_ENTER_TELEGRAM_ID.text
-            ), (
-                keyboards.BUTTON_CLOSE.text,
+                one_time_keyboard=True
             )
         )
+        self.keyboard.add_parent(keyboards.TELEGRAM_ACTIONS_KEYBOARD)
+        
+        self.telegram_admin_ids = telegram_admin_ids
         self.telegram_user_ids_cache = telegram_user_ids_cache
     
     
@@ -42,14 +50,17 @@ class RemoveTelegramUserCommand(BaseCommand):
         """
         Команда /remove_telegram_user: удаляет пользователя Telegram 
         вместе с его файлами конфигурации Wireguard.
-        """    
+        """
+        if self.keyboard is None:
+            return
+        
         if update.message is not None:
             await update.message.reply_text(
                 messages.SELECT_TELEGRAM_USER,
-                reply_markup=ReplyKeyboardMarkup(self.keyboard, one_time_keyboard=True),
+                reply_markup=self.keyboard.reply_keyboard
             )
         if context.user_data is not None:
-            context.user_data["command"] = self.command_name
+            context.user_data[ContextDataKeys.COMMAND] = self.command_name
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -197,11 +208,11 @@ class RemoveTelegramUserCommand(BaseCommand):
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self._close_button_handler(update, context):
+        if await self._cancel_button_handler(update, context):
             await self._end_command(update, context)
             return True
         
-        if update.message is not None and update.message.text == keyboards.BUTTON_ENTER_TELEGRAM_ID:
+        if update.message is not None and update.message.text == keyboards.ButtonText.ENTER_TELEGRAM_ID:
             if update.effective_user is not None:
                 await self._delete_message(update, context)
                 await update.message.reply_text(messages.ENTER_TELEGRAM_IDS_MESSAGE)

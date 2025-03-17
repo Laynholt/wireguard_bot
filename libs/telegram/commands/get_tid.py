@@ -4,12 +4,10 @@ from .base import *
 class GetTelegramIdCommand(BaseCommand):
     def __init__(
         self,
-        database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId]
+        database: UserDatabase
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids
+            database
         )
         self.command_name = BotCommand.GET_TELEGRAM_ID
     

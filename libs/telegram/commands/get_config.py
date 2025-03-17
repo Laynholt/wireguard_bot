@@ -16,26 +16,34 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
         return_config: bool
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.GET_CONFIG if return_config else BotCommand.GET_QRCODE
-        self.keyboard = ((
-                KeyboardButton(
-                    text=keyboards.BUTTON_TELEGRAM_USER.text,
-                    request_users=KeyboardButtonRequestUsers(
-                        request_id=0,
-                        user_is_bot=False,
-                        request_username=True,
+        self.keyboard = Keyboard(
+            title=BotCommand.GET_CONFIG.pretty_text if return_config else BotCommand.GET_QRCODE.pretty_text,
+            reply_keyboard=ReplyKeyboardMarkup(
+                ((
+                    KeyboardButton(
+                        text=keyboards.ButtonText.TELEGRAM_USER.value.text,
+                        request_users=KeyboardButtonRequestUsers(
+                            request_id=0,
+                            user_is_bot=False,
+                            request_username=True,
+                        )
+                    ),
+                    keyboards.ButtonText.WIREGUARD_USER.value.text
+                    ), (
+                        keyboards.ButtonText.OWN.value.text,
+                        keyboards.ButtonText.CANCEL.value.text,
                     )
                 ),
-                keyboards.BUTTON_WIREGUARD_USER.text
-            ), (
-                keyboards.BUTTON_OWN.text,
-                keyboards.BUTTON_CLOSE.text,
+                one_time_keyboard=True
             )
         )
+        self.keyboard.add_parent(keyboards.WIREGUARD_CONFIG_KEYBOARD)
+        
+        self.telegram_admin_ids= telegram_admin_ids
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -54,20 +62,23 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
             return
         
+        if self.keyboard is None:
+            return
+        
         telegram_id = update.effective_user.id
         if telegram_id in self.telegram_admin_ids:
             if context.user_data is not None:
-                context.user_data["command"] = self.command_name
+                context.user_data[ContextDataKeys.COMMAND] = self.command_name
             
             message=(
                 f"Выберете, чьи {'Qr-код файлы' if self.command_name == BotCommand.GET_QRCODE else 'файлы конфигурации'}"
                 " вы хотите получить.\n\n"
-                f"Для отмены действия нажмите кнопку '{keyboards.BUTTON_CLOSE}'."
+                f"Для отмены действия нажмите кнопку '{keyboards.ButtonText.CANCEL}'."
             )    
             
             await update.message.reply_text(
                 message,
-                reply_markup=ReplyKeyboardMarkup(keyboard=self.keyboard, one_time_keyboard=True)
+                reply_markup=self.keyboard.reply_keyboard
             )
         else:
             await self.__get_configuration(update, telegram_id)
@@ -257,15 +268,15 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self._close_button_handler(update, context):
+        if await self._cancel_button_handler(update, context):
             await self._end_command(update, context)
             return True
         
         if (
             update.message is not None
             and update.message.text in (
-                keyboards.BUTTON_OWN,
-                keyboards.BUTTON_WIREGUARD_USER
+                keyboards.ButtonText.OWN,
+                keyboards.ButtonText.WIREGUARD_USER
             )
         ):
             if update.effective_user is not None:
@@ -291,12 +302,12 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 logger.error(f'Update message is None в функции {curr_frame.f_code.co_name}')
             return False
 
-        if update.message.text == keyboards.BUTTON_OWN and update.effective_user is not None:
+        if update.message.text == keyboards.ButtonText.OWN and update.effective_user is not None:
             await self.__get_configuration(update, update.effective_user.id)
             await self._end_command(update, context)
             return True
 
-        elif update.message.text == keyboards.BUTTON_WIREGUARD_USER.text:
+        elif update.message.text == keyboards.ButtonText.WIREGUARD_USER.value.text:
             await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
             return True
         return False

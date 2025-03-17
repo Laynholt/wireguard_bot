@@ -8,11 +8,11 @@ class RequestNewConfigCommand(BaseCommand):
         telegram_admin_ids: Iterable[TelegramId]
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids
+            database
         )
         self.command_name = BotCommand.REQUEST_NEW_CONFIG
-    
+        self.telegram_admin_ids = telegram_admin_ids
+        
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
         """

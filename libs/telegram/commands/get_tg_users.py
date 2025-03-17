@@ -5,12 +5,10 @@ class GetTelegramUsersCommand(BaseCommand):
     def __init__(
         self,
         database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId],
         semaphore: Semaphore
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids
+            database
         )
         self.semaphore = semaphore
         self.command_name = BotCommand.GET_TELEGRAM_USERS

@@ -10,31 +10,39 @@ from telegram import (
 from typing import Final
 
 
-BIND_KEYBOARD: Final = ((
-        KeyboardButton(
-            text=keyboards.BUTTON_BIND_WITH_TG_USER.text,
-            request_users=KeyboardButtonRequestUsers(
-                request_id=0,
-                user_is_bot=False,
-                request_username=True,
+BIND_KEYBOARD: Final = Keyboard(
+    title=BotCommand.BIND_USER.pretty_text,
+    reply_keyboard=ReplyKeyboardMarkup(
+        (
+            (
+                KeyboardButton(
+                    text=keyboards.ButtonText.BIND_WITH_TG_USER.value.text,
+                    request_users=KeyboardButtonRequestUsers(
+                        request_id=0,
+                        user_is_bot=False,
+                        request_username=True,
+                    )
+                ),
+                keyboards.ButtonText.BIND_TO_YOURSELF.value.text
+            ),
+            (
+                keyboards.ButtonText.CANCEL.value.text,
             )
         ),
-        keyboards.BUTTON_BIND_TO_YOURSELF.text
-    ), (
-        keyboards.BUTTON_CLOSE.text,
+        one_time_keyboard=True
     )
 )
+BIND_KEYBOARD.add_parent(keyboards.WIREGUARD_BINDINGS_KEYBOARD)
+
 
 class BindWireguardUserCommand(BaseCommand):
     def __init__(
         self,
         database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId],
         telegram_user_ids_cache: set[TelegramId]
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.BIND_USER
@@ -49,8 +57,8 @@ class BindWireguardUserCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
         if context.user_data is not None:
-            context.user_data["command"] = self.command_name
-            context.user_data["wireguard_users"] = []
+            context.user_data[ContextDataKeys.COMMAND] = self.command_name
+            context.user_data[ContextDataKeys.WIREGUARD_USERS] = []
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -61,7 +69,7 @@ class BindWireguardUserCommand(BaseCommand):
             await self._end_command(update, context)
             return
         
-        if context.user_data is None or update.message is None:
+        if context.user_data is None or update.message is None or self.keyboard is None:
             await self._end_command(update, context)
             return
         
@@ -84,14 +92,14 @@ class BindWireguardUserCommand(BaseCommand):
                     else:
                         logger.error(ret_val.description)
             
-            if len(context.user_data["wireguard_users"]) > 0:
+            if len(context.user_data[ContextDataKeys.WIREGUARD_USERS]) > 0:
                 await update.message.reply_text(
                     (
-                        f"Нажмите на кнопку '{keyboards.BUTTON_BIND_WITH_TG_USER}', "
+                        f"Нажмите на кнопку '{keyboards.ButtonText.BIND_WITH_TG_USER}', "
                         "чтобы выбрать пользователя Telegram для связывания с переданными конфигами Wireguard.\n\n"
-                        f"Для отмены связывания, нажмите кнопку '{keyboards.BUTTON_CLOSE}'."
+                        f"Для отмены связывания, нажмите кнопку '{keyboards.ButtonText.CANCEL}'."
                     ),
-                    reply_markup=ReplyKeyboardMarkup(self.keyboard),
+                    reply_markup=self.keyboard.reply_keyboard
                 )
 
 
@@ -125,7 +133,7 @@ class BindWireguardUserCommand(BaseCommand):
                 logger.error(f'Не удалось добавить пользователя {telegram_username} ({telegram_id}) в БД.')
                 return
 
-        for user_name in context.user_data["wireguard_users"]:
+        for user_name in context.user_data[ContextDataKeys.WIREGUARD_USERS]:
             if not self.database.is_user_exists(user_name):
                 # user_name ещё не привязан к никому
                 if self.database.add_user(telegram_id, user_name):
@@ -160,10 +168,10 @@ class BindWireguardUserCommand(BaseCommand):
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self._close_button_handler(update, context):
+        if await self._cancel_button_handler(update, context):
             return True
         
-        if update.message is not None and update.message.text == keyboards.BUTTON_BIND_TO_YOURSELF:
+        if update.message is not None and update.message.text == keyboards.ButtonText.BIND_TO_YOURSELF:
             if update.effective_user is not None:
                 await self._delete_message(update, context)
                 await self.__bind_users(update, context, update.effective_user.id)
@@ -172,31 +180,27 @@ class BindWireguardUserCommand(BaseCommand):
         return False
 
 
-    async def _close_button_handler(self, update: Update, context: CallbackContext) -> bool:
+    async def _cancel_button_handler(self, update: Update, context: CallbackContext) -> bool:
         """
-        Обработка кнопки Закрыть (BUTTON_CLOSE).
+        Обработка кнопки Отмена (ButtonText.CANCEL).
         Возвращает True, если нужно прервать дальнейший парсинг handle_text.
         """
         if not context.user_data:
             return False
         
-        if update.message is None or update.message.text != keyboards.BUTTON_CLOSE:
+        if update.message is None or update.message.text != keyboards.ButtonText.CANCEL:
             return False
         
-        current_command = context.user_data.get("command", None)
 
-        if current_command == self.command_name:
-            await self._delete_message(update, context)
-            user_names = context.user_data["wireguard_users"]
-            
-            if update.message is not None:
-                await update.message.reply_text(
-                    (
-                        f"Связывание пользователей "
-                        f'[{", ".join([f"<code>{name}</code>" for name in sorted(user_names)])}] '
-                        f"отменено."
-                    ),
-                    parse_mode="HTML",
-                )
-            return True
-        return False
+        await self._delete_message(update, context)
+        user_names = context.user_data[ContextDataKeys.WIREGUARD_USERS]
+        
+        await update.message.reply_text(
+            (
+                f"Связывание пользователей "
+                f'[{", ".join([f"<code>{name}</code>" for name in sorted(user_names)])}] '
+                f"отменено."
+            ),
+            parse_mode="HTML",
+        )
+        return True

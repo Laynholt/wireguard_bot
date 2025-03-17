@@ -8,14 +8,12 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
     def __init__(
         self,
         database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId],
         semaphore: Semaphore,
         wireguard_config_path: str,
         wireguard_log_path: str
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids
+            database
         )
         self.command_name = BotCommand.GET_ALL_STATS
         self.semaphore = semaphore

@@ -1,6 +1,7 @@
 import inspect
 import logging
 
+from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Any, Iterable, List, Optional, Tuple, Union
 
@@ -10,6 +11,7 @@ from telegram.error import TelegramError
 
 from libs.telegram import keyboards
 from libs.telegram.commands import BotCommand
+from libs.telegram.keyboards.keyboards import Keyboard
 from libs.telegram.types import TelegramId, WireguardUserName
 from libs.telegram.database import UserDatabase
 
@@ -22,17 +24,21 @@ import libs.wireguard.user_control as wireguard
 logger = logging.getLogger(__name__)
 
 
+class ContextDataKeys(str, Enum):
+    COMMAND = 'command'
+    WIREGUARD_USERS = 'wireguard_users'
+    CURRENT_MENU = 'current_menu'
+
+
 class BaseCommand(ABC):
     def __init__(
         self,
-        database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId],
+        database: UserDatabase
     ) -> None:
         self.database = database
-        self.telegram_admin_ids = telegram_admin_ids
 
         self.command_name: Optional[BotCommand] = None  
-        self.keyboard: Tuple[Any, ...] = ()
+        self.keyboard: Optional[Keyboard] = None
     
 
     async def request_input(self, update: Update, context: CallbackContext) -> None:
@@ -73,19 +79,24 @@ class BaseCommand(ABC):
         Универсальная функция завершения команды. Очищает данные о команде
         и предлагает меню в зависимости от прав пользователя.
         """
-        if context.user_data is not None: 
-            context.user_data["command"] = None
-            context.user_data["wireguard_users"] = []
-
-        if update.message is not None and update.effective_user is not None:
-            await update.message.reply_text(
-                f"Команда завершена. Выбрать новую команду можно из меню (/{BotCommand.MENU}).",
-                reply_markup=(
-                    keyboards.ADMIN_MENU
-                    if update.effective_user.id in self.telegram_admin_ids
-                    else keyboards.USER_MENU
+        if context.user_data is None:
+            if (curr_frame := inspect.currentframe()):
+                logger.error(f'Context user_data is None в функции {curr_frame.f_code.co_name}')
+            return
+        
+        keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(context.user_data[ContextDataKeys.CURRENT_MENU])
+        if keyboard is None:
+            logger.error(f'Не удалось найти клавиатуру с индексом {context.user_data[ContextDataKeys.CURRENT_MENU]}')
+        
+        else:
+            if update.message is not None and update.effective_user is not None:
+                await update.message.reply_text(
+                    f"Команда завершена. Выбрать новую команду можно из меню (/{BotCommand.MENU}).",
+                    reply_markup=keyboard.reply_keyboard
                 )
-            )
+        
+        context.user_data[ContextDataKeys.COMMAND] = None
+        context.user_data[ContextDataKeys.WIREGUARD_USERS] = []
 
 
     async def _validate_username(self, update: Update, user_name: WireguardUserName) -> bool:
@@ -132,7 +143,7 @@ class BaseCommand(ABC):
         check_result = wireguard.check_user_exists(user_name)
         if check_result.status:
             if context.user_data is not None:
-                context.user_data["wireguard_users"].append(user_name)
+                context.user_data[ContextDataKeys.WIREGUARD_USERS].append(user_name)
             return None
         return check_result
 
@@ -180,30 +191,48 @@ class BaseCommand(ABC):
             bool: Возвращает True, если сообщение пользователя являлось кнопкой и было обработано.
             В ином случает возвращает False - продолжаем выполнение команды. 
         """
-        if not self.keyboard:
+        if self.keyboard is None:
             return False
         raise NotImplementedError(f"Необходимо переопределить обработчик кнопок для [{self.keyboard}].")
         
         
-    async def _close_button_handler(self, update: Update, context: CallbackContext) -> bool:
+    async def _cancel_button_handler(self, update: Update, context: CallbackContext) -> bool:
         """
-        Обработка кнопки Закрыть (BUTTON_CLOSE).
+        Обработка кнопки отменить (ButtonText.CANCEL).
+        Возвращает True, если нужно прервать дальнейший парсинг handle_text.
+        """        
+        if update.message is None or update.message.text != keyboards.ButtonText.CANCEL:
+            return False
+        
+        await self._delete_message(update, context)
+        await update.message.reply_text("Действие отменено.")
+        return True
+
+
+    async def _turn_back_button_handler(self, update: Update, context: CallbackContext) -> bool:
+        """
+        Обработка кнопки вернуться назад (ButtonText.TURN_BACK).
         Возвращает True, если нужно прервать дальнейший парсинг handle_text.
         """
-        if not context.user_data:
+        if context.user_data is None:
             return False
         
-        if update.message is None or update.message.text != keyboards.BUTTON_CLOSE:
+        if update.message is None or update.message.text != keyboards.ButtonText.TURN_BACK:
             return False
         
-        current_command = context.user_data.get("command", None)
-
-        if current_command == self.command_name:
-            await self._delete_message(update, context)
-            if update.message is not None:
-                await update.message.reply_text("Действие отменено.")
-            return True
-        return False
+        await self._delete_message(update, context)
+        
+        keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(context.user_data[ContextDataKeys.CURRENT_MENU])
+        if keyboard is None:
+            logger.error(f'Не удалось найти клавиатуру с индексом {context.user_data[ContextDataKeys.CURRENT_MENU]}')
+            return False
+        
+        prev_keyboard = keyboard.parent if keyboard.parent is not None else keyboard
+        context.user_data[ContextDataKeys.CURRENT_MENU] = prev_keyboard.id
+        await update.message.reply_text(
+            f"Возврат в {prev_keyboard.title}.", reply_markup=prev_keyboard.reply_keyboard
+        )
+        return True
 
 
     async def _delete_message(self, update: Update, context: CallbackContext) -> None:

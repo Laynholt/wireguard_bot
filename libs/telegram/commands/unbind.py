@@ -5,12 +5,10 @@ from libs.telegram import messages
 class UnbindWireguardUserCommand(BaseCommand):
     def __init__(
         self,
-        database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId]
+        database: UserDatabase
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.UNBIND_USER
@@ -23,7 +21,7 @@ class UnbindWireguardUserCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
         if context.user_data is not None:
-            context.user_data["command"] = self.command_name
+            context.user_data[ContextDataKeys.COMMAND] = self.command_name
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

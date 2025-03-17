@@ -15,23 +15,32 @@ class SendConfigCommand(BaseCommand):
         telegram_admin_ids: Iterable[TelegramId]
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.SEND_CONFIG
-        self.keyboard = ((
-                KeyboardButton(
-                    text=keyboards.BUTTON_SELECT_TELEGRAM_USER.text,
-                    request_users=KeyboardButtonRequestUsers(
-                        request_id=0,
-                        user_is_bot=False,
-                        request_username=True,
-                    )
+        self.keyboard = Keyboard(
+            title=BotCommand.SEND_CONFIG.pretty_text,
+            reply_keyboard=ReplyKeyboardMarkup(
+                (
+                    (
+                        KeyboardButton(
+                            text=keyboards.ButtonText.SELECT_TELEGRAM_USER.value.text,
+                            request_users=KeyboardButtonRequestUsers(
+                                request_id=0,
+                                user_is_bot=False,
+                                request_username=True,
+                            )
+                        ),
+                        keyboards.ButtonText.CANCEL.value.text
+                    ),
                 ),
-                keyboards.BUTTON_CLOSE.text
-            ),
+                one_time_keyboard=True
+            )
         )
+        self.keyboard.add_parent(keyboards.WIREGUARD_CONFIG_KEYBOARD)
+        
+        self.telegram_admin_ids = telegram_admin_ids
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -41,8 +50,8 @@ class SendConfigCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
         if context.user_data is not None:
-            context.user_data["command"] = self.command_name
-            context.user_data["wireguard_users"] = []
+            context.user_data[ContextDataKeys.COMMAND] = self.command_name
+            context.user_data[ContextDataKeys.WIREGUARD_USERS] = []
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -78,14 +87,17 @@ class SendConfigCommand(BaseCommand):
                     else:
                         logger.error(ret_val.description)
             
-            if len(context.user_data["wireguard_users"]) > 0:
+            if len(context.user_data[ContextDataKeys.WIREGUARD_USERS]) > 0:
+                if self.keyboard is None:
+                    return
+                
                 await update.message.reply_text(
                     (
                         f"Выберете пользователя телеграм через кнопку "
-                        f"'{keyboards.BUTTON_SELECT_TELEGRAM_USER}'.\n\n"
-                        f"Чтобы отменить команду, нажмите {keyboards.BUTTON_CLOSE}."
+                        f"'{keyboards.ButtonText.SELECT_TELEGRAM_USER}'.\n\n"
+                        f"Чтобы отменить команду, нажмите {keyboards.ButtonText.CANCEL}."
                     ),
-                    reply_markup=ReplyKeyboardMarkup(self.keyboard, one_time_keyboard=True),
+                    reply_markup=self.keyboard.reply_keyboard
                 )
         
 
@@ -117,7 +129,7 @@ class SendConfigCommand(BaseCommand):
             context
         ) or "NoUsername"
 
-        for user_name in context.user_data["wireguard_users"]:
+        for user_name in context.user_data[ContextDataKeys.WIREGUARD_USERS]:
             check_result = wireguard.check_user_exists(user_name)
             if not check_result.status:
                 logger.error(f"Конфиг [{user_name}] не найден.")
@@ -211,6 +223,6 @@ class SendConfigCommand(BaseCommand):
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
-        if await self._close_button_handler(update, context):
+        if await self._cancel_button_handler(update, context):
             return True
         return False

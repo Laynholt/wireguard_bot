@@ -6,12 +6,10 @@ class ShowAllBindingsCommand(BaseCommand):
     def __init__(
         self,
         database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId],
         semaphore: Semaphore
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids
+            database
         )
         self.semaphore = semaphore
         self.command_name = BotCommand.SHOW_ALL_BINDINGS
@@ -56,7 +54,7 @@ class ShowAllBindingsCommand(BaseCommand):
             for index, (tid, user_names) in enumerate(linked_dict.items(), start=1):
                 user_names_str = ", ".join([f"<code>{u}</code>" for u in sorted(user_names)])
                 telegram_username = linked_telegram_names_dict.get(tid) or "Имя пользователя недоступно"
-                message_parts.append(f"{index}. {telegram_username} ({tid}): {user_names_str}\n")
+                message_parts.append(f"{index}. {telegram_username} (<code>{tid}</code>): {user_names_str}\n")
 
         # Непривязанные Telegram ID
         unlinked_telegram_ids = set(telegram_info.keys()) - set(linked_telegram_ids)
@@ -69,7 +67,7 @@ class ShowAllBindingsCommand(BaseCommand):
             )
             for index, tid in enumerate(unlinked_telegram_ids, start=1):
                 telegram_username = unlinked_telegram_names_dict.get(tid) or "Имя пользователя недоступно"
-                message_parts.append(f"{index}. {telegram_username} ({tid})\n")
+                message_parts.append(f"{index}. {telegram_username} (<code>{tid}</code>)\n")
 
         # Непривязанные user_name
         linked_usernames = {u for _, u in linked_users}

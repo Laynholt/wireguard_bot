@@ -2,19 +2,14 @@ from .base import *
 from libs.telegram import messages
 from libs.telegram.commands.bind import BIND_KEYBOARD
 
-from telegram import (
-    ReplyKeyboardMarkup
-)
 
 class AddWireguardUserCommand(BaseCommand):
     def __init__(
         self,
-        database: UserDatabase,
-        telegram_admin_ids: Iterable[TelegramId]
+        database: UserDatabase
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
     
         self.command_name = BotCommand.ADD_USER
@@ -27,8 +22,8 @@ class AddWireguardUserCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(messages.ENTER_WIREGUARD_USERNAMES_MESSAGE)
         if context.user_data is not None: 
-            context.user_data["command"] = self.command_name
-            context.user_data["wireguard_users"] = []
+            context.user_data[ContextDataKeys.COMMAND] = self.command_name
+            context.user_data[ContextDataKeys.WIREGUARD_USERS] = []
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -55,16 +50,16 @@ class AddWireguardUserCommand(BaseCommand):
                 else:
                     logger.error(ret_val.description)
         
-        if len(context.user_data["wireguard_users"]) > 0:
+        if len(context.user_data[ContextDataKeys.WIREGUARD_USERS]) > 0:
             await update.message.reply_text(
                 (
-                    f"Нажмите на кнопку '{keyboards.BUTTON_BIND_WITH_TG_USER}', "
+                    f"Нажмите на кнопку '{keyboards.ButtonText.BIND_WITH_TG_USER}', "
                     "чтобы выбрать пользователя Telegram для связывания с переданными конфигами Wireguard.\n\n"
-                    f"Для отмены связывания, нажмите кнопку '{keyboards.BUTTON_CLOSE}'."
+                    f"Для отмены связывания, нажмите кнопку '{keyboards.ButtonText.CANCEL}'."
                 ),
-                reply_markup=ReplyKeyboardMarkup(BIND_KEYBOARD),
+                reply_markup=BIND_KEYBOARD.reply_keyboard,
             )
-            context.user_data["command"] = BotCommand.BIND_USER
+            context.user_data[ContextDataKeys.COMMAND] = BotCommand.BIND_USER
         
         return need_restart_wireguard
 
@@ -88,5 +83,5 @@ class AddWireguardUserCommand(BaseCommand):
                 await update.message.reply_document(document=open(zip_result.description, "rb"))
                 wireguard.remove_zipfile(user_name)
                 if context.user_data is not None:
-                    context.user_data["wireguard_users"].append(user_name)
+                    context.user_data[ContextDataKeys.WIREGUARD_USERS].append(user_name)
         return add_result

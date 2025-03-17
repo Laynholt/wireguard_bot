@@ -9,11 +9,11 @@ class SendMessageCommand(BaseCommand):
         telegram_user_ids_cache: set[TelegramId]
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids,
+            database
         )
         self.telegram_user_ids_cache = telegram_user_ids_cache
         self.command_name = BotCommand.SEND_MESSAGE
+        self.telegram_admin_ids = telegram_admin_ids
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -28,7 +28,7 @@ class SendMessageCommand(BaseCommand):
                 )
             )
         if context.user_data is not None:
-            context.user_data["command"] = self.command_name
+            context.user_data[ContextDataKeys.COMMAND] = self.command_name
 
 
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:
@@ -50,7 +50,14 @@ class SendMessageCommand(BaseCommand):
         for tid in self.telegram_user_ids_cache:
             try:
                 if update.message is not None:
-                    await context.bot.send_message(chat_id=tid, text=update.message.text)
+                    keyboard = (
+                        keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard()
+                        if tid in self.telegram_admin_ids
+                        else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard()
+                    )
+                    await context.bot.send_message(
+                        chat_id=tid, text=update.message.text, reply_markup=keyboard.reply_keyboard
+                    )
                 logger.info(f"Сообщение успешно отправлено пользователю {tid}")
             except TelegramError as e:
                 logger.error(f"Не удалось отправить сообщение пользователю {tid}: {e}")

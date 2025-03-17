@@ -10,11 +10,11 @@ class StartCommand(BaseCommand):
         telegram_user_ids_cache: set[TelegramId]
     ) -> None:
         super().__init__(
-            database,
-            telegram_admin_ids
+            database
         )
         self.telegram_user_ids_cache = telegram_user_ids_cache
         self.command_name = BotCommand.START
+        self.telegram_admin_ids = telegram_admin_ids
     
     
     async def execute(self, update: Update, context: CallbackContext) -> Optional[bool]:

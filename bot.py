@@ -27,7 +27,7 @@ from libs.wireguard import utils as wireguard_utils
 from libs.telegram.types import *
 from libs.telegram.database import UserDatabase
 from libs.telegram import wrappers, keyboards
-from libs.telegram.commands import BotCommand, BotCommandHandler
+from libs.telegram.commands import BotCommand, BotCommandHandler, ContextDataKeys
 
 
 
@@ -431,10 +431,57 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
     вызывается соответствующий обработчик.
     В противном случае сообщение передается в общий обработчик.
     """
-    if update.message is not None and update.message.text is not None:
-        if update.message.text in text_command_handlers:
-            await text_command_handlers[update.message.text](update, context)
+    if update.message is None or context.user_data is None:
+        return
+    
+    if update.message.text is None:
+        return
+        
+    # Если для пользователя не установлено текущее меню, то устанавливаем главное
+    if context.user_data.get(ContextDataKeys.CURRENT_MENU) is None:
+        if update.effective_user is not None:
+            user_id = update.effective_user.id
+            keyboard = (
+                keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard()
+                if user_id in config.telegram_admin_ids
+                else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard()
+            )
+            context.user_data[ContextDataKeys.CURRENT_MENU] = keyboard.id
+    
+    # Не используем else, чтобы пользователю не нужно было снова вводить данные
+    # Таким образом мы сразу бесшовно обрабатываем введенные данные и устанавливаем меню
+    if context.user_data.get(ContextDataKeys.CURRENT_MENU) is not None:
+        current_keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(
+            context.user_data[ContextDataKeys.CURRENT_MENU]
+        )
+        
+        if current_keyboard is None:
+            logger.error(
+                f'Не удалось получить клавиатуру с id {context.user_data[ContextDataKeys.CURRENT_MENU]}.'
+            )
             return
+        
+        # Если это подменю нашей клавиатуры
+        if update.message.text in current_keyboard:
+            # Если это кнопка вернуться, то возвращаемся
+            if await __turn_back_button_handler(update, context):
+                return
+            
+            # Если это команда, то выполняем ее
+            if update.message.text in text_command_handlers:
+                await text_command_handlers[update.message.text](update, context)
+                return
+    
+            # В ином случае это подменю
+            child_menus = [child for child in current_keyboard.children if child.is_menu is True]
+            
+            for child_menu in child_menus:
+                if update.message.text == child_menu.title:
+                    context.user_data[ContextDataKeys.CURRENT_MENU] = child_menu.id
+                    await update.message.reply_text(
+                        f"Переходим в {child_menu.title}.", reply_markup=child_menu.reply_keyboard
+                    )
+                    return
     
     await handle_update(update, context)
 
@@ -469,9 +516,35 @@ async def __send_menu(update: Update) -> None:
         await update.message.reply_text(
             f"Пожалуйста, выберите команду из меню. (/{BotCommand.MENU})",
             reply_markup=(
-                keyboards.ADMIN_MENU if update.effective_user.id in config.telegram_admin_ids else keyboards.USER_MENU
+                keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard().reply_keyboard 
+                if update.effective_user.id in config.telegram_admin_ids
+                else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard().reply_keyboard
             )
         )
+
+
+async def __turn_back_button_handler(update: Update, context: CallbackContext) -> bool:
+        """
+        Обработка кнопки вернуться назад (ButtonText.TURN_BACK).
+        Возвращает True, если нужно прервать дальнейший парсинг handle_text.
+        """
+        if context.user_data is None:
+            return False
+        
+        if update.message is None or update.message.text != keyboards.ButtonText.TURN_BACK:
+            return False
+        
+        keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(context.user_data[ContextDataKeys.CURRENT_MENU])
+        if keyboard is None:
+            logger.error(f'Не удалось найти клавиатуру с индексом {context.user_data[ContextDataKeys.CURRENT_MENU]}')
+            return False
+        
+        prev_keyboard = keyboard.parent if keyboard.parent is not None else keyboard
+        context.user_data[ContextDataKeys.CURRENT_MENU] = prev_keyboard.id
+        await update.message.reply_text(
+            f"Возврат в {prev_keyboard.title}.", reply_markup=prev_keyboard.reply_keyboard
+        )
+        return True
 
 # ---------------------- Обработчик ошибок ----------------------
 
