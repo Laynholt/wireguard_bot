@@ -20,7 +20,7 @@ class BanTelegramUserCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.BAN_TELEGRAM_USER
-        self.keyboard = Keyboard(
+        self.keyboard = keyboards.Keyboard(
             title=BotCommand.BAN_TELEGRAM_USER.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 (

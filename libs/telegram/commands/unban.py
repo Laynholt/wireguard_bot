@@ -20,7 +20,7 @@ class UnbanTelegramUserCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.UNBAN_TELEGRAM_USER
-        self.keyboard = Keyboard(
+        self.keyboard = keyboards.Keyboard(
             title=BotCommand.UNBAN_TELEGRAM_USER.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 (

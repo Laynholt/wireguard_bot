@@ -22,7 +22,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.GET_MY_STATS if return_own_stats else BotCommand.GET_USER_STATS
-        self.keyboard = Keyboard(
+        self.keyboard = keyboards.Keyboard(
             title=BotCommand.GET_MY_STATS.pretty_text if return_own_stats else BotCommand.GET_USER_STATS.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 ((

@@ -17,7 +17,7 @@ class UnbindTelegramUserCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.UNBIND_TELEGRAM_ID
-        self.keyboard = Keyboard(
+        self.keyboard = keyboards.Keyboard(
             title=BotCommand.UNBIND_TELEGRAM_ID.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 (

@@ -20,7 +20,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
         )
     
         self.command_name = BotCommand.GET_CONFIG if return_config else BotCommand.GET_QRCODE
-        self.keyboard = Keyboard(
+        self.keyboard = keyboards.Keyboard(
             title=BotCommand.GET_CONFIG.pretty_text if return_config else BotCommand.GET_QRCODE.pretty_text,
             reply_keyboard=ReplyKeyboardMarkup(
                 ((

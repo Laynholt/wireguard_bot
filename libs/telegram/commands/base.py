@@ -11,7 +11,6 @@ from telegram.error import TelegramError
 
 from libs.telegram import keyboards
 from libs.telegram.commands import BotCommand
-from libs.telegram.keyboards import Keyboard
 from libs.telegram.types import TelegramId, WireguardUserName
 from libs.telegram.database import UserDatabase
 
@@ -38,7 +37,7 @@ class BaseCommand(ABC):
         self.database = database
 
         self.command_name: Optional[BotCommand] = None  
-        self.keyboard: Optional["Keyboard"] = None
+        self.keyboard: Optional[keyboards.Keyboard] = None
     
 
     async def request_input(self, update: Update, context: CallbackContext) -> None:

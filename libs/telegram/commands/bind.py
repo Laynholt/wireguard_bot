@@ -10,7 +10,7 @@ from telegram import (
 from typing import Final
 
 
-BIND_KEYBOARD: Final = Keyboard(
+BIND_KEYBOARD: Final = keyboards.Keyboard(
     title=BotCommand.BIND_USER.pretty_text,
     reply_keyboard=ReplyKeyboardMarkup(
         (
