@@ -461,6 +461,7 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
             )
             return
         
+        print(current_keyboard, f'{update.message.text in current_keyboard=}')
         # Если это подменю нашей клавиатуры
         if update.message.text in current_keyboard:
             # Если это кнопка вернуться, то возвращаемся

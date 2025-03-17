@@ -12,7 +12,7 @@ WIREGUARD_ACTIONS_KEYBOARD = Keyboard(
             (BotCommand.REMOVE_USER.pretty_text,),
             (BotCommand.COM_UNCOM_USER.pretty_text,),
             (BotCommand.SHOW_USERS_STATE.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -30,7 +30,7 @@ WIREGUARD_BINDINGS_KEYBOARD = Keyboard(
             (BotCommand.UNBIND_TELEGRAM_ID.pretty_text,),
             (BotCommand.GET_USERS_BY_ID.pretty_text,),
             (BotCommand.SHOW_ALL_BINDINGS.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -46,7 +46,7 @@ TELEGRAM_ACTIONS_KEYBOARD = Keyboard(
             (BotCommand.BAN_TELEGRAM_USER.pretty_text,),
             (BotCommand.UNBAN_TELEGRAM_USER.pretty_text,),
             (BotCommand.REMOVE_TELEGRAM_USER.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -62,7 +62,7 @@ WIREGUARD_CONFIG_KEYBOARD = Keyboard(
             (BotCommand.GET_CONFIG.pretty_text,),
             (BotCommand.GET_QRCODE.pretty_text,),
             (BotCommand.SEND_CONFIG.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -78,7 +78,7 @@ WIREGUARD_STATS_KEYBOARD = Keyboard(
             (BotCommand.GET_MY_STATS.pretty_text,),
             (BotCommand.GET_USER_STATS.pretty_text,),
             (BotCommand.GET_ALL_STATS.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -93,7 +93,7 @@ TELEGRAM_INFO_KEYBOARD = Keyboard(
         (
             (BotCommand.GET_TELEGRAM_ID.pretty_text,),
             (BotCommand.GET_TELEGRAM_USERS.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -109,7 +109,7 @@ GENERAL_COMMANDS_KEYBOARD = Keyboard(
             (BotCommand.HELP.pretty_text,),
             (BotCommand.SEND_MESSAGE.pretty_text,),
             (BotCommand.RELOAD_WG_SERVER.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -126,7 +126,7 @@ USER_WIREGUARD_CONFIG_KEYBOARD = Keyboard(
             (BotCommand.GET_CONFIG.pretty_text,),
             (BotCommand.GET_QRCODE.pretty_text,),
             (BotCommand.REQUEST_NEW_CONFIG.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
@@ -142,7 +142,7 @@ USER_GENERAL_COMMANDS_KEYBOARD = Keyboard(
             (BotCommand.GET_TELEGRAM_ID.pretty_text,),
             (BotCommand.GET_MY_STATS.pretty_text,),
             (BotCommand.HELP.pretty_text,),
-            (keys.ButtonText.CANCEL.value.text,)
+            (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
         one_time_keyboard=False,
