@@ -486,6 +486,9 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
 # ---------------------- Вспомогательные функции ----------------------
 
 async def __init_main_menu(update: Update, context: CallbackContext) -> None:
+    """
+    Задает начальное пользовательское меню
+    """
     if context.user_data is None:
         return
     
