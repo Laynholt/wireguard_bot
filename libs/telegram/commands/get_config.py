@@ -150,7 +150,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             else:
                 await update.message.reply_text(
                     (
-                        "ℹ️ Пользователь Tid "
+                        "ℹ️ Пользователь "
                         f"{await telegram_utils.get_username_by_id(telegram_id, context) or 'Не удалось получить имя'}"
                         f" (<code>{telegram_id}</code>) не привязан ни к одной конфигурации.\n\n"
                     ),
