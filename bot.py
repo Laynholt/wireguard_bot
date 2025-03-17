@@ -416,6 +416,7 @@ async def handle_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик команд, отправленных пользователем.
     """
+    await __init_main_menu(update, context)
     if update.message is not None and update.message.text is not None:
         await text_command_handlers[
             BotCommand.from_command(update.message.text).pretty_text
@@ -436,20 +437,9 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
     
     if update.message.text is None:
         return
-        
-    # Если для пользователя не установлено текущее меню, то устанавливаем главное
-    if context.user_data.get(ContextDataKeys.CURRENT_MENU) is None:
-        if update.effective_user is not None:
-            user_id = update.effective_user.id
-            keyboard = (
-                keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard()
-                if user_id in config.telegram_admin_ids
-                else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard()
-            )
-            context.user_data[ContextDataKeys.CURRENT_MENU] = keyboard.id
     
-    # Не используем else, чтобы пользователю не нужно было снова вводить данные
-    # Таким образом мы сразу бесшовно обрабатываем введенные данные и устанавливаем меню
+    await __init_main_menu(update, context)
+    
     if context.user_data.get(ContextDataKeys.CURRENT_MENU) is not None:
         current_keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(
             context.user_data[ContextDataKeys.CURRENT_MENU]
@@ -490,9 +480,26 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
     Обработчик, который срабатывает, когда пользователь шлёт запрос
     с кнопкой выбора Telegram-пользователя (filters.StatusUpdate.USER_SHARED).
     """
+    await __init_main_menu(update, context)
     await handle_update(update, context, delete_msg=True)
 
 # ---------------------- Вспомогательные функции ----------------------
+
+async def __init_main_menu(update: Update, context: CallbackContext) -> None:
+    if context.user_data is None:
+        return
+    
+    # Если для пользователя не установлено текущее меню, то устанавливаем главное
+    if context.user_data.get(ContextDataKeys.CURRENT_MENU) is None:
+        if update.effective_user is not None:
+            user_id = update.effective_user.id
+            keyboard = (
+                keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard()
+                if user_id in config.telegram_admin_ids
+                else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard()
+            )
+            context.user_data[ContextDataKeys.CURRENT_MENU] = keyboard.id
+
 
 async def __delete_message(update: Update, context: CallbackContext) -> None:
     """
