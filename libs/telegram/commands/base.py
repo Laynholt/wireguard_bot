@@ -36,7 +36,7 @@ class BaseCommand(ABC):
     ) -> None:
         self.database = database
 
-        self.command_name: Optional[BotCommand] = None  
+        self.command_name: Optional[BotCommand] = None
         self.keyboard: Optional[keyboards.Keyboard] = None
     
 
