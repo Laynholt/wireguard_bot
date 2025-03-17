@@ -81,7 +81,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 reply_markup=self.keyboard.reply_keyboard
             )
         else:
-            await self.__get_configuration(update, telegram_id)
+            await self.__get_configuration(update, context, telegram_id)
             await self._end_command(update, context)
 
 
@@ -108,13 +108,13 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             
             for shared_user in update.message.users_shared.users:
                 await self.__get_configuration(
-                    update, shared_user.user_id
+                    update, context, shared_user.user_id
                 )
 
         await self._end_command(update, context)
 
 
-    async def __get_configuration(self, update: Update, telegram_id: TelegramId) -> None:
+    async def __get_configuration(self, update: Update, context: CallbackContext, telegram_id: TelegramId) -> None:
         """
         Универсальная функция получения и отправки пользователю конфигурационных файлов/QR-кода.
         """
@@ -140,12 +140,22 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
         user_names = self.database.get_users_by_telegram_id(telegram_id)
         if not user_names:
             logger.info(f"Пользователь Tid [{telegram_id}] не привязан ни к одной конфигурации.")
-            await update.message.reply_text(
-                "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
-                f"📝 <em>Используйте /{BotCommand.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
-                f"администратору на создание новой конфигурации.</em>",
-                parse_mode="HTML"
-            )
+            if telegram_id == update.effective_user.id:
+                await update.message.reply_text(
+                    "📁 <b>У вас нет доступных конфигураций WireGuard.</b>\n\n"
+                    f"📝 <em>Используйте /{BotCommand.REQUEST_NEW_CONFIG}, чтобы отправить запрос "
+                    f"администратору на создание новой конфигурации.</em>",
+                    parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(
+                    (
+                        "ℹ️ Пользователь Tid "
+                        f"{telegram_utils.get_username_by_id(telegram_id, context) or 'Не удалось получить имя'}"
+                        f" (<code>{telegram_id}</code>) не привязан ни к одной конфигурации.\n\n"
+                    ),
+                    parse_mode="HTML"
+                )
             return
 
         for user_name in user_names:
@@ -303,7 +313,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             return False
 
         if update.message.text == keyboards.ButtonText.OWN and update.effective_user is not None:
-            await self.__get_configuration(update, update.effective_user.id)
+            await self.__get_configuration(update, context, update.effective_user.id)
             await self._end_command(update, context)
             return True
 
