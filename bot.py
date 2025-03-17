@@ -549,6 +549,7 @@ async def __turn_back_button_handler(update: Update, context: CallbackContext) -
             await bot_command_handler.command(
                 BotCommand.CANCEL
             ).execute(update, context)
+            return True
         
         keyboard = keyboards.KEYBOARD_MANAGER.get_keyboard(context.user_data[ContextDataKeys.CURRENT_MENU])
         if keyboard is None:
