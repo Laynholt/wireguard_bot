@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Dict, Final
 from .keys import *
 from .keyboards import *
 
@@ -14,6 +14,10 @@ class KeyboardManager:
             title='Главное меню Пользователя',
             is_menu=True
         )
+        self.__manager: Dict[KeyboardId, Keyboard] = {
+            self.__admin_keyboard.id: self.__admin_keyboard,
+            self.__user_keyboard.id: self.__user_keyboard
+        }
 
     def __add_to_keyboard(self, keyboard: Keyboard, is_admin_keyboard: bool = False) -> None:
         kb = self.__admin_keyboard if is_admin_keyboard else self.__user_keyboard
@@ -25,6 +29,8 @@ class KeyboardManager:
             resize_keyboard=True,
             one_time_keyboard=False,
         )
+        
+        self.__manager.update({keyboard.id: keyboard})
 
     def add_to_admin_keyboard(self, keyboard: Keyboard) -> None:
         """
@@ -48,14 +54,8 @@ class KeyboardManager:
         Returns:
             Optional[Keyboard]: Найденный объект Keyboard или None, если индекс некорректный.
         """
-        if index == self.__admin_keyboard.id:
-            return self.__admin_keyboard
-        if index == self.__user_keyboard.id:
-            return self.__user_keyboard
+        return self.__manager.get(index)
         
-        result = self.__user_keyboard.get_descendant_by_id(index)
-        return result if result is not None else self.__admin_keyboard.get_descendant_by_id(index)
-
     def get_admin_main_keyboard(self) -> Keyboard:
         return self.__admin_keyboard
     
