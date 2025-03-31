@@ -51,7 +51,7 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
             await update.message.reply_text(
                 (
                     "Пожалуйста, выберите пользователя Telegram, привязки которого хотите увидеть.\n\n"
-                    "Для отмены действия нажмите кнопку Закрыть."
+                    f"Для отмены действия нажмите кнопку '{keyboards.ButtonText.CANCEL}'."
                 ),
                 reply_markup=self.keyboard.reply_keyboard
             )

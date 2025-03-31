@@ -2,7 +2,7 @@ from .base import *
 
 from telegram import (
     KeyboardButton,
-        ReplyKeyboardMarkup,
+    ReplyKeyboardMarkup,
     KeyboardButtonRequestUsers
 )
 
@@ -52,7 +52,7 @@ class UnbindTelegramUserCommand(BaseCommand):
             await update.message.reply_text(
                 (
                     "Пожалуйста, выберите пользователя Telegram, которого хотите отвязать.\n\n"
-                    "Для отмены действия нажмите кнопку Закрыть."
+                    f"Для отмены действия нажмите кнопку '{keyboards.ButtonText.CANCEL}'."
                 ),
                 reply_markup=self.keyboard.reply_keyboard
             )
