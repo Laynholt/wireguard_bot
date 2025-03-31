@@ -6,6 +6,7 @@ from telegram import (
     KeyboardButtonRequestUsers,
     ReplyKeyboardMarkup
 )
+from libs.wireguard.user_control import sanitize_string
 
 
 class BanTelegramUserCommand(BaseCommand):
@@ -76,7 +77,7 @@ class BanTelegramUserCommand(BaseCommand):
         entries = update.message.text.split() if update.message.text is not None else []
         if entries:
             for entry in entries:
-                if await self.__ban_user(update, context, entry):
+                if await self.__ban_user(update, context, sanitize_string(entry)):
                     need_restart_wireguard = True
                     
         else:

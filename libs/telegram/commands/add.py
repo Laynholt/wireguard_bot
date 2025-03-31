@@ -2,6 +2,8 @@ from .base import *
 from libs.telegram import messages
 from libs.telegram.commands.bind import BIND_KEYBOARD
 
+from libs.wireguard.user_control import sanitize_string 
+
 
 class AddWireguardUserCommand(BaseCommand):
     def __init__(
@@ -39,7 +41,9 @@ class AddWireguardUserCommand(BaseCommand):
         entries = update.message.text.split() if update.message.text is not None else []
         
         for entry in entries:
-            ret_val = await self.__add_user(update, context, entry)
+            ret_val = await self.__add_user(
+                update, context, sanitize_string(entry)
+            )
             
             if ret_val is not None:
                 # Выводим сообщение с результатом (ошибка или успех)

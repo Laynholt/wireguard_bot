@@ -52,9 +52,11 @@ class ShowAllBindingsCommand(BaseCommand):
         if linked_telegram_ids:
             message_parts.append(f"<b>🔹🔐 Привязанные пользователи [{len(linked_dict)}] 🔹</b>\n")
             for index, (tid, user_names) in enumerate(linked_dict.items(), start=1):
-                user_names_str = ", ".join([f"<code>{u}</code>" for u in sorted(user_names)])
+                user_names_str = ", ".join([f"{u}" for u in sorted(user_names)])
                 telegram_username = linked_telegram_names_dict.get(tid) or "Имя пользователя недоступно"
-                message_parts.append(f"{index}. {telegram_username} (<code>{tid}</code>): {user_names_str}\n")
+                message_parts.append(
+                    f"{index}. {telegram_username} (<code>{tid}</code>): <code>{user_names_str}</code>\n"
+                )
 
         # Непривязанные Telegram ID
         unlinked_telegram_ids = set(telegram_info.keys()) - set(linked_telegram_ids)

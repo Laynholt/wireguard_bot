@@ -1,5 +1,6 @@
 from .base import *
 from libs.telegram import messages
+from libs.wireguard.user_control import sanitize_string
 
 
 class RemoveWireguardUserCommand(BaseCommand):
@@ -37,7 +38,7 @@ class RemoveWireguardUserCommand(BaseCommand):
             entries = update.message.text.split() if update.message.text is not None else []
             
             for entry in entries:
-                ret_val = await self.__rem_user(update, entry)
+                ret_val = await self.__rem_user(update, sanitize_string(entry))
                 
                 if ret_val is not None:
                     # Выводим сообщение с результатом (ошибка или успех)

@@ -6,6 +6,7 @@ from telegram import (
     KeyboardButtonRequestUsers,
     ReplyKeyboardMarkup
 )
+from libs.wireguard.user_control import sanitize_string
 
 from typing import Final
 
@@ -82,7 +83,9 @@ class BindWireguardUserCommand(BaseCommand):
         else:
             entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
-                ret_val = await self._create_list_of_wireguard_users(update, context, entry)
+                ret_val = await self._create_list_of_wireguard_users(
+                    update, context, sanitize_string(entry)
+                )
                 
                 if ret_val is not None:
                     # Выводим сообщение с результатом (ошибка или успех)

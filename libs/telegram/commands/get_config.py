@@ -6,6 +6,7 @@ from telegram import (
     KeyboardButtonRequestUsers,
     ReplyKeyboardMarkup
 )
+from libs.wireguard.user_control import sanitize_string
 
 
 class GetWireguardConfigOrQrcodeCommand(BaseCommand):
@@ -99,7 +100,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
         entries = update.message.text.split() if update.message.text is not None else []
         if entries:
             for entry in entries:
-                await self.__get_user_configuration(update, entry)
+                await self.__get_user_configuration(update, sanitize_string(entry))
         
         else:
             if update.message.users_shared is None:

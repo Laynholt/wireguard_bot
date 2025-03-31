@@ -694,3 +694,16 @@ def is_username_commented(user_name: str) -> bool:
         bool: True - закомментирован, иначе False.
     """
     return user_name in get_usernames() and user_name in get_inactive_usernames()
+
+
+def sanitize_string(string: str) -> str:
+    """
+    Удаляет символы ',' и ';' из переданной строки и обрезает пробелы по краям.
+
+    Args:
+        string (str): Исходная строка.
+
+    Returns:
+        str: Очищенная строка без символов ',' и ';'.
+    """
+    return string.strip().translate(str.maketrans('', '', ",;"))

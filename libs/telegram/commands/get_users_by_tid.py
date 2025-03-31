@@ -103,9 +103,9 @@ class GetWireguardUsersByTIdCommand(BaseCommand):
             user_names = self.database.get_users_by_telegram_id(telegram_id)
             if update.message is not None:
                 await update.message.reply_text((
-                        f"Пользователи Wireguard, прикрепленные к [{telegram_username}"
-                        f" (<code>{telegram_id}</code>)]: "
-                        f"[{', '.join([f'<code>{u}</code>' for u in sorted(user_names)])}]."
+                        f"Пользователи Wireguard, прикрепленные к {telegram_username}"
+                        f" (<code>{telegram_id}</code>): "
+                        f"<code>{', '.join([f'{u}' for u in sorted(user_names)])}</code>."
                     ),
                     parse_mode="HTML"
                 )

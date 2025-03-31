@@ -6,6 +6,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     KeyboardButtonRequestUsers
 )
+from libs.wireguard.user_control import sanitize_string
 
 
 class SendConfigCommand(BaseCommand):
@@ -76,7 +77,7 @@ class SendConfigCommand(BaseCommand):
             entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
                 ret_val = await self._create_list_of_wireguard_users(
-                    update, context, entry
+                    update, context, sanitize_string(entry)
                 )
                 
                 if ret_val is not None:
