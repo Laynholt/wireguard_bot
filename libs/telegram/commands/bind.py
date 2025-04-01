@@ -83,18 +83,10 @@ class BindWireguardUserCommand(BaseCommand):
         else:
             entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
-                ret_val = await self._create_list_of_wireguard_users(
+                await self._create_list_of_wireguard_users(
                     update, context, sanitize_string(entry)
                 )
                 
-                if ret_val is not None:
-                    # Выводим сообщение с результатом (ошибка или успех)
-                    await update.message.reply_text(ret_val.description)
-                    if ret_val.status:
-                        logger.info(ret_val.description)
-                    else:
-                        logger.error(ret_val.description)
-            
             if len(context.user_data[ContextDataKeys.WIREGUARD_USERS]) > 0:
                 await update.message.reply_text(
                     (
@@ -104,6 +96,8 @@ class BindWireguardUserCommand(BaseCommand):
                     ),
                     reply_markup=self.keyboard.reply_keyboard
                 )
+            else:
+                await self._end_command(update, context)
 
 
     async def __bind_users(

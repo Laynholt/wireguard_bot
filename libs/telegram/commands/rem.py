@@ -38,37 +38,37 @@ class RemoveWireguardUserCommand(BaseCommand):
             entries = update.message.text.split() if update.message.text is not None else []
             
             for entry in entries:
-                ret_val = await self.__rem_user(update, sanitize_string(entry))
-                
-                if ret_val is not None:
-                    # Выводим сообщение с результатом (ошибка или успех)
-                    await update.message.reply_text(ret_val.description)
-                    if ret_val.status:
-                        logger.info(ret_val.description)
-                        need_restart_wireguard = True
-                    else:
-                        logger.error(ret_val.description)
+                if await self.__rem_user(update, sanitize_string(entry)):
+                    need_restart_wireguard = True
         finally:
             await self._end_command(update, context)
         return need_restart_wireguard
 
 
-    async def __rem_user(self, update: Update, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
+    async def __rem_user(self, update: Update, user_name: str) -> bool:
         """
         Удаляет пользователя Wireguard, а также запись о нём из БД (если есть).
         """
         if not await self._validate_username(update, user_name):
-            return None
+            return False
 
         remove_result = wireguard.remove_user(user_name)
         if remove_result.status:
+            logger.info(remove_result.description)
             if await self._check_database_state(update):
                 if not self.database.delete_user(user_name):
                     logger.error(f"Не удалось удалить информацию о пользователе [{user_name}] из базы данных.")
+                    
                     if update.message is not None:
                         await update.message.reply_text(
                             f"Не удалось удалить информацию о пользователе [{user_name}] из базы данных."
                         )
                 else:
                     logger.info(f"Пользователь [{user_name}] удален из базы данных.")
-        return remove_result
+        else:
+            logger.error(remove_result.description)
+        
+        if update.message is not None:
+            await update.message.reply_text(remove_result.description)
+        
+        return remove_result.status

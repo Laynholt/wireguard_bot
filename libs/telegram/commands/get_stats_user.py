@@ -1,3 +1,4 @@
+from typing import final
 from .base import *
 from libs.telegram import messages
 from libs.wireguard import stats as wireguard_stats
@@ -98,39 +99,27 @@ class GetWireguardUserStatsCommand(BaseCommand):
         if await self._buttons_handler(update, context):
             return
         
-        if context.user_data is None or update.message is None:
-            await self._end_command(update, context)
-            return
-    
-        entries = update.message.text.split() if update.message.text is not None else []
-        if entries:
-            for entry in entries:
-                ret_val = await self._create_list_of_wireguard_users(
-                    update, context, sanitize_string(entry)
-                )
-            
-                if ret_val is not None:
-                    # Выводим сообщение с результатом (ошибка или успех)
-                    await update.message.reply_text(ret_val.description)
-                    if ret_val.status:
-                        logger.info(ret_val.description)
-                    else:
-                        logger.error(ret_val.description)
-            
-        else:
-            if update.message.users_shared is None:
-                await self._end_command(update, context)
+        try:
+            if context.user_data is None or update.message is None:
                 return
-            
-            for shared_user in update.message.users_shared.users:
-                await self._create_list_of_wireguard_users_by_telegram_id(
-                    update,
-                    context,
-                    shared_user.user_id
-                )
+        
+            if update.message.users_shared is not None:
+                for shared_user in update.message.users_shared.users:
+                    await self._create_list_of_wireguard_users_by_telegram_id(
+                        update,
+                        context,
+                        shared_user.user_id
+                    )
+            else:                
+                entries = update.message.text.split() if update.message.text is not None else []
+                for entry in entries:
+                    await self._create_list_of_wireguard_users(
+                        update, context, sanitize_string(entry)
+                    )
 
-        await self.__get_user_stats(update, context)
-        await self._end_command(update, context)
+            await self.__get_user_stats(update, context)
+        finally:
+            await self._end_command(update, context)
 
 
     async def __get_user_stats(self, update: Update, context: CallbackContext, own_stats: bool = False) -> None:

@@ -16,8 +16,6 @@ from libs.telegram.types import TelegramId, WireguardUserName
 from libs.telegram.database import UserDatabase
 
 import libs.telegram.utils as telegram_utils
-
-import libs.wireguard.utils as wireguard_utils
 import libs.wireguard.user_control as wireguard
 
 
@@ -132,20 +130,26 @@ class BaseCommand(ABC):
         update: Update,
         context: CallbackContext,
         user_name: str
-    ) -> Optional[wireguard_utils.FunctionResult]:
+    ) -> bool:
         """
         Добавляет существующие user_name в список пользователей Wireguard для дальнейшей обработки,
         если user_name существует и корректен.
         """
         if not await self._validate_username(update, user_name):
-            return None
+            return False
 
         check_result = wireguard.check_user_exists(user_name)
         if check_result.status:
             if context.user_data is not None:
                 context.user_data[ContextDataKeys.WIREGUARD_USERS].append(user_name)
-            return None
-        return check_result
+            logger.info(check_result.description)
+        else:
+            logger.error(check_result.description)
+        
+        if update.message is not None:
+            await update.message.reply_text(check_result.description)
+                    
+        return check_result.status
 
 
     async def _create_list_of_wireguard_users_by_telegram_id(
@@ -175,13 +179,10 @@ class BaseCommand(ABC):
 
         wireguard_users = self.database.get_users_by_telegram_id(telegram_id)
         for user_name in wireguard_users:
-            ret_val = await self._create_list_of_wireguard_users(
+            await self._create_list_of_wireguard_users(
                 update, context, user_name
             )
             
-            if ret_val is not None and ret_val.status is False:
-                logger.error(ret_val.description)
-
     
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:
         """

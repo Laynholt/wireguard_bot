@@ -77,21 +77,16 @@ class UnbanTelegramUserCommand(BaseCommand):
             return
         
         need_restart_wireguard = False
-        entries = update.message.text.split() if update.message.text is not None else []
-        if entries:
+        if update.message.users_shared is not None:
+            for shared_user in update.message.users_shared.users:
+                if await self.__unban_user(update, context, shared_user.user_id):
+                    need_restart_wireguard = True       
+        else:
+            entries = update.message.text.split() if update.message.text is not None else []
             for entry in entries:
                 if await self.__unban_user(update, context, sanitize_string(entry)):
                     need_restart_wireguard = True
-                    
-        else:
-            if update.message.users_shared is None:
-                await self._end_command(update, context)
-                return
             
-            for shared_user in update.message.users_shared.users:
-                if await self.__unban_user(update, context, shared_user.user_id):
-                    need_restart_wireguard = True
-
         await self._end_command(update, context)
         return need_restart_wireguard
 

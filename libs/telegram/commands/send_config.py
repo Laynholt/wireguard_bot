@@ -59,47 +59,37 @@ class SendConfigCommand(BaseCommand):
         """
         Отправляет конфиги пользователя(-ей) Wireguard пользователю Telegram.
         """
-        if await self._buttons_handler(update, context):
-            await self._end_command(update, context)
-            return
-        
-        if context.user_data is None or update.message is None:
-            await self._end_command(update, context)
-            return
-        
-        if update.message.users_shared is not None:
-            for shared_user in update.message.users_shared.users:
-                await self.__send_config(update, context, shared_user.user_id)
+        need_clean_up = True
+        try:
+            if await self._buttons_handler(update, context):
+                return
             
-            await self._end_command(update, context)
-        
-        else:    
-            entries = update.message.text.split() if update.message.text is not None else []
-            for entry in entries:
-                ret_val = await self._create_list_of_wireguard_users(
-                    update, context, sanitize_string(entry)
-                )
-                
-                if ret_val is not None:
-                    # Выводим сообщение с результатом (ошибка или успех)
-                    await update.message.reply_text(ret_val.description)
-                    if ret_val.status:
-                        logger.info(ret_val.description)
-                    else:
-                        logger.error(ret_val.description)
+            if context.user_data is None or update.message is None or self.keyboard is None:
+                return
             
-            if len(context.user_data[ContextDataKeys.WIREGUARD_USERS]) > 0:
-                if self.keyboard is None:
-                    return
-                
-                await update.message.reply_text(
-                    (
-                        f"Выберете пользователя телеграм через кнопку "
-                        f"'{keyboards.ButtonText.SELECT_TELEGRAM_USER}'.\n\n"
-                        f"Чтобы отменить команду, нажмите {keyboards.ButtonText.CANCEL}."
-                    ),
-                    reply_markup=self.keyboard.reply_keyboard
-                )
+            if update.message.users_shared is not None:
+                for shared_user in update.message.users_shared.users:
+                    await self.__send_config(update, context, shared_user.user_id)
+            else:    
+                entries = update.message.text.split() if update.message.text is not None else []
+                for entry in entries:
+                    await self._create_list_of_wireguard_users(
+                        update, context, sanitize_string(entry)
+                    )
+                    
+                if len(context.user_data[ContextDataKeys.WIREGUARD_USERS]) > 0:                    
+                    await update.message.reply_text(
+                        (
+                            f"Выберете пользователя телеграм через кнопку "
+                            f"'{keyboards.ButtonText.SELECT_TELEGRAM_USER}'.\n\n"
+                            f"Чтобы отменить команду, нажмите {keyboards.ButtonText.CANCEL}."
+                        ),
+                        reply_markup=self.keyboard.reply_keyboard
+                    )
+                    need_clean_up = False
+        finally:
+            if need_clean_up:
+                await self._end_command(update, context)
         
 
     async def __send_config(

@@ -93,26 +93,21 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
         if await self._buttons_handler(update, context):
             return
         
-        if context.user_data is None or update.message is None:
-            await self._end_command(update, context)
-            return
-    
-        entries = update.message.text.split() if update.message.text is not None else []
-        if entries:
-            for entry in entries:
-                await self.__get_user_configuration(update, sanitize_string(entry))
-        
-        else:
-            if update.message.users_shared is None:
-                await self._end_command(update, context)
+        try:
+            if context.user_data is None or update.message is None:
                 return
-            
-            for shared_user in update.message.users_shared.users:
-                await self.__get_configuration(
-                    update, context, shared_user.user_id
-                )
-
-        await self._end_command(update, context)
+        
+            if update.message.users_shared is not None:
+                for shared_user in update.message.users_shared.users:
+                    await self.__get_configuration(
+                        update, context, shared_user.user_id
+                    )
+            else:
+                entries = update.message.text.split() if update.message.text is not None else []
+                for entry in entries:
+                    await self.__get_user_configuration(update, sanitize_string(entry))
+        finally:
+            await self._end_command(update, context)
 
 
     async def __get_configuration(self, update: Update, context: CallbackContext, telegram_id: TelegramId) -> None:

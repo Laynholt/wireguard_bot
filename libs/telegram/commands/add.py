@@ -41,19 +41,11 @@ class AddWireguardUserCommand(BaseCommand):
         entries = update.message.text.split() if update.message.text is not None else []
         
         for entry in entries:
-            ret_val = await self.__add_user(
+            if await self.__add_user(
                 update, context, sanitize_string(entry)
-            )
-            
-            if ret_val is not None:
-                # Выводим сообщение с результатом (ошибка или успех)
-                await update.message.reply_text(ret_val.description)
-                if ret_val.status:
-                    logger.info(ret_val.description)
-                    need_restart_wireguard = True
-                else:
-                    logger.error(ret_val.description)
-        
+            ):
+                need_restart_wireguard = True
+                
         if len(context.user_data[ContextDataKeys.WIREGUARD_USERS]) > 0:
             await update.message.reply_text(
                 (
@@ -64,6 +56,8 @@ class AddWireguardUserCommand(BaseCommand):
                 reply_markup=BIND_KEYBOARD.reply_keyboard,
             )
             context.user_data[ContextDataKeys.COMMAND] = BotCommand.BIND_USER
+        else:
+            await self._end_command(update, context)
         
         return need_restart_wireguard
 
@@ -73,19 +67,28 @@ class AddWireguardUserCommand(BaseCommand):
         update: Update,
         context: CallbackContext,
         user_name: str
-    ) -> Optional[wireguard_utils.FunctionResult]:
+    ) -> bool:
         """
         Добавляет пользователя Wireguard. Если успешно, сразу отправляет ему .zip-конфиг.
         """
         if not await self._validate_username(update, user_name):
-            return None
+            return False
 
         add_result = wireguard.add_user(user_name)
         if add_result.status:
             zip_result = wireguard.create_zipfile(user_name)
-            if zip_result.status and update.message:
+            
+            if zip_result.status and update.message is not None:
                 await update.message.reply_document(document=open(zip_result.description, "rb"))
                 wireguard.remove_zipfile(user_name)
+                
                 if context.user_data is not None:
                     context.user_data[ContextDataKeys.WIREGUARD_USERS].append(user_name)
-        return add_result
+            
+            logger.info(add_result.description)
+        else:
+            logger.error(add_result.description)
+            
+        if update.message is not None:
+            await update.message.reply_text(add_result.description)
+        return add_result.status

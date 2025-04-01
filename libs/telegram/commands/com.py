@@ -39,25 +39,27 @@ class CommentWireguardUserCommand(BaseCommand):
             entries = update.message.text.split() if update.message.text is not None else []
             
             for entry in entries:
-                ret_val = await self.__com_user(update, sanitize_string(entry))
-                
-                if ret_val is not None:
-                    # Выводим сообщение с результатом (ошибка или успех)
-                    await update.message.reply_text(ret_val.description)
-                    if ret_val.status:
-                        logger.info(ret_val.description)
-                        need_restart_wireguard = True
-                    else:
-                        logger.error(ret_val.description)
+                if await self.__com_user(update, sanitize_string(entry)):
+                    need_restart_wireguard = True
         finally:    
             await self._end_command(update, context)
         return need_restart_wireguard
 
 
-    async def __com_user(self, update: Update, user_name: str) -> Optional[wireguard_utils.FunctionResult]:
+    async def __com_user(self, update: Update, user_name: str) -> bool:
         """
         Комментирует или раскомментирует (блокирует/разблокирует) пользователя Wireguard.
         """
         if not await self._validate_username(update, user_name):
-            return None
-        return wireguard.comment_or_uncomment_user(user_name)
+            return False
+        
+        ret_val = wireguard.comment_or_uncomment_user(user_name)
+        if ret_val.status is True:
+            logger.info(ret_val.description)
+        else:
+            logger.error(ret_val.description)
+            
+        if update.message is not None:
+            await update.message.reply_text(ret_val.description)
+        
+        return ret_val.status

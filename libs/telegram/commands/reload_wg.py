@@ -1,4 +1,5 @@
 from .base import *
+import libs.wireguard.utils as wireguard_utils
 
 
 class ReloadWireguardServerCommand(BaseCommand):
