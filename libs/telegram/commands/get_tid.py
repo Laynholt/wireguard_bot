@@ -103,25 +103,7 @@ class GetTelegramIdCommand(BaseCommand):
                 )
         finally:
             await self._end_command(update, context)
-        
-        try:
-            if update.effective_user is None:
-                if (curr_frame := inspect.currentframe()):
-                    logger.error(
-                        f'Update effective_user is None в функции {curr_frame.f_code.co_name}'
-                    )
-                return
-            
-            telegram_id = update.effective_user.id
 
-            logger.info(f"Отправляю ответ на команду [get_telegram_id] -> Tid [{telegram_id}].")
-            if update.message is not None:
-                await update.message.reply_text(
-                    f"🆔 Ваш идентификатор: <code>{telegram_id}</code>.", parse_mode="HTML"
-                )
-        finally:
-            await self._end_command(update, context)
-            
 
     async def __get_own_tid(self, update: Update, context: CallbackContext) -> None:
         try:

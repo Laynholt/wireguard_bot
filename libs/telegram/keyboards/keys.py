@@ -40,7 +40,7 @@ class ButtonText(Enum):
     CANCEL = KeyText(text="❌ Отменить")
     TURN_BACK = KeyText(text="◀️ Назад")
 
-    OWN = KeyText(text="👤 Свои")
+    OWN = KeyText(text="👤 Свой(-и)")
     WIREGUARD_USER = KeyText(text="🛡 Пользователя Wireguard")
     TELEGRAM_USER = KeyText(text="📩 Пользователя Telegram")
 
