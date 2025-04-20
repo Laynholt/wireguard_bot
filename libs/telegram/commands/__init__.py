@@ -55,6 +55,7 @@ class BotCommand(str, Enum):
 
     # Информация, связанная с Telegram
     GET_TELEGRAM_ID = ("get_telegram_id", "🆔 Получить Telegram ID")
+    GET_TELEGRAM_USERNAME = ("get_telegram_username", "🔍 Получить имя пользователя Telegram по Telegram ID")
     GET_TELEGRAM_USERS = ("get_telegram_users", "👤 Показать пользователей Telegram")
     SEND_MESSAGE = ("send_message", "📢 Рассылка сообщения")
 
@@ -148,6 +149,7 @@ class BotCommandHandler:
         from .send_config       import SendConfigCommand
 
         from .get_tid           import GetTelegramIdCommand
+        from .get_tg_username   import GetTelegramUsernameByIdCommand
         from .get_tg_users      import GetTelegramUsersCommand
         from .send_message      import SendMessageCommand
 
@@ -252,6 +254,10 @@ class BotCommandHandler:
         
         # Команды работы с Telegram ID
         self.__command_wrapper[BotCommand.GET_TELEGRAM_ID] = GetTelegramIdCommand(
+            database,
+            config.telegram_admin_ids
+        )
+        self.__command_wrapper[BotCommand.GET_TELEGRAM_USERNAME] = GetTelegramUsernameByIdCommand(
             database
         )
         self.__command_wrapper[BotCommand.GET_TELEGRAM_USERS] = GetTelegramUsersCommand(

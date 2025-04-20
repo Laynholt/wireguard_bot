@@ -110,7 +110,7 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
     """
     await bot_command_handler.command(
         BotCommand.GET_TELEGRAM_ID
-    ).execute(update, context)
+    ).request_input(update, context)
 
 
 @wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
@@ -145,6 +145,18 @@ async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
     await bot_command_handler.command(
         BotCommand.GET_QRCODE
     ).request_input(update, context)
+
+
+@wrappers.admin_required
+@wrappers.command_lock
+async def get_telegram_username_command(update: Update, context: CallbackContext) -> None:
+    """
+    Команда /get_telegram_username: возвращает имена пользователей Telegram по Id.
+    """
+    await bot_command_handler.command(
+        BotCommand.GET_TELEGRAM_USERNAME
+    ).request_input(update, context)
+
 
 @wrappers.admin_required
 async def get_telegram_users_command(update: Update, context: CallbackContext) -> None:
@@ -728,6 +740,7 @@ def main() -> None:
         BotCommand.SEND_CONFIG.pretty_text: send_config_command,
 
         BotCommand.GET_TELEGRAM_ID.pretty_text: get_telegram_id_command,
+        BotCommand.GET_TELEGRAM_USERNAME.pretty_text: get_telegram_username_command,
         BotCommand.GET_TELEGRAM_USERS.pretty_text: get_telegram_users_command,
         BotCommand.SEND_MESSAGE.pretty_text: send_message_command,
 

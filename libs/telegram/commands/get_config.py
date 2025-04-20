@@ -285,9 +285,8 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 keyboards.ButtonText.WIREGUARD_USER
             )
         ):
-            if update.effective_user is not None:
-                await self._delete_message(update, context)
-                await self.__get_config_buttons_handler(update, context)
+            await self._delete_message(update, context)
+            await self.__get_config_buttons_handler(update, context)
             return True
         
         return False

@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 from libs.core import config
+from libs.telegram.commands import BotCommand
 from .types import TelegramId
 from .utils import get_username_by_id
 
@@ -82,7 +83,7 @@ def command_lock(func):
             if update.message is not None and update.message.text is not None:
                 await update.message.reply_text(
                     f"Перед началом выполнения новой команды [{update.message.text.lower()}] "
-                    f"завершите выполнение [{current_command}]."
+                    f"завершите выполнение [{BotCommand.from_command(current_command).pretty_text}]."
                 )
             return None
 

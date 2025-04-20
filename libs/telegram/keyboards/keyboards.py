@@ -92,6 +92,7 @@ TELEGRAM_INFO_KEYBOARD = Keyboard(
     reply_keyboard=ReplyKeyboardMarkup(
         (
             (BotCommand.GET_TELEGRAM_ID.pretty_text,),
+            (BotCommand.GET_TELEGRAM_USERNAME.pretty_text,),
             (BotCommand.GET_TELEGRAM_USERS.pretty_text,),
             (keys.ButtonText.TURN_BACK.value.text,)
         ),
