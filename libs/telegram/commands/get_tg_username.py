@@ -45,7 +45,7 @@ class GetTelegramUsernameByIdCommand(BaseCommand):
                 
                 if telegram_username is not None:
                     message_parts += [
-                        f"{index}. {telegram_username} (<code>{entry}</code>)"
+                        f"{index}. {telegram_username} (<code>{entry}</code>)\n"
                     ]
 
             if len(message_parts) > 1:

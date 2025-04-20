@@ -95,7 +95,7 @@ class GetTelegramIdCommand(BaseCommand):
                 ]
                 for index, shared_user in enumerate(update.message.users_shared.users, start=1):
                     message_parts += [
-                        f"{index}. <code>{shared_user.user_id}</code>"
+                        f"{index}. @{shared_user.username} (<code>{shared_user.user_id}</code>)\n"
                     ]
                     
                 await telegram_utils.send_long_message(
