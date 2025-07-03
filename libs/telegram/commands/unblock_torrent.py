@@ -1,4 +1,6 @@
+import threading
 from .base import *
+import libs.wireguard.utils as wireguard_utils
 
 class UnblockTorrentCommand(BaseCommand):
     def __init__(
@@ -29,7 +31,6 @@ class UnblockTorrentCommand(BaseCommand):
 
         logger.info(f"Отправляю ответ на команду [unblock_torrent] -> Tid [{telegram_id}].")
         
-        need_restart_wireguard = False
         try:
             status = wireguard.check_torrent_blocking_status()
             if status == "enabled":
@@ -42,7 +43,6 @@ class UnblockTorrentCommand(BaseCommand):
                         )
                     )
                 if result.status is True:
-                    need_restart_wireguard = True
                     if update.message is not None:    
                         await update.message.reply_text(
                             (
@@ -51,6 +51,7 @@ class UnblockTorrentCommand(BaseCommand):
                             ),
                             parse_mode="HTML"
                         )
+                    threading.Thread(target=wireguard_utils.log_and_restart_wireguard, daemon=True).start()
                     
             elif status == "disabled":
                 if update.message is not None:    
@@ -66,6 +67,4 @@ class UnblockTorrentCommand(BaseCommand):
                 
         finally:
             await self._end_command(update, context)
-        
-        return need_restart_wireguard
         
