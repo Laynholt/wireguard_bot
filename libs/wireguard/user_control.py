@@ -1,7 +1,7 @@
 import os
 import re
 import pwd
-from typing import List
+from typing import List, Literal
 import zipfile
 import ipaddress
 from enum import Enum
@@ -707,3 +707,291 @@ def sanitize_string(string: str) -> str:
         str: Очищенная строка без символов ',' и ';'.
     """
     return string.strip().translate(str.maketrans('', '', ",;"))
+
+
+def add_torrent_blocking(backup: bool=True) -> utils.FunctionResult:
+    """
+    Обновляет конфигурацию WireGuard, заменяя базовые правила на правила с блокировкой торрентов.
+    
+    Args:
+        backup (bool): Создать резервную копию перед изменением
+    
+    Returns:
+        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
+    """
+    
+    # Проверяем существование файла
+    if not os.path.exists(config.wireguard_config_filepath):
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Файл {config.wireguard_config_filepath} не найден!"
+        )
+    
+    # Создаем резервную копию
+    if backup:
+        backup_path = f"{config.wireguard_config_filepath}.backup"
+        try:
+            with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as src, \
+                 open(backup_path, 'w', encoding='utf-8') as dst:
+                dst.write(src.read())
+            print(f"✅ Резервная копия создана: {backup_path}")
+        except Exception as e:
+            return utils.FunctionResult(
+                status=False,
+                description=f"❌ Ошибка создания резервной копии: {e}"
+            )
+    
+    # Читаем конфигурацию
+    try:
+        with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Ошибка чтения файла: {e}"
+        )
+    
+    # Шаблоны для поиска существующих правил
+    old_postup_pattern = r'PostUp\s*=\s*iptables\s+-A\s+FORWARD\s+-i\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-A\s+FORWARD\s+-o\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-t\s+nat\s+-A\s+POSTROUTING\s+-o\s+eth\+\s+-j\s+MASQUERADE'
+    old_postdown_pattern = r'PostDown\s*=\s*iptables\s+-D\s+FORWARD\s+-i\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-D\s+FORWARD\s+-o\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-t\s+nat\s+-D\s+POSTROUTING\s+-o\s+eth\+\s+-j\s+MASQUERADE'
+    
+    # Новые правила для замены
+    new_rules = """# Основные правила WireGuard
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE
+# Блокировка торрентов для вашей сети 10.0.0.0/24
+PostUp = iptables -I FORWARD -s 10.0.0.0/24 -m string --string "BitTorrent protocol" --algo bm -j DROP
+PostUp = iptables -I FORWARD -s 10.0.0.0/24 -m string --string "announce" --algo bm -j DROP
+PostUp = iptables -I FORWARD -s 10.0.0.0/24 -p tcp --dport 6881:6999 -j DROP
+PostUp = iptables -I FORWARD -s 10.0.0.0/24 -p udp --dport 6881:6999 -j DROP
+# Очистка при остановке
+PostDown = iptables -D FORWARD -s 10.0.0.0/24 -m string --string "BitTorrent protocol" --algo bm -j DROP
+PostDown = iptables -D FORWARD -s 10.0.0.0/24 -m string --string "announce" --algo bm -j DROP
+PostDown = iptables -D FORWARD -s 10.0.0.0/24 -p tcp --dport 6881:6999 -j DROP
+PostDown = iptables -D FORWARD -s 10.0.0.0/24 -p udp --dport 6881:6999 -j DROP
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE"""
+    
+    # Ищем совпадения
+    postup_match = re.search(old_postup_pattern, content)
+    postdown_match = re.search(old_postdown_pattern, content)
+    
+    if not postup_match:
+        print("Ищем паттерн:", old_postup_pattern)
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Не найдены базовые правила PostUp для замены!"
+        )
+    
+    if not postdown_match:
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Не найдены базовые правила PostDown для замены!"
+        )
+    
+    print("✅ Найдены базовые правила для замены")
+    
+    # Определяем позицию для замены (от PostUp до PostDown включительно)
+    start_pos = postup_match.start()
+    end_pos = postdown_match.end()
+    
+    # Создаем новый контент
+    new_content = content[:start_pos] + new_rules + content[end_pos:]
+    
+    # Сохраняем изменения
+    try:
+        with open(config.wireguard_config_filepath, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        print(f"✅ Конфигурация успешно обновлена: {config.wireguard_config_filepath}")
+        return utils.FunctionResult(
+            status=True,
+            description=f"✅ Конфигурация успешно обновлена: {config.wireguard_config_filepath}"
+        )
+    except Exception as e:
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Ошибка записи файла: {e}"
+        )
+
+def restore_backup() -> utils.FunctionResult:
+    """
+    Восстанавливает конфигурацию из резервной копии.
+      
+    Returns:
+        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
+    """
+    backup_path = f"{config.wireguard_config_filepath}.backup"
+    
+    if not os.path.exists(backup_path):
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Резервная копия {backup_path} не найдена!"
+        )
+    
+    try:
+        with open(backup_path, 'r', encoding='utf-8') as src, \
+             open(config.wireguard_config_filepath, 'w', encoding='utf-8') as dst:
+            dst.write(src.read())
+        return utils.FunctionResult(
+            status=True,
+            description=f"✅ Конфигурация восстановлена из резервной копии"
+        )
+    except Exception as e:
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Ошибка восстановления: {e}"
+        )
+
+def remove_torrent_blocking(backup: bool=True) -> utils.FunctionResult:
+    """
+    Удаляет правила блокировки торрентов, возвращая к базовым правилам WireGuard.
+    
+    Args:
+        backup (bool): Создать резервную копию перед изменением
+    
+    Returns:
+        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
+    """
+    
+    # Проверяем существование файла
+    if not os.path.exists(config.wireguard_config_filepath):
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Файл {config.wireguard_config_filepath} не найден!"
+        )
+    
+    # Создаем резервную копию
+    if backup:
+        backup_path = f"{config.wireguard_config_filepath}.backup"
+        try:
+            with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as src, \
+                 open(backup_path, 'w', encoding='utf-8') as dst:
+                dst.write(src.read())
+            print(f"✅ Резервная копия создана: {backup_path}")
+        except Exception as e:
+            return utils.FunctionResult(
+                status=False,
+                description=f"❌ Ошибка создания резервной копии: {e}"
+            )
+    
+    # Читаем конфигурацию
+    try:
+        with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Ошибка чтения файла: {e}"
+        )
+    
+    # Шаблон для поиска расширенных правил (от комментария до PostDown)
+    extended_rules_pattern = r'# Основные правила WireGuard\s*\n.*?PostDown\s*=\s*iptables\s+-D\s+FORWARD\s+-i\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-D\s+FORWARD\s+-o\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-t\s+nat\s+-D\s+POSTROUTING\s+-o\s+eth\+\s+-j\s+MASQUERADE'
+    
+    # Базовые правила для замены
+    basic_rules = """PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE"""
+    
+    # Ищем расширенные правила
+    match = re.search(extended_rules_pattern, content, re.DOTALL)
+    
+    if not match:
+        return utils.FunctionResult(
+            status=False,
+            description=(
+                f"❌ Не найдены расширенные правила для удаления!\n"
+                "Возможно, в конфигурации уже базовые правила или другой формат."
+            )
+        )
+    
+    print("✅ Найдены расширенные правила для удаления")
+    
+    # Заменяем расширенные правила на базовые
+    new_content = content[:match.start()] + basic_rules + content[match.end():]
+    
+    # Сохраняем изменения
+    try:
+        with open(config.wireguard_config_filepath, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        return utils.FunctionResult(
+            status=True,
+            description=f"✅ Правила блокировки торрентов успешно удалены: {config.wireguard_config_filepath}"
+        )
+    except Exception as e:
+        print(f"❌ Ошибка записи файла: {e}")
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Ошибка записи файла: {e}"
+        )
+
+def get_current_rules() -> utils.FunctionResult:
+    """
+    Возвращает текущие правила PostUp/PostDown в конфигурации.
+    
+    Returns:
+        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
+    """
+    if not os.path.exists(config.wireguard_config_filepath):
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Файл {config.wireguard_config_filepath} не найден!"
+        )
+    
+    try:
+        with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Ищем все правила PostUp и PostDown
+        postup_rules = re.findall(r'PostUp\s*=\s*(.+)', content)
+        postdown_rules = re.findall(r'PostDown\s*=\s*(.+)', content)
+        
+        rules = []
+        rules.append("🔍 Текущие правила PostUp:")
+        for i, rule in enumerate(postup_rules, 1):
+            rules.append(f"  {i}. {rule}")
+        
+        rules.append("\n🔍 Текущие правила PostDown:")
+        for i, rule in enumerate(postdown_rules, 1):
+            rules.append(f"  {i}. {rule}")
+            
+        return utils.FunctionResult(
+            status=True,
+            description="\n".join(rules)
+        )
+            
+    except Exception as e:
+        print(f"❌ Ошибка чтения файла: {e}")
+        return utils.FunctionResult(
+            status=False,
+            description=f"❌ Ошибка чтения файла: {e}"
+        )
+
+def check_torrent_blocking_status() -> Literal['unknown'] | Literal['enabled'] | Literal['disabled']:
+    """
+    Проверяет, включена ли блокировка торрентов в конфигурации.
+    
+    Returns:
+        str: "enabled", "disabled", или "unknown"
+    """
+    if not os.path.exists(config.wireguard_config_filepath):
+        print(f"❌ Файл {config.wireguard_config_filepath} не найден!")
+        return "unknown"
+    
+    try:
+        with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Ищем признаки блокировки торрентов
+        torrent_blocking_patterns = [
+            r'BitTorrent protocol',
+            r'announce',
+            r'--dport 6881:6999',
+            r'# Блокировка торрентов'
+        ]
+        
+        for pattern in torrent_blocking_patterns:
+            if re.search(pattern, content):
+                return "enabled"
+        
+        return "disabled"
+        
+    except Exception as e:
+        print(f"❌ Ошибка чтения файла: {e}")
+        return "unknown"

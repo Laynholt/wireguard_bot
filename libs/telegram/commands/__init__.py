@@ -68,6 +68,7 @@ class BotCommand(str, Enum):
     RELOAD_WG_SERVER = ("reload_wg_server", "🔄 Перезагрузить сервер")
     
     TORRENT_STATE = ("get_torrent_state", "🧲 Статус блокировки торрентов")
+    TORRENT_RULES = ("get_torrent_rules", "📋 Показать текущие правила")
     TORRENT_BLOCK = ("block_torrent", "✋ Заблокировать торрент соединения")
     TORRENT_UNBLOCK = ("unblock_torrent", "🕊️ Разблокировать торрент соединения")
 
@@ -161,6 +162,11 @@ class BotCommandHandler:
         from .get_stats_all     import GetAllWireguardUsersStatsCommand
 
         from .reload_wg         import ReloadWireguardServerCommand
+
+        from .get_torrent_state import GetTorrentStateCommand
+        from .get_torrent_rules import GetTorrentRulesCommand
+        from .block_torrent     import BlockTorrentCommand
+        from .unblock_torrent   import UnblockTorrentCommand
 
         from .unknown           import UnknownCommand
         
@@ -296,5 +302,19 @@ class BotCommandHandler:
         
         # Команда перезапуска сервера WireGuard
         self.__command_wrapper[BotCommand.RELOAD_WG_SERVER] = ReloadWireguardServerCommand(
+            database
+        )
+        
+        # Команды, связанные с торрент трафиком
+        self.__command_wrapper[BotCommand.TORRENT_STATE] = GetTorrentStateCommand(
+            database
+        )
+        self.__command_wrapper[BotCommand.TORRENT_RULES] = GetTorrentRulesCommand(
+            database
+        )
+        self.__command_wrapper[BotCommand.TORRENT_BLOCK] = BlockTorrentCommand(
+            database
+        )
+        self.__command_wrapper[BotCommand.TORRENT_UNBLOCK] = UnblockTorrentCommand(
             database
         )

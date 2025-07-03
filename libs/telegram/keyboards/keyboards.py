@@ -108,6 +108,7 @@ TORRENT_COMMANDS_KEYBOARD = Keyboard(
     reply_keyboard=ReplyKeyboardMarkup(
         (
             (BotCommand.TORRENT_STATE.pretty_text,),
+            (BotCommand.TORRENT_RULES.pretty_text,),
             (BotCommand.TORRENT_BLOCK.pretty_text,),
             (BotCommand.TORRENT_UNBLOCK.pretty_text,),
             (keys.ButtonText.TURN_BACK.value.text,)

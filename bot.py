@@ -384,6 +384,46 @@ async def reload_wireguard_server_command(update: Update, context: CallbackConte
         BotCommand.RELOAD_WG_SERVER
     ).execute(update, context)
 
+
+@wrappers.admin_required
+async def get_torrent_state_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды получения статуса блокировки торрентов.
+    """
+    await bot_command_handler.command(
+        BotCommand.TORRENT_STATE
+    ).execute(update, context)
+
+
+@wrappers.admin_required
+async def get_torrent_rules_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды получения правил обработки пакетов Wireguard.
+    """
+    await bot_command_handler.command(
+        BotCommand.TORRENT_RULES
+    ).execute(update, context)
+
+
+@wrappers.admin_required
+async def block_torrent_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды блокировки торрент трафика.
+    """
+    await bot_command_handler.command(
+        BotCommand.TORRENT_BLOCK
+    ).execute(update, context)
+
+
+@wrappers.admin_required
+async def unblock_torrent_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды разблокировки торрент трафика.
+    """
+    await bot_command_handler.command(
+        BotCommand.TORRENT_UNBLOCK
+    ).execute(update, context)
+
 # ---------------------- Обработка входящих сообщений ----------------------
 
 async def handle_update(update: Update, context: CallbackContext, delete_msg: bool = False) -> None:
@@ -749,6 +789,11 @@ def main() -> None:
         BotCommand.GET_ALL_STATS.pretty_text: get_all_stats_command,
 
         BotCommand.RELOAD_WG_SERVER.pretty_text: reload_wireguard_server_command,
+        
+        BotCommand.TORRENT_STATE.pretty_text: get_torrent_state_command,
+        BotCommand.TORRENT_RULES.pretty_text: get_torrent_rules_command,
+        BotCommand.TORRENT_BLOCK.pretty_text: block_torrent_command,
+        BotCommand.TORRENT_UNBLOCK.pretty_text: unblock_torrent_command,
     }
 
     # Обработка сообщений
