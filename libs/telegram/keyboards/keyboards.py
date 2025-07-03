@@ -110,6 +110,7 @@ GENERAL_COMMANDS_KEYBOARD = Keyboard(
             (BotCommand.HELP.pretty_text,),
             (BotCommand.SEND_MESSAGE.pretty_text,),
             (BotCommand.RELOAD_WG_SERVER.pretty_text,),
+            ("🧲 Информация о Торренте",),
             (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
@@ -117,6 +118,23 @@ GENERAL_COMMANDS_KEYBOARD = Keyboard(
     ),
     is_menu=True
 )
+
+# Подменю "Торрент команды"
+TORRENT_COMMANDS_KEYBOARD = Keyboard(
+    title="🧲 Информация о Торренте",
+    reply_keyboard=ReplyKeyboardMarkup(
+        (
+            (BotCommand.TORRENT_STATE.pretty_text,),
+            (BotCommand.TORRENT_BLOCK.pretty_text,),
+            (BotCommand.TORRENT_UNBLOCK.pretty_text,),
+            (keys.ButtonText.TURN_BACK.value.text,)
+        ),
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    ),
+    is_menu=True
+)
+TORRENT_COMMANDS_KEYBOARD.add_parent(GENERAL_COMMANDS_KEYBOARD)
 
 
 # Подменю "Конфигурационные файлы WireGuard" для пользователей
