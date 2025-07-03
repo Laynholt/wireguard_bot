@@ -1,3 +1,4 @@
+from encodings.punycode import T
 from typing import Dict, Final
 from .keys import *
 from .keyboards import *
@@ -71,6 +72,7 @@ KEYBOARD_MANAGER.add_to_admin_keyboard(WIREGUARD_STATS_KEYBOARD)
 KEYBOARD_MANAGER.add_to_admin_keyboard(TELEGRAM_ACTIONS_KEYBOARD)
 KEYBOARD_MANAGER.add_to_admin_keyboard(TELEGRAM_INFO_KEYBOARD)
 KEYBOARD_MANAGER.add_to_admin_keyboard(GENERAL_COMMANDS_KEYBOARD)
+KEYBOARD_MANAGER.add_to_admin_keyboard(TORRENT_COMMANDS_KEYBOARD)
 
 KEYBOARD_MANAGER.add_to_user_keyboard(USER_WIREGUARD_CONFIG_KEYBOARD)
 KEYBOARD_MANAGER.add_to_user_keyboard(USER_GENERAL_COMMANDS_KEYBOARD)
