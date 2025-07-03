@@ -963,7 +963,7 @@ def get_current_rules() -> utils.FunctionResult:
             description=f"❌ Ошибка чтения файла: {e}"
         )
 
-def check_torrent_blocking_status() -> Literal['unknown'] | Literal['enabled'] | Literal['disabled']:
+def check_torrent_blocking_status() -> Literal['unknown', 'enabled', 'disabled']:
     """
     Проверяет, включена ли блокировка торрентов в конфигурации.
     
