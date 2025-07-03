@@ -756,18 +756,18 @@ def add_torrent_blocking(backup: bool=True) -> utils.FunctionResult:
     old_postdown_pattern = r'PostDown\s*=\s*iptables\s+-D\s+FORWARD\s+-i\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-D\s+FORWARD\s+-o\s+%i\s+-j\s+ACCEPT;\s*iptables\s+-t\s+nat\s+-D\s+POSTROUTING\s+-o\s+eth\+\s+-j\s+MASQUERADE'
     
     # Новые правила для замены
-    new_rules = """# Основные правила WireGuard
+    new_rules = f"""# Основные правила WireGuard
 PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth+ -j MASQUERADE
-# Блокировка торрентов для вашей сети 10.0.0.0/24
-PostUp = iptables -I FORWARD -s 10.0.0.0/24 -m string --string "BitTorrent protocol" --algo bm -j DROP
-PostUp = iptables -I FORWARD -s 10.0.0.0/24 -m string --string "announce" --algo bm -j DROP
-PostUp = iptables -I FORWARD -s 10.0.0.0/24 -p tcp --dport 6881:6999 -j DROP
-PostUp = iptables -I FORWARD -s 10.0.0.0/24 -p udp --dport 6881:6999 -j DROP
+# Блокировка торрентов для вашей сети {config.local_ip}0/24
+PostUp = iptables -I FORWARD -s {config.local_ip}0/24 -m string --string "BitTorrent protocol" --algo bm -j DROP
+PostUp = iptables -I FORWARD -s {config.local_ip}0/24 -m string --string "announce" --algo bm -j DROP
+PostUp = iptables -I FORWARD -s {config.local_ip}0/24 -p tcp --dport 6881:6999 -j DROP
+PostUp = iptables -I FORWARD -s {config.local_ip}0/24 -p udp --dport 6881:6999 -j DROP
 # Очистка при остановке
-PostDown = iptables -D FORWARD -s 10.0.0.0/24 -m string --string "BitTorrent protocol" --algo bm -j DROP
-PostDown = iptables -D FORWARD -s 10.0.0.0/24 -m string --string "announce" --algo bm -j DROP
-PostDown = iptables -D FORWARD -s 10.0.0.0/24 -p tcp --dport 6881:6999 -j DROP
-PostDown = iptables -D FORWARD -s 10.0.0.0/24 -p udp --dport 6881:6999 -j DROP
+PostDown = iptables -D FORWARD -s {config.local_ip}0/24 -m string --string "BitTorrent protocol" --algo bm -j DROP
+PostDown = iptables -D FORWARD -s {config.local_ip}0/24 -m string --string "announce" --algo bm -j DROP
+PostDown = iptables -D FORWARD -s {config.local_ip}0/24 -p tcp --dport 6881:6999 -j DROP
+PostDown = iptables -D FORWARD -s {config.local_ip}0/24 -p udp --dport 6881:6999 -j DROP
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth+ -j MASQUERADE"""
     
     # Ищем совпадения
@@ -803,7 +803,7 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
         print(f"✅ Конфигурация успешно обновлена: {config.wireguard_config_filepath}")
         return utils.FunctionResult(
             status=True,
-            description=f"✅ Конфигурация успешно обновлена: {config.wireguard_config_filepath}"
+            description=f"✅ Конфигурация успешно обновлена."
         )
     except Exception as e:
         return utils.FunctionResult(
@@ -912,7 +912,7 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
             f.write(new_content)
         return utils.FunctionResult(
             status=True,
-            description=f"✅ Правила блокировки торрентов успешно удалены: {config.wireguard_config_filepath}"
+            description=f"✅ Правила блокировки торрентов успешно удалены."
         )
     except Exception as e:
         print(f"❌ Ошибка записи файла: {e}")
@@ -921,17 +921,22 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
             description=f"❌ Ошибка записи файла: {e}"
         )
 
-def get_current_rules() -> utils.FunctionResult:
+def get_current_rules(html_formatting: bool = False) -> utils.FunctionResult:
     """
     Возвращает текущие правила PostUp/PostDown в конфигурации.
+    
+    Args:
+        html_formatting (bool): Если True, возвращает результат в HTML формате
+                               для отправки в Telegram.
     
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
     """
     if not os.path.exists(config.wireguard_config_filepath):
+        error_msg = f"Файл {config.wireguard_config_filepath} не найден!"
         return utils.FunctionResult(
             status=False,
-            description=f"❌ Файл {config.wireguard_config_filepath} не найден!"
+            description=_format_error(error_msg, html_formatting)
         )
     
     try:
@@ -942,26 +947,170 @@ def get_current_rules() -> utils.FunctionResult:
         postup_rules = re.findall(r'PostUp\s*=\s*(.+)', content)
         postdown_rules = re.findall(r'PostDown\s*=\s*(.+)', content)
         
-        rules = []
-        rules.append("🔍 Текущие правила PostUp:")
-        for i, rule in enumerate(postup_rules, 1):
-            rules.append(f"  {i}. {rule}")
-        
-        rules.append("\n🔍 Текущие правила PostDown:")
-        for i, rule in enumerate(postdown_rules, 1):
-            rules.append(f"  {i}. {rule}")
+        if html_formatting:
+            formatted_output = _format_rules_html(postup_rules, postdown_rules)
+        else:
+            formatted_output = _format_rules_text(postup_rules, postdown_rules)
             
         return utils.FunctionResult(
             status=True,
-            description="\n".join(rules)
+            description=formatted_output
         )
             
     except Exception as e:
-        print(f"❌ Ошибка чтения файла: {e}")
+        error_msg = f"Ошибка чтения файла: {e}"
         return utils.FunctionResult(
             status=False,
-            description=f"❌ Ошибка чтения файла: {e}"
+            description=_format_error(error_msg, html_formatting)
         )
+
+
+def _format_rules_text(postup_rules: List[str], postdown_rules: List[str]) -> str:
+    """Форматирует правила в текстовом формате."""
+    rules = []
+    
+    rules.append("🔍 Текущие правила PostUp:")
+    if postup_rules:
+        for i, rule in enumerate(postup_rules, 1):
+            rules.append(f"  {i}. {rule}")
+    else:
+        rules.append("  📭 Правила PostUp отсутствуют")
+    
+    rules.append("\n🔍 Текущие правила PostDown:")
+    if postdown_rules:
+        for i, rule in enumerate(postdown_rules, 1):
+            rules.append(f"  {i}. {rule}")
+    else:
+        rules.append("  📭 Правила PostDown отсутствуют")
+    
+    # Добавляем статистику
+    rules.append(f"\n📊 Всего правил: {len(postup_rules) + len(postdown_rules)}")
+    
+    return "\n".join(rules)
+
+
+def _format_rules_html(postup_rules: List[str], postdown_rules: List[str]) -> str:
+    """Форматирует правила в HTML формате для Telegram."""
+    
+    lines = []
+    
+    # Заголовок
+    lines.append("<b>🔧 WireGuard Configuration Rules</b>\n")
+    
+    # PostUp правила
+    lines.append("<b>🚀 PostUp Rules:</b>")
+    if postup_rules:
+        for i, rule in enumerate(postup_rules, 1):
+            formatted_rule = _format_rule_for_telegram(rule)
+            lines.append(f"  <b>{i}.</b> {formatted_rule}")
+    else:
+        lines.append("  <i>📭 Правила PostUp отсутствуют</i>")
+    
+    lines.append("")  # Пустая строка
+    
+    # PostDown правила
+    lines.append("<b>🛑 PostDown Rules:</b>")
+    if postdown_rules:
+        for i, rule in enumerate(postdown_rules, 1):
+            formatted_rule = _format_rule_for_telegram(rule)
+            lines.append(f"  <b>{i}.</b> {formatted_rule}")
+    else:
+        lines.append("  <i>📭 Правила PostDown отсутствуют</i>")
+    
+    lines.append("")  # Пустая строка
+    
+    # Статистика
+    total_rules = len(postup_rules) + len(postdown_rules)
+    lines.append(f"<b>📊 Всего правил:</b> <u>{total_rules}</u>")
+    
+    return "\n".join(lines)
+
+
+def _format_error(error_msg: str, html_formatting: bool) -> str:
+    """Форматирует сообщение об ошибке."""
+    if html_formatting:
+        return f"<b>❌ Ошибка:</b> <i>{_escape_html(error_msg)}</i>"
+    else:
+        return f"❌ {error_msg}"
+
+
+def _format_rule_for_telegram(rule: str) -> str:
+    """Форматирует длинное правило для красивого отображения в Telegram."""
+    
+    # Экранируем HTML символы
+    escaped_rule = _escape_html(rule)
+    
+    # Если правило короткое (до 60 символов), оставляем как есть
+    if len(rule) <= 60:
+        return f"<code>{escaped_rule}</code>"
+    
+    # Разбиваем длинное правило на части по точкам с запятой
+    parts = escaped_rule.split(';')
+    
+    if len(parts) == 1:
+        # Если нет точек с запятой, разбиваем по логическим частям
+        return _format_single_long_rule(escaped_rule)
+    
+    # Форматируем каждую часть на отдельной строке
+    formatted_parts = []
+    for i, part in enumerate(parts):
+        part = part.strip()
+        if part:
+            if i == 0:
+                # Первая часть
+                formatted_parts.append(f"<code>{part}</code>")
+            else:
+                # Остальные части с отступом
+                formatted_parts.append(f"    <code>{part}</code>")
+    
+    return ";\n".join(formatted_parts)
+
+
+def _format_single_long_rule(rule: str) -> str:
+    """Форматирует одиночное длинное правило без точек с запятой."""
+    
+    # Ищем ключевые параметры для переноса
+    keywords = [
+        '-A ', '-I ', '-D ', '-s ', '-d ', '-p ',
+        '--dport ', '--sport ', '--string ', '-m ', '-j ', '-t '
+    ]
+    
+    # Если правило содержит несколько ключевых параметров, разбиваем его
+    parts = []
+    current_part = ""
+    words = rule.split()
+    
+    for word in words:
+        if current_part and any(word.startswith(kw.strip()) for kw in keywords) and len(current_part) > 30:
+            parts.append(current_part.strip())
+            current_part = word
+        else:
+            current_part += " " + word if current_part else word
+    
+    if current_part:
+        parts.append(current_part.strip())
+    
+    if len(parts) <= 1:
+        # Если не удалось разбить, просто оборачиваем в code
+        return f"<code>{rule}</code>"
+    
+    # Форматируем части
+    formatted_parts = []
+    for i, part in enumerate(parts):
+        if i == 0:
+            formatted_parts.append(f"<code>{part}</code>")
+        else:
+            formatted_parts.append(f"    <code>{part}</code>")
+    
+    return " \\\n".join(formatted_parts)
+
+
+def _escape_html(text: str) -> str:
+    """Экранирует HTML символы для Telegram."""
+    return (text.replace('&', '&amp;')
+               .replace('<', '&lt;')
+               .replace('>', '&gt;'))
+    
 
 def check_torrent_blocking_status() -> Literal['unknown', 'enabled', 'disabled']:
     """

@@ -32,7 +32,8 @@ class GetTorrentRulesCommand(BaseCommand):
         try:
             if update.message is not None:
                 await update.message.reply_text(
-                    wireguard.get_current_rules().description
+                    wireguard.get_current_rules(html_formatting=True).description,
+                    parse_mode="HTML"
                 )
                 
         finally:

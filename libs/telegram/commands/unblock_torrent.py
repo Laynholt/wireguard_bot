@@ -47,8 +47,9 @@ class UnblockTorrentCommand(BaseCommand):
                         await update.message.reply_text(
                             (
                                 '📋 Обновленные правила:'
-                                f'\n{wireguard.get_current_rules().description}'
-                            )
+                                f'\n{wireguard.get_current_rules(html_formatting=True).description}'
+                            ),
+                            parse_mode="HTML"
                         )
                     
             elif status == "disabled":
