@@ -1,3 +1,4 @@
+from collections import deque
 from typing import List, Optional, Union
 from dataclasses import dataclass, field
 from telegram import ReplyKeyboardMarkup
@@ -68,13 +69,17 @@ class Keyboard:
         Returns:
             Optional[Keyboard]: Найденный объект или None, если потомок с таким id отсутствует.
         """
-        stack = list(self.children)  # Начинаем с прямых детей
-        while stack:
-            child = stack.pop()  # Извлекаем последний элемент (DFS)
+        if not self.children:
+            return None
+        
+        queue = deque(self.children)  # Начинаем с прямых детей
+        while queue:
+            child = queue.popleft()  # Извлекаем последний элемент (DFS)
             if child.id == child_id:
                 return child
-            # Добавляем потомков текущего ребенка в стек
-            stack.extend(child.children)
+            if child.children:
+                # Добавляем потомков текущего ребенка в стек
+                queue.extend(child.children)
         return None
 
     

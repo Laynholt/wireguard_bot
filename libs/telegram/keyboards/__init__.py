@@ -55,7 +55,14 @@ class KeyboardManager:
         Returns:
             Optional[Keyboard]: Найденный объект Keyboard или None, если индекс некорректный.
         """
-        return self.__manager.get(index)
+        if index in self.__manager:
+            return self.__manager.get(index)
+        
+        keyboard = self.__admin_keyboard.get_descendant_by_id(index)
+        if keyboard is not None:
+            return keyboard
+        
+        return self.__user_keyboard.get_descendant_by_id(index)
         
     def get_admin_main_keyboard(self) -> Keyboard:
         return self.__admin_keyboard
@@ -72,7 +79,6 @@ KEYBOARD_MANAGER.add_to_admin_keyboard(WIREGUARD_STATS_KEYBOARD)
 KEYBOARD_MANAGER.add_to_admin_keyboard(TELEGRAM_ACTIONS_KEYBOARD)
 KEYBOARD_MANAGER.add_to_admin_keyboard(TELEGRAM_INFO_KEYBOARD)
 KEYBOARD_MANAGER.add_to_admin_keyboard(GENERAL_COMMANDS_KEYBOARD)
-KEYBOARD_MANAGER.add_to_admin_keyboard(TORRENT_COMMANDS_KEYBOARD)
 
 KEYBOARD_MANAGER.add_to_user_keyboard(USER_WIREGUARD_CONFIG_KEYBOARD)
 KEYBOARD_MANAGER.add_to_user_keyboard(USER_GENERAL_COMMANDS_KEYBOARD)
