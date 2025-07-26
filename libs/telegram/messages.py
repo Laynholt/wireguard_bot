@@ -68,7 +68,7 @@ ADMIN_HELP = (
     "<b>🔹 Управление торрент трафиком: 🔹</b>\n"
     f"🧲 <b>/{BotCommand.TORRENT_STATE}</b> — показать статус блокировки торрентов\n"
     f"📋 <b>/{BotCommand.TORRENT_RULES}</b> — показать текущие правила\n"
-    f"✋ <b>/{BotCommand.TORRENT_BLOCK}</b> — заблокировать торрент соединения\n\n"
+    f"✋ <b>/{BotCommand.TORRENT_BLOCK}</b> — заблокировать торрент соединения\n"
     f"🕊️ <b>/{BotCommand.TORRENT_UNBLOCK}</b> — разблокировать торрент соединения\n\n"
     
     "<b>🔹 Дополнительные команды: 🔹</b>\n"
