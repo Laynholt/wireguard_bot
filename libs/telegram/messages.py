@@ -33,7 +33,8 @@ ADMIN_HELP = (
     f"🚫 <b>/{BotCommand.CANCEL}</b> — отменить текущую операцию\n\n"
 
     "<b>🔹 Информация, связанная с Telegram: 🔹</b>\n"
-    f"🆔 <b>/{BotCommand.GET_TELEGRAM_ID}</b> — узнать ваш Telegram ID\n"
+    f"🆔 <b>/{BotCommand.GET_TELEGRAM_ID}</b> — узнать Telegram ID\n"
+    f"🔍 <b>/{BotCommand.GET_TELEGRAM_USERNAME}</b> — получить имя пользователя Telegram по Telegram ID\n"
     f"👥 <b>/{BotCommand.GET_TELEGRAM_USERS}</b> — получить список всех пользователей бота\n\n"
 
     "<b>🔹 Управление пользователями WireGuard: 🔹</b>\n"
@@ -63,6 +64,12 @@ ADMIN_HELP = (
     f"📊 <b>/{BotCommand.GET_MY_STATS}</b> — показать статистику по вашим конфигам WireGuard\n"
     f"📊 <b>/{BotCommand.GET_USER_STATS}</b> — показать статистику по конфигам WireGuard пользователя\n"
     f"📊 <b>/{BotCommand.GET_ALL_STATS}</b> — показать статистику по всем конфигурациям\n\n"
+    
+    "<b>🔹 Управление торрент трафиком: 🔹</b>\n"
+    f"🧲 <b>/{BotCommand.TORRENT_STATE}</b> — показать статус блокировки торрентов\n"
+    f"📋 <b>/{BotCommand.TORRENT_RULES}</b> — показать текущие правила\n"
+    f"✋ <b>/{BotCommand.TORRENT_BLOCK}</b> — заблокировать торрент соединения\n\n"
+    f"🕊️ <b>/{BotCommand.TORRENT_UNBLOCK}</b> — разблокировать торрент соединения\n\n"
     
     "<b>🔹 Дополнительные команды: 🔹</b>\n"
     f"🔄 <b>/{BotCommand.RELOAD_WG_SERVER}</b> — перезагрузить WireGuard сервер"
