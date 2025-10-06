@@ -1,3 +1,4 @@
+from curses.ascii import isdigit
 from typing import final
 from .base import *
 from libs.telegram import messages
@@ -113,9 +114,16 @@ class GetWireguardUserStatsCommand(BaseCommand):
             else:                
                 entries = update.message.text.split() if update.message.text is not None else []
                 for entry in entries:
-                    await self._create_list_of_wireguard_users(
-                        update, context, sanitize_string(entry)
-                    )
+                    if entry.isdigit():
+                        await self._create_list_of_wireguard_users_by_telegram_id(
+                            update,
+                            context,
+                            int(entry)
+                        )
+                    else:
+                        await self._create_list_of_wireguard_users(
+                            update, context, sanitize_string(entry)
+                        )
 
             await self.__get_user_stats(update, context)
         finally:

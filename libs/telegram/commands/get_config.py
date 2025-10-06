@@ -1,3 +1,4 @@
+from curses.ascii import isdigit
 from .base import *
 from libs.telegram import messages
 
@@ -105,7 +106,14 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             else:
                 entries = update.message.text.split() if update.message.text is not None else []
                 for entry in entries:
-                    await self.__get_user_configuration(update, sanitize_string(entry))
+                    if entry.isdigit():
+                        await self.__get_configuration(
+                            update, context, int(entry)
+                        )
+                    else:
+                        await self.__get_user_configuration(
+                            update, sanitize_string(entry)
+                        )
         finally:
             await self._end_command(update, context)
 

@@ -314,7 +314,8 @@ def __merge_results(
 def accumulate_wireguard_stats(
     conf_file_path: str,
     json_file_path: str,
-    sort_by: SortBy = SortBy.TRANSFER_SENT
+    sort_by: SortBy = SortBy.TRANSFER_SENT,
+    reverse_sort: bool = True
 ) -> Dict[str, WgPeerData]:
     """
     1. Считывает старые результаты из json_file_path (если есть).
@@ -328,6 +329,7 @@ def accumulate_wireguard_stats(
         conf_file_path (str): Путь к файлу wg0.conf.
         json_file_path (str): Путь к JSON-файлу, куда сохраняем накопленные результаты.
         sort_by (Optional[str]): "allowed_ips" или "transfer_sent".
+        reverse_sort (Optional[bool]): Сортировка по возрастанию (False) или убыванию (True).
     
     Returns:
         Возвращает объединенный словарь данных.
@@ -360,13 +362,14 @@ def accumulate_wireguard_stats(
     # 5. Суммируем и сортируем
     merged = __sort_merged_data(
         __merge_results(old_data, new_data),
-        sort_by=sort_by
+        sort_by=sort_by,
+        reverse_sort=reverse_sort
     )
     
     return merged
 
 
-def __sort_merged_data(merged_data: Dict[str, WgPeerData], sort_by: SortBy) -> Dict[str, WgPeerData]:
+def __sort_merged_data(merged_data: Dict[str, WgPeerData], sort_by: SortBy, reverse_sort: bool) -> Dict[str, WgPeerData]:
     """
     Сортирует словарь {username: WgPeerData} по одному из критериев:
       - "allowed_ips" (в порядке возрастания IP)
@@ -380,14 +383,15 @@ def __sort_merged_data(merged_data: Dict[str, WgPeerData], sort_by: SortBy) -> D
             merged_data.keys(),
             key=lambda k: ipaddress.ip_network(
                 merged_data[k].allowed_ips.split("/")[0]
-            ) if merged_data[k].allowed_ips else ipaddress.ip_network("0.0.0.0/32")
+            ) if merged_data[k].allowed_ips else ipaddress.ip_network("0.0.0.0/32"),
+            reverse=reverse_sort
         )
     elif sort_by == SortBy.TRANSFER_SENT:
         # Сортируем по объёму переданных данных (по убыванию)
         sorted_keys = sorted(
             merged_data.keys(),
             key=lambda k: __convert_transfer_to_bytes(merged_data[k].transfer_sent or "0 B"),
-            reverse=True
+            reverse=reverse_sort
         )
     else:
         # Если критерий не распознан, не сортируем

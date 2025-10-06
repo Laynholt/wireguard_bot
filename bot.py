@@ -364,6 +364,7 @@ async def get_user_stats_command(update: Update, context: CallbackContext) -> No
 
 
 @wrappers.admin_required
+@wrappers.command_lock
 async def get_all_stats_command(update: Update, context: CallbackContext) -> None:
     """
     Команда для администраторов.
@@ -372,7 +373,7 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
     """
     await bot_command_handler.command(
         BotCommand.GET_ALL_STATS
-    ).execute(update, context)
+    ).request_input(update, context)
 
 
 @wrappers.admin_required
