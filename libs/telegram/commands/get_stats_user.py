@@ -244,6 +244,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
                 f"   📡 IP: {user_data.allowed_ips}\n"
                 f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
                 f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
+                f"   ⏱️ Последнее рукопожатие: {user_data.latest_handshake if user_data.latest_handshake else 'N/A'}\n"
                 f"   ━━━━━━━━━━━━━━━━"
             )
 
