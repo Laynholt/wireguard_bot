@@ -104,22 +104,68 @@ def __strip_bad_symbols(username: str) -> str:
     """
     return re.sub(f'[^{config.allowed_username_pattern}]', '', username)
 
-
 def __get_dsn_server_ip() -> str:
-    if config.is_dns_server_in_docker:
-        ret_val = utils.run_command(
-            "docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' " + config.dns_server_name
-        )
-        if not ret_val.status:
-            ret_val.return_with_print()
-            return f'{config.local_ip}1'
-        return ret_val.description.strip()
+    """
+    Возвращает строку с IP-адресом(ами) DNS-сервера на основе настроек конфигурации.
 
-    try:
-        ipaddress.ip_address(config.dns_server_name)
-        return config.dns_server_name
-    except ValueError:
-        return f'{config.local_ip}1'
+    Args:
+        Нет аргументов, используется глобальный объект config.
+
+    Returns:
+        str: Один IP или список IP-адресов, разделённых запятой.
+    """
+    dns_raw: str = config.dns_server_name.strip()
+
+    # Поддержка нескольких IP/значений через пробел или запятую:
+    # пример: "1.1.1.1, 8.8.8.8" или "1.1.1.1 8.8.8.8"
+    dns_tokens: List[str] = [t for t in re.split(r"[,\s]+", dns_raw) if t]
+
+    def _get_valid_ips(tokens: List[str]) -> List[str]:
+        """
+        Возвращает список всех валидных IP-адресов из списка строк.
+        """
+        valid_ips: List[str] = []
+        for token in tokens:
+            try:
+                ipaddress.ip_address(token)
+            except ValueError:
+                continue
+            else:
+                valid_ips.append(token)
+        return valid_ips
+
+    # 1. DNS-сервер НЕ в Docker
+    if not config.is_dns_server_in_docker:
+        # Пользователь мог указать один или несколько IP
+        valid_ips = _get_valid_ips(dns_tokens)
+        if valid_ips:
+            # Вернём все валидные IP через запятую
+            return ", ".join(valid_ips)
+
+        # Не IP и не список IP → используем локальный адрес по умолчанию
+        return f"{config.local_ip}1"
+
+    # 2. DNS-сервер в Docker
+    # Даже в этом режиме пользователь мог прямо указать один или несколько IP —
+    # тогда не дергаем docker inspect.
+    valid_ips = _get_valid_ips(dns_tokens)
+    if valid_ips:
+        return ", ".join(valid_ips)
+
+    # Иначе считаем, что это имя контейнера (берём первый токен как имя)
+    dns_container_name: str = dns_tokens[0] if dns_tokens else dns_raw
+
+    ret_val = utils.run_command(
+        "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "
+        + dns_container_name
+    )
+
+    if not ret_val.status:
+        ret_val.return_with_print()
+        return f"{config.local_ip}1"
+
+    # docker inspect вернёт один IP
+    return ret_val.description.strip()
 
 
 def add_user(user_name: str) -> utils.FunctionResult:
