@@ -56,19 +56,20 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(
         """
-Вот ультра-короткая шпаргалка:<br><br>
-<b>Формат:</b> <code>sort=&lt;a|d&gt; metric=&lt;t|d|w|m&gt; head=&lt;N&gt; tail=&lt;M&gt; sum=&lt;1|0&gt;</code><br>
-• <b>sort</b>: <code>a/asc/воз/1</code> → ↑, <code>d/desc/убыв/2</code> → ↓ (по умолчанию ↓)<br>
-• <b>metric</b>: <code>t=total</code> (default), <code>d=day</code>, <code>w=week</code>, <code>m=month</code><br>
-• <b>head=N</b> — первые N, <b>tail=M</b> — последние M (N,M ≥ 0)<br>
-• <b>sum=1</b> — показать сводку (сутки/неделя/месяц/всё)<br>
-• Параметры в любом порядке, можно пропускать<br>
-• <code>head=0 tail=0</code> → список пуст (только sum, если включён)<br>
-• Если <code>head+tail >= len</code> → выводятся все<br>
-• Неверные <code>head/tail</code> → считаются 0<br><br>
-<b>Примеры:</b> <code>sort=asc head=5</code> • <code>tail=4</code> • <code>head=3 tail=2</code> • <code>head=0 tail=0 sum=1</code>
+Вот ультра-короткая шпаргалка:
+Формат: sort=<a|d> metric=<t|d|w|m> head=<N> tail=<M> sum=<1|0>
+• sort: a/asc/воз/1 → ↑, d/desc/убыв/2 → ↓ (по умолчанию ↓)
+• metric: t=total (default), d=day, w=week, m=month
+• head=N — первые N, tail=M — последние M (N,M ≥ 0)
+• sum=1 — показать сводку (сутки/неделя/месяц/всё)
+• Параметры в любом порядке, можно пропускать
+• head=0 tail=0 → список пуст (только sum, если включён)
+• Если head+tail >= len → выводятся все
+• Неверные head/tail → считаются 0
+
+Примеры: sort=asc head=5 • tail=4 • head=3 tail=2 • head=0 tail=0 sum=1
         """
-        , parse_mode="HTML")
+        )
         if context.user_data is not None: 
             context.user_data[ContextDataKeys.COMMAND] = self.command_name
         
