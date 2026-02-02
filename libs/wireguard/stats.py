@@ -354,10 +354,62 @@ def __period_keys(now: datetime) -> Tuple[str, str, str]:
     return date_key, week_key, month_key
 
 
+# Ретеншн периодов для избежания разрастания JSON в БД
+DAILY_RETENTION_DAYS = 90
+WEEKLY_RETENTION_WEEKS = 52
+MONTHLY_RETENTION_MONTHS = None  # без ограничения
+
+
+def __prune_periods(periods: PeriodizedTraffic, now: datetime) -> None:
+    """Удаляет устаревшие записи из daily/weekly/monthly."""
+    # daily: older than N days
+    if DAILY_RETENTION_DAYS is not None and periods.daily:
+        cutoff_date = (now.date() - timedelta(days=DAILY_RETENTION_DAYS)).strftime("%Y-%m-%d")
+        periods.daily = {
+            k: v for k, v in periods.daily.items()
+            if k >= cutoff_date
+        }
+
+    # weekly: older than N ISO weeks
+    if WEEKLY_RETENTION_WEEKS is not None and periods.weekly:
+        iso_year, iso_week, _ = now.isocalendar()
+        cutoff_number = iso_year * 100 + iso_week - WEEKLY_RETENTION_WEEKS
+
+        def _week_number(key: str) -> int:
+            try:
+                year_str, week_str = key.split("-W")
+                return int(year_str) * 100 + int(week_str)
+            except Exception:
+                return 0
+
+        periods.weekly = {
+            k: v for k, v in periods.weekly.items()
+            if _week_number(k) >= cutoff_number
+        }
+
+    # monthly: optionally limit by count
+    if MONTHLY_RETENTION_MONTHS is not None and periods.monthly:
+        now_month = now.year * 100 + now.month
+        cutoff_month = now_month - MONTHLY_RETENTION_MONTHS
+
+        def _month_number(key: str) -> int:
+            try:
+                year_str, month_str = key.split("-")
+                return int(year_str) * 100 + int(month_str)
+            except Exception:
+                return 0
+
+        periods.monthly = {
+            k: v for k, v in periods.monthly.items()
+            if _month_number(k) >= cutoff_month
+        }
+
+
 def __update_period_stats(periods: PeriodizedTraffic, delta_received: int, delta_sent: int, now: datetime) -> None:
     """
     Добавляет приращение трафика в текущие сутки/неделю/месяц.
     """
+    __prune_periods(periods, now)
     date_key, week_key, month_key = __period_keys(now)
     for bucket, key in (
         (periods.daily, date_key),
