@@ -31,6 +31,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         )
         head: int = 0
         tail: int = 0
+        show_totals: bool = False
 
 
     def __init__(
@@ -172,6 +173,34 @@ sort=<тип> metric=<период> head=<N> tail=<M>
                 head=parsed_keys.head,
                 tail=parsed_keys.tail
             )
+
+            if parsed_keys.show_totals:
+                total_day_sent = total_day_recv = 0
+                total_week_sent = total_week_recv = 0
+                total_month_sent = total_month_recv = 0
+                total_sent = total_recv = 0
+                for _, user_data in all_wireguard_stats.items():
+                    day_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+                    week_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                    month_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                    total_day_sent += day_stat_all.sent_bytes
+                    total_day_recv += day_stat_all.received_bytes
+                    total_week_sent += week_stat_all.sent_bytes
+                    total_week_recv += week_stat_all.received_bytes
+                    total_month_sent += month_stat_all.sent_bytes
+                    total_month_recv += month_stat_all.received_bytes
+                    total_sent += wireguard_stats.human_to_bytes(user_data.transfer_sent)
+                    total_recv += wireguard_stats.human_to_bytes(user_data.transfer_received)
+
+                totals_text = (
+                    "📊 <b>Суммарно по всем конфигаx:</b>\n"
+                    f"   За сутки: ↑ {wireguard_stats.bytes_to_human(total_day_sent)} | ↓ {wireguard_stats.bytes_to_human(total_day_recv)}\n"
+                    f"   За неделю: ↑ {wireguard_stats.bytes_to_human(total_week_sent)} | ↓ {wireguard_stats.bytes_to_human(total_week_recv)}\n"
+                    f"   За месяц: ↑ {wireguard_stats.bytes_to_human(total_month_sent)} | ↓ {wireguard_stats.bytes_to_human(total_month_recv)}\n"
+                    f"   Всего: ↑ {wireguard_stats.bytes_to_human(total_sent)} | ↓ {wireguard_stats.bytes_to_human(total_recv)}"
+                )
+                await update.message.reply_text(totals_text, parse_mode="HTML")
+
             for i, (wg_user, user_data) in enumerate(items_sorted, start=1):       
                 if i not in indexes:
                     continue
@@ -209,10 +238,11 @@ sort=<тип> metric=<период> head=<N> tail=<M>
                     f"   🗓️ Создан: {created_at_human}\n"
                     f"   📡 IP: {user_data.allowed_ips}\n"
                     f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
-                    f"   📊 За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
-                    f"   📊 За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
-                    f"   📊 За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
-                    f"   📊 Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
+                    f"   📊 Статистика по трафику:\n"
+                    f"      За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
+                    f"      За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
+                    f"      За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
+                    f"      Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
                     f"   ━━━━━━━━━━━━━━━━"
                 )
 
@@ -331,7 +361,20 @@ sort=<тип> metric=<период> head=<N> tail=<M>
         else:
             tail_value = default_tail
 
-        return self.Params(sort=sort_value, metric=metric_value, head=head_value, tail=tail_value)
+        # поиск флага totals/summary
+        m_totals = re.compile(r"\b(totals|summary)=([^\s]+)\b", re.IGNORECASE).search(s)
+        show_totals = False
+        if m_totals:
+            v = m_totals.group(2).lower()
+            show_totals = v in {"1", "true", "yes", "y", "on", "да", "истина"}
+
+        return self.Params(
+            sort=sort_value,
+            metric=metric_value,
+            head=head_value,
+            tail=tail_value,
+            show_totals=show_totals
+        )
     
 
     def __make_index_range(self, elements_size: int, head: int = 0, tail: int = 0) -> List[int]:

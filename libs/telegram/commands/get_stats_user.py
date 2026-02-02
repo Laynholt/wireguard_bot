@@ -294,10 +294,11 @@ class GetWireguardUserStatsCommand(BaseCommand):
                 f"   🗓️ Создан: {created_at_human}\n"
                 f"   📡 IP: {user_data.allowed_ips}\n"
                 f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
-                f"   📊 За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
-                f"   📊 За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
-                f"   📊 За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
-                f"   📊 Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
+                f"   📊 Статистика по трафику:\n"
+                f"      За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
+                f"      За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
+                f"      За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
+                f"      Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
                 f"   ━━━━━━━━━━━━━━━━"
             )
 

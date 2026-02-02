@@ -592,33 +592,6 @@ def _get_user_keys_from_db(user_name: str) -> Optional[Dict[str, str]]:
     }
 
 
-def _get_allowed_ip_from_config(user_name: str) -> Optional[str]:
-    """
-    Ищет AllowedIPs для пользователя в wg0.conf.
-    """
-    if not os.path.exists(config.wireguard_config_filepath):
-        return None
-    with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as f:
-        lines = [line.strip() for line in f]
-    for i, line in enumerate(lines):
-        if line.startswith("#"):
-            name = line.lstrip("#").strip()
-            if name == user_name and i + 2 < len(lines):
-                # next lines: PublicKey, PresharedKey, AllowedIPs
-                for j in range(i + 1, min(len(lines), i + 6)):
-                    if lines[j].startswith("AllowedIPs"):
-                        return lines[j].split("=")[1].strip()
-        elif line == "[Peer]" and i + 1 < len(lines):
-            name_line = lines[i + 1]
-            if name_line.startswith("#"):
-                name = name_line.lstrip("#").strip()
-                if name == user_name:
-                    for j in range(i + 1, min(len(lines), i + 6)):
-                        if lines[j].startswith("AllowedIPs"):
-                            return lines[j].split("=")[1].strip()
-    return None
-
-
 def _get_server_public_key() -> Optional[str]:
     path = os.path.join(config.wireguard_folder, "config", "server", "publickey-server")
     if not os.path.exists(path):
@@ -634,11 +607,6 @@ def generate_temp_conf(user_name: str) -> utils.FunctionResult:
     if keys is None:
         return utils.FunctionResult(status=False, description=f"Пользователь [{user_name}] не найден в БД.")
     allowed_ip = keys.get("allowed_ip")
-    if not allowed_ip:
-        # Попробуем один раз достать из старого конфига и сохранить в БД, чтобы потом использовать только БД.
-        allowed_ip = _get_allowed_ip_from_config(user_name)
-        if allowed_ip:
-            wg_db.set_allowed_ip(user_name, allowed_ip)
     if allowed_ip is None:
         return utils.FunctionResult(status=False, description=f"Не найден AllowedIP для [{user_name}] в базе. Обновите запись пользователя.")
     server_public = _get_server_public_key()
