@@ -184,6 +184,18 @@ class GetWireguardUserStatsCommand(BaseCommand):
             await update.message.reply_text("Нет данных по ни одному конфигу.")
             return
 
+        # Сортируем список пользователей по общему трафику (sent + received), по убыванию
+        def _total_bytes(user: str) -> int:
+            data = all_wireguard_stats.get(user)
+            if data is None:
+                return 0
+            return (
+                wireguard_stats.human_to_bytes(data.transfer_sent)
+                + wireguard_stats.human_to_bytes(data.transfer_received)
+            )
+
+        wireguard_users.sort(key=_total_bytes, reverse=True)
+
         owner_tid = self.database.get_telegram_id_by_user(wireguard_users[0])
         # Так как возвращается в базе данных нет ограничений на привязке нескольких конфигов к нескольким tid
         # (это ограничение установлено в коде нашего бота), там возвращается список.

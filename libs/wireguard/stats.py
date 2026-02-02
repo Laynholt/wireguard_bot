@@ -219,6 +219,13 @@ def bytes_to_human(num_bytes: int) -> str:
     return __convert_bytes_to_human_readable(num_bytes)
 
 
+def human_to_bytes(transfer: Optional[str]) -> int:
+    """
+    Публичная обёртка для __convert_transfer_to_bytes.
+    """
+    return __convert_transfer_to_bytes(transfer)
+
+
 def __parse_handshake_to_datetime(handshake_str: Optional[str]) -> Optional[datetime]:
     """
     Конвертирует строку вида '1 minute, 9 seconds ago' в UTC datetime.
