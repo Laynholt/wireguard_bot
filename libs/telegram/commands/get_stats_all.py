@@ -56,41 +56,17 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(
         """
-ℹ️ Формат ввода (в одну строку):
-sort=<тип> metric=<период> head=<N> tail=<M> sum=<yes|no>
-
-Параметры:
-• sort — порядок сортировки. Допустимые значения (без учёта регистра):
-— a, asc, ascending, воз, 1  → ASCENDING
-— d, desc, descending, убыв, 2 → DESCENDING
-По умолчанию: DESCENDING.
-
-• metric — поле сортировки:
-— total / t (по умолчанию) — суммарный трафик
-— day / daily / d — трафик за сутки
-— week / weekly / w — трафик за неделю
-— month / monthly / m — трафик за месяц
-
-• head — целое число (≥ 0). Берём первые N элементов. Значение 0 выводит 0 элементов.
-
-• tail — целое число (≥ 0). Берём последние M элементов. Значение 0 выводит 0 элементов.
-
-• sum / summary — показать общую сумму по всем конфигаx за сутки, неделю, месяц и всё время.
-  Допустимые значения: 1/true/yes/y/on/да/истина. По умолчанию: не показывать.
-
-Правила:
-• Параметры могут идти в любом порядке и быть опущены.
-• Если указаны оба head и tail — учитываются оба (например: head=3 tail=2).
-• Если head == 0 и tail == 0 → конфиги не выводятся (только сводка sum, если указана).
-• Если head + tail >= длина_списка (диапазоны перекрываются или покрывают весь список) → возвращаются ВСЕ элементы.
-• При некорректных значениях (отрицательные числа, нецелые, неверный формат) → параметры head/tail считаются 0.
-
-Примеры:
-• sort=asc head=5        — первые 5 элементов, сортировка ASCENDING
-• tail=4 sort=desc       — последние 4 элемента, сортировка DESCENDING
-• head=3 tail=2          — первые 3 и последние 2 элемента
-• head=0 tail=0 sum=1    — список не выводится, только общая сводка
-• head=7 tail=5 (len=10) — перекрытие → все элементы
+Вот ультра-короткая шпаргалка:<br><br>
+<b>Формат:</b> <code>sort=&lt;a|d&gt; metric=&lt;t|d|w|m&gt; head=&lt;N&gt; tail=&lt;M&gt; sum=&lt;1|0&gt;</code><br>
+• <b>sort</b>: <code>a/asc/воз/1</code> → ↑, <code>d/desc/убыв/2</code> → ↓ (по умолчанию ↓)<br>
+• <b>metric</b>: <code>t=total</code> (default), <code>d=day</code>, <code>w=week</code>, <code>m=month</code><br>
+• <b>head=N</b> — первые N, <b>tail=M</b> — последние M (N,M ≥ 0)<br>
+• <b>sum=1</b> — показать сводку (сутки/неделя/месяц/всё)<br>
+• Параметры в любом порядке, можно пропускать<br>
+• <code>head=0 tail=0</code> → список пуст (только sum, если включён)<br>
+• Если <code>head+tail >= len</code> → выводятся все<br>
+• Неверные <code>head/tail</code> → считаются 0<br><br>
+<b>Примеры:</b> <code>sort=asc head=5</code> • <code>tail=4</code> • <code>head=3 tail=2</code> • <code>head=0 tail=0 sum=1</code>
         """
         )
         if context.user_data is not None: 
