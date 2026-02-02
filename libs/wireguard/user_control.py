@@ -1,10 +1,15 @@
 import os
 import re
 import pwd
-from typing import List, Literal
+from typing import List, Literal, Optional, Dict, Any
 import zipfile
 import ipaddress
 from enum import Enum
+import json
+import shutil
+from datetime import datetime
+
+from . import wg_db
 
 from ..core import config
 from . import utils
@@ -43,6 +48,78 @@ def __get_key(filename: str) -> str:
     except IOError:
         print(f'Не удалось открыть файл [{filename}] для чтения ключа!')
         return ''
+
+
+def migrate_legacy_users_to_db() -> None:
+    """
+    Мигрирует пользователей из старой структуры папок в SQLite.
+    - Читает legacy stats.json (если есть) для списка имён.
+    - Собирает ключи из /config/<user>/public|private|preshared files.
+    - created_at берётся из ctime папки.
+    - Если миграция успешна, удаляет папку пользователя.
+    - Пропускает пользователей, у которых нет ключей или папки.
+    """
+    wg_db.init_db()
+
+    legacy_stats: Dict[str, Any] = {}
+    stats_path = config.wireguard_log_filepath
+    if os.path.exists(stats_path):
+        try:
+            with open(stats_path, "r", encoding="utf-8") as f:
+                legacy_stats = json.load(f)
+        except Exception:
+            legacy_stats = {}
+
+    base_dir = os.path.join(config.wireguard_folder, "config")
+    entries = [
+        d for d in os.listdir(base_dir)
+        if d not in config.system_names and os.path.isdir(os.path.join(base_dir, d))
+    ]
+
+    usernames = {name.lstrip("+") for name in entries}.union(set(legacy_stats.keys()))
+
+    for username in usernames:
+        folder = os.path.join(base_dir, username)
+        commented_folder = os.path.join(base_dir, f"+{username}")
+        folder_path = None
+        commented_flag = 0
+        if os.path.isdir(folder):
+            folder_path = folder
+        elif os.path.isdir(commented_folder):
+            folder_path = commented_folder
+            commented_flag = 1
+        if folder_path is None:
+            continue
+
+        priv_path = os.path.join(folder_path, f"privatekey-{username}")
+        pub_path = os.path.join(folder_path, f"publickey-{username}")
+        psk_path = os.path.join(folder_path, f"presharedkey-{username}")
+
+        if not (os.path.exists(priv_path) and os.path.exists(pub_path) and os.path.exists(psk_path)):
+            continue
+
+        private_key = __get_key(priv_path)
+        public_key = __get_key(pub_path)
+        preshared_key = __get_key(psk_path)
+
+        created_at = datetime.fromtimestamp(os.path.getctime(folder_path)).isoformat()
+        stats_blob = legacy_stats.get(username)
+        stats_json = json.dumps(stats_blob, ensure_ascii=False) if isinstance(stats_blob, dict) else None
+
+        wg_db.upsert_user(
+            name=username,
+            private_key=private_key,
+            public_key=public_key,
+            preshared_key=preshared_key,
+            created_at=created_at,
+            commented=commented_flag,
+            stats_json=stats_json,
+        )
+
+        try:
+            shutil.rmtree(folder_path)
+        except Exception:
+            pass
     
 
 def __error_exit(user_name: str) -> None:
@@ -622,20 +699,10 @@ def check_user_exists(user_name: str) -> utils.FunctionResult:
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
     """
-    names = os.listdir(f'{config.wireguard_folder}/config')
-    
-    stripped_user_name = __strip_bad_symbols(user_name)
-    if len(user_name) != len(stripped_user_name):
-        return utils.FunctionResult(status=False, description=f'Имя пользователя может состоять только из латинских символов и цифр!')
-    
-    user_name_commented = f'+{user_name}'
-
-    if user_name in config.system_names:
-        return utils.FunctionResult(status=False, description=f'Имя пользователя [{user_name}] совпадает с названием системной папки!')
-
-    if user_name not in names and user_name_commented not in names:
+    wg_db.init_db()
+    row = wg_db.get_user(user_name)
+    if row is None:
         return utils.FunctionResult(status=False, description=f"Пользователь с именем [{user_name}] не найден.")
-
     return utils.FunctionResult(status=True, description=f"Пользователь [{user_name}] найден.")
 
 
@@ -706,7 +773,8 @@ def get_usernames() -> List[str]:
     Returns:
         list: Список имен конфигов всех пользователей Wireguard
     """
-    return [__strip_bad_symbols(user_name) for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names]
+    wg_db.init_db()
+    return [name for name, _ in wg_db.list_users()]
 
 
 def get_active_usernames() -> List[str]:
@@ -716,7 +784,8 @@ def get_active_usernames() -> List[str]:
     Returns:
         list: Список имен конфигов активных пользователей Wireguard
     """
-    return [user_name for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names and '+' not in user_name]
+    wg_db.init_db()
+    return [name for name, commented in wg_db.list_users() if not commented]
 
 
 def get_inactive_usernames() -> List[str]:
@@ -726,7 +795,8 @@ def get_inactive_usernames() -> List[str]:
     Returns:
         list: Список имен конфигов отключенных пользователей Wireguard
     """
-    return [user_name[1:] for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names and '+' in user_name]
+    wg_db.init_db()
+    return [name for name, commented in wg_db.list_users() if commented]
 
 
 def is_username_commented(user_name: str) -> bool:
@@ -739,7 +809,11 @@ def is_username_commented(user_name: str) -> bool:
     Returns:
         bool: True - закомментирован, иначе False.
     """
-    return user_name in get_usernames() and user_name in get_inactive_usernames()
+    wg_db.init_db()
+    row = wg_db.get_user(user_name)
+    if row is None:
+        return False
+    return bool(row["commented"])
 
 
 def sanitize_string(string: str) -> str:

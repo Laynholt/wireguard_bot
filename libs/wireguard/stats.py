@@ -9,6 +9,8 @@ from typing import Optional, List, Dict, Any, Union, Tuple
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from . import wg_db
+
 from . import user_control
 
 class TrafficStat(BaseModel):
@@ -439,11 +441,23 @@ def write_data_to_json(file_path: str, data: Dict[str, WgPeerData]) -> None:
     Сохраняет Dict[str, WgPeerData] в файл JSON.
     В процессе сериализации каждый объект WgPeerData превращается в словарь.
     """
-    # Превращаем каждое значение (WgPeerData) в dict через .dict()
+    # Превращаем каждое значение (WgPeerData) в dict через .model_dump()
     raw_data = {key: val.model_dump() for key, val in data.items()}
-
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(raw_data, f, indent=2, ensure_ascii=False)
+    wg_db.init_db()
+    for name, blob in raw_data.items():
+        # Не трогаем ключи, если пользователь уже есть; иначе создаём пустые поля.
+        existing = wg_db.get_user(name)
+        if existing is None:
+            wg_db.upsert_user(
+                name=name,
+                private_key="",
+                public_key="",
+                preshared_key="",
+                stats_json=json.dumps(blob, ensure_ascii=False),
+                commented=0,
+            )
+        else:
+            wg_db.set_stats(name, json.dumps(blob, ensure_ascii=False))
 
 
 def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
@@ -451,17 +465,19 @@ def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
     Загружает Dict[str, WgPeerData] из JSON-файла.
     Если файл не существует, возвращает пустой словарь.
     """
-    if not os.path.exists(file_path):
-        return {}
-
-    with open(file_path, 'r', encoding='utf-8') as f:
-        raw_data = json.load(f)  # это Dict[str, dict]
+    # Теперь данные хранятся в БД
+    wg_db.init_db()
+    raw_data = wg_db.get_stats_all()  # Dict[name, json_str]
 
     # Превращаем каждую вложенную dict обратно в объект WgPeerData
     result = {}
     for key, val in raw_data.items():
-        # val: dict => WgPeerData(**val)
-        data_obj = WgPeerData(**val)
+        # val: json str => dict => WgPeerData
+        try:
+            decoded = json.loads(val)
+        except Exception:
+            continue
+        data_obj = WgPeerData(**decoded)
 
         # Заполняем raw_* из существующих строк, если они не были сохранены ранее (обратная совместимость).
         if data_obj.raw_received_bytes == 0 and data_obj.transfer_received:
