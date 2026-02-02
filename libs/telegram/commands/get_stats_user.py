@@ -207,11 +207,13 @@ class GetWireguardUserStatsCommand(BaseCommand):
             user_data = all_wireguard_stats.get(wg_user, None)
             created_at_human = "N/A"
             db_row = wg_db.get_user(wg_user)
-            if db_row and db_row.get("created_at"):
-                try:
-                    created_at_human = datetime.fromisoformat(db_row["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    created_at_human = db_row["created_at"]
+            if db_row is not None:
+                created_raw = db_row["created_at"] if "created_at" in db_row.keys() else None
+                if created_raw:
+                    try:
+                        created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        created_at_human = created_raw
 
             # Случай, когда статистики для пользователя нет
             # Это может быть только в том случае, если она отсутствует в логах, 
