@@ -1,6 +1,8 @@
 from __future__ import annotations
 from .base import *
 from libs.wireguard import stats as wireguard_stats
+from libs.wireguard import wg_db
+from datetime import datetime
 
 import re
 from enum import Enum
@@ -190,11 +192,19 @@ sort=<тип> metric=<период> head=<N> tail=<M>
                 week_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
                 month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
                 handshake_text = wireguard_stats.format_handshake_age(user_data)
+                created_at_human = "N/A"
+                db_row = wg_db.get_user(wg_user)
+                if db_row and db_row.get("created_at"):
+                    try:
+                        created_at_human = datetime.fromisoformat(db_row["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        created_at_human = db_row["created_at"]
 
                 lines.append(
                     f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                     f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
                     f"   {owner_part}\n"
+                    f"   🗓️ Создан: {created_at_human}\n"
                     f"   📡 IP: {user_data.allowed_ips}\n"
                     f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
                     f"   📊 За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"

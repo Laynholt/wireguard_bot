@@ -3,6 +3,8 @@ from typing import final
 from .base import *
 from libs.telegram import messages
 from libs.wireguard import stats as wireguard_stats
+from libs.wireguard import wg_db
+from datetime import datetime
 
 from telegram import (
     KeyboardButton,
@@ -203,6 +205,13 @@ class GetWireguardUserStatsCommand(BaseCommand):
 
         for i, wg_user in enumerate(wireguard_users, start=1):
             user_data = all_wireguard_stats.get(wg_user, None)
+            created_at_human = "N/A"
+            db_row = wg_db.get_user(wg_user)
+            if db_row and db_row.get("created_at"):
+                try:
+                    created_at_human = datetime.fromisoformat(db_row["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    created_at_human = db_row["created_at"]
 
             # Случай, когда статистики для пользователя нет
             # Это может быть только в том случае, если она отсутствует в логах, 
@@ -280,6 +289,7 @@ class GetWireguardUserStatsCommand(BaseCommand):
                 f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                 f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
                 f"{owner_part}"
+                f"   🗓️ Создан: {created_at_human}\n"
                 f"   📡 IP: {user_data.allowed_ips}\n"
                 f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
                 f"   📊 За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
