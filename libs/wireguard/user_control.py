@@ -628,7 +628,7 @@ def print_user_qrcode(user_name: str) -> utils.FunctionResult:
     tmp_remote = f"/tmp/{user_name}.conf"
     copy_to = utils.run_command(f"docker cp {conf_res.description} wireguard:{tmp_remote}")
     if not copy_to.status:
-        return copy_to.return_with_print(add_to_print=f'[{50 * \"-\"}]\\n')
+        return copy_to.return_with_print(add_to_print=f'[{50 * "-"}]\n')
 
     command = f'docker exec wireguard bash -c "qrencode -t ansiutf8 < {tmp_remote}"'
     utils.run_command(command).return_with_print()
