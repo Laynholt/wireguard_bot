@@ -68,7 +68,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
 • Неверные <code>head/tail</code> → считаются 0<br><br>
 <b>Примеры:</b> <code>sort=asc head=5</code> • <code>tail=4</code> • <code>head=3 tail=2</code> • <code>head=0 tail=0 sum=1</code>
         """
-        )
+        , parse_mode="HTML")
         if context.user_data is not None: 
             context.user_data[ContextDataKeys.COMMAND] = self.command_name
         
