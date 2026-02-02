@@ -11,12 +11,21 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
     class SortSequence(Enum):
         ASCENDING = 1
         DESCENDING = 2
+
+    class Metric(Enum):
+        TOTAL = "total"
+        DAILY = "daily"
+        WEEKLY = "weekly"
+        MONTHLY = "monthly"
         
     @dataclass
     class Params:
         """Результат парсинга строки с параметрами."""
         sort: "GetAllWireguardUsersStatsCommand.SortSequence" = field(
             default_factory=lambda: GetAllWireguardUsersStatsCommand.SortSequence.DESCENDING
+        )
+        metric: "GetAllWireguardUsersStatsCommand.Metric" = field(
+            default_factory=lambda: GetAllWireguardUsersStatsCommand.Metric.TOTAL
         )
         head: int = 0
         tail: int = 0
@@ -47,13 +56,19 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             await update.message.reply_text(
         """
 ℹ️ Формат ввода (в одну строку):
-sort=<тип> head=<N> tail=<M>
+sort=<тип> metric=<период> head=<N> tail=<M>
 
 Параметры:
 • sort — порядок сортировки. Допустимые значения (без учёта регистра):
 — a, asc, ascending, воз, 1  → ASCENDING
 — d, desc, descending, убыв, 2 → DESCENDING
 По умолчанию: DESCENDING.
+
+• metric — поле сортировки:
+— total / t (по умолчанию) — суммарный трафик
+— day / daily / d — трафик за сутки
+— week / weekly / w — трафик за неделю
+— month / monthly / m — трафик за месяц
 
 • head — целое число (≥ 0). Берём первые N элементов. По умолчанию: 0 (не задано).
 
@@ -96,16 +111,17 @@ sort=<тип> head=<N> tail=<M>
                 parsed_keys = self.__parse_params(
                     s=keys.strip(),
                     default_sort=self.SortSequence.DESCENDING,
+                    default_metric=self.Metric.TOTAL,
                     default_head=0,
                     default_tail=0
                 )
             
-            # Сначала получаем всю статистику
+            # Сначала получаем всю статистику (сортировку настроим вручную по metric)
             all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
                 conf_file_path=self.wireguard_config_path,
                 json_file_path=self.wireguard_log_path,
                 sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
-                reverse_sort=parsed_keys.sort == self.SortSequence.DESCENDING
+                reverse_sort=True
             )
 
             if not all_wireguard_stats:
@@ -127,13 +143,37 @@ sort=<тип> head=<N> tail=<M>
 
             lines = []
             inactive_usernames = wireguard.get_inactive_usernames()
+
+            # Подготовим сортировку по выбранному metric
+            def _metric_value(user_data: wireguard_stats.WgPeerData) -> int:
+                if parsed_keys.metric == self.Metric.TOTAL:
+                    return (
+                        wireguard_stats.human_to_bytes(user_data.transfer_sent)
+                        + wireguard_stats.human_to_bytes(user_data.transfer_received)
+                    )
+                if parsed_keys.metric == self.Metric.DAILY:
+                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+                    return stat.sent_bytes + stat.received_bytes
+                if parsed_keys.metric == self.Metric.WEEKLY:
+                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                    return stat.sent_bytes + stat.received_bytes
+                if parsed_keys.metric == self.Metric.MONTHLY:
+                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                    return stat.sent_bytes + stat.received_bytes
+                return 0
+
+            items_sorted = sorted(
+                all_wireguard_stats.items(),
+                key=lambda kv: _metric_value(kv[1]),
+                reverse=parsed_keys.sort == self.SortSequence.DESCENDING
+            )
             
             indexes = self.__make_index_range(
                 len(all_wireguard_stats.items()),
                 head=parsed_keys.head,
                 tail=parsed_keys.tail
             )
-            for i, (wg_user, user_data) in enumerate(all_wireguard_stats.items(), start=1):       
+            for i, (wg_user, user_data) in enumerate(items_sorted, start=1):       
                 if i not in indexes:
                     continue
             
@@ -214,11 +254,30 @@ sort=<тип> head=<N> tail=<M>
             return self.SortSequence(n)
         except Exception:
             return default
+
+    def __map_metric(self, raw: Optional[str], default: Metric) -> Metric:
+        """
+        Преобразует строковое представление metric в Metric.
+        Поддерживает: total/t, day/d/daily, week/w/weekly, month/m/monthly.
+        """
+        if raw is None:
+            return default
+        v = raw.strip().lower()
+        if v in {"t", "total"}:
+            return self.Metric.TOTAL
+        if v in {"d", "day", "daily"}:
+            return self.Metric.DAILY
+        if v in {"w", "week", "weekly"}:
+            return self.Metric.WEEKLY
+        if v in {"m", "month", "monthly"}:
+            return self.Metric.MONTHLY
+        return default
             
     def __parse_params(
         self,
         s: str,
         default_sort: SortSequence = SortSequence.DESCENDING,
+        default_metric: Metric = Metric.TOTAL,
         default_head: int = 0,
         default_tail: int = 0,
 ) -> Params:
@@ -233,6 +292,11 @@ sort=<тип> head=<N> tail=<M>
         m_sort = re.compile(r"\bsort=([^\s]+)\b").search(s)
         sort_raw  = m_sort.group(1) if m_sort else None
         sort_value = self.__map_sort(sort_raw, default_sort)
+
+        # поиск metric
+        m_metric = re.compile(r"\bmetric=([^\s]+)\b").search(s)
+        metric_raw = m_metric.group(1) if m_metric else None
+        metric_value = self.__map_metric(metric_raw, default_metric)
 
         # поиск head и tail (поддерживаем и отрицательные числа)
         m_head = re.compile(r"\bhead=([+-]?\d+)\b").search(s)
@@ -258,7 +322,7 @@ sort=<тип> head=<N> tail=<M>
         else:
             tail_value = default_tail
 
-        return self.Params(sort=sort_value, head=head_value, tail=tail_value)
+        return self.Params(sort=sort_value, metric=metric_value, head=head_value, tail=tail_value)
     
 
     def __make_index_range(self, elements_size: int, head: int = 0, tail: int = 0) -> List[int]:
