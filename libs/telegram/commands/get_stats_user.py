@@ -3,6 +3,8 @@ from typing import final
 from .base import *
 from libs.telegram import messages
 from libs.wireguard import stats as wireguard_stats
+from libs.wireguard import wg_db
+from datetime import datetime
 
 from telegram import (
     KeyboardButton,
@@ -17,7 +19,6 @@ class GetWireguardUserStatsCommand(BaseCommand):
         self,
         database: UserDatabase,
         wireguard_config_path: str,
-        wireguard_log_path: str,
         return_own_stats: bool
     ) -> None:
         super().__init__(
@@ -48,7 +49,6 @@ class GetWireguardUserStatsCommand(BaseCommand):
         self.keyboard.add_parent(keyboards.WIREGUARD_STATS_KEYBOARD)
         
         self.wireguard_config_path = wireguard_config_path
-        self.wireguard_log_path = wireguard_log_path
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -176,7 +176,6 @@ class GetWireguardUserStatsCommand(BaseCommand):
         # Получаем полную статистику
         all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
             conf_file_path=self.wireguard_config_path,
-            json_file_path=self.wireguard_log_path,
             sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
         )
         
@@ -184,31 +183,37 @@ class GetWireguardUserStatsCommand(BaseCommand):
             await update.message.reply_text("Нет данных по ни одному конфигу.")
             return
 
-        owner_tid = self.database.get_telegram_id_by_user(wireguard_users[0])
-        # Так как возвращается в базе данных нет ограничений на привязке нескольких конфигов к нескольким tid
-        # (это ограничение установлено в коде нашего бота), там возвращается список.
-        # Однако, если нет привязки, он может быть пустой.
-        owner_tid = owner_tid[0] if owner_tid else None
-        
-        if owner_tid is not None and own_stats is False:
-            owner_username = await telegram_utils.get_username_by_id(owner_tid, context)
-            owner_part = (
-                f"   👤 <b>Владелец:</b>\n"
-                f"      ├ 🆔 <b>ID:</b> <code>{owner_tid}</code>\n"
-                f"      └ 🔗 <b>Telegram:</b> "
-                f"{'Не удалось получить' if owner_username is None else owner_username}"
+        # Сортируем список пользователей по общему трафику (sent + received), по убыванию
+        def _total_bytes(user: str) -> int:
+            data = all_wireguard_stats.get(user)
+            if data is None:
+                return 0
+            return (
+                wireguard_stats.human_to_bytes(data.transfer_sent)
+                + wireguard_stats.human_to_bytes(data.transfer_received)
             )
 
-        else:
-            owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"       
+        wireguard_users.sort(key=_total_bytes, reverse=True)
 
-        owner_part = "" if own_stats else f"   {owner_part}\n"
+        # Агрегация суммарной статистики по владельцам
+        summary_by_owner: dict[int, dict[str, int]] = {}
 
         lines = []
         inactive_usernames = wireguard.get_inactive_usernames()
         
+        username_cache: dict[int, Optional[str]] = {}
+
         for i, wg_user in enumerate(wireguard_users, start=1):
             user_data = all_wireguard_stats.get(wg_user, None)
+            created_at_human = "N/A"
+            db_row = wg_db.get_user(wg_user)
+            if db_row is not None:
+                created_raw = db_row["created_at"] if "created_at" in db_row.keys() else None
+                if created_raw:
+                    try:
+                        created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        created_at_human = created_raw
 
             # Случай, когда статистики для пользователя нет
             # Это может быть только в том случае, если она отсутствует в логах, 
@@ -237,18 +242,84 @@ class GetWireguardUserStatsCommand(BaseCommand):
                 continue
 
             # Если всё в порядке, формируем строку со статистикой
+            day_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+            week_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+            month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+            handshake_text = wireguard_stats.format_handshake_age(user_data)
+
+            # Определяем владельца конкретного конфига
+            owner_tid_list = self.database.get_telegram_id_by_user(wg_user)
+            owner_tid_local = owner_tid_list[0] if owner_tid_list else None
+            if owner_tid_local is not None and own_stats is False:
+                if owner_tid_local not in username_cache:
+                    username_cache[owner_tid_local] = await telegram_utils.get_username_by_id(owner_tid_local, context)
+                owner_username = username_cache[owner_tid_local]
+                owner_part = (
+                    f"   👤 <b>Владелец:</b>\n"
+                    f"      ├ 🆔 <b>ID:</b> <code>{owner_tid_local}</code>\n"
+                    f"      └ 🔗 <b>Telegram:</b> "
+                    f"{'Не удалось получить' if owner_username is None else owner_username}"
+                )
+            else:
+                owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"
+            owner_part = "" if own_stats else f"   {owner_part}\n"
+
+            # Накопим агрегированные значения по владельцу
+            if owner_tid_local is not None:
+                agg = summary_by_owner.setdefault(owner_tid_local, {
+                    "count": 0,
+                    "total_sent": 0,
+                    "total_recv": 0,
+                    "day_sent": 0,
+                    "day_recv": 0,
+                    "week_sent": 0,
+                    "week_recv": 0,
+                    "month_sent": 0,
+                    "month_recv": 0,
+                })
+                agg["count"] += 1
+                agg["total_sent"] += wireguard_stats.human_to_bytes(user_data.transfer_sent)
+                agg["total_recv"] += wireguard_stats.human_to_bytes(user_data.transfer_received)
+                agg["day_sent"] += day_stat.sent_bytes
+                agg["day_recv"] += day_stat.received_bytes
+                agg["week_sent"] += week_stat.sent_bytes
+                agg["week_recv"] += week_stat.received_bytes
+                agg["month_sent"] += month_stat.sent_bytes
+                agg["month_recv"] += month_stat.received_bytes
+
             lines.append(
                 f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                 f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
                 f"{owner_part}"
+                f"   🗓️ Создан: {created_at_human}\n"
                 f"   📡 IP: {user_data.allowed_ips}\n"
-                f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
-                f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
-                f"   ⏱️ Последнее рукопожатие: {user_data.latest_handshake if user_data.latest_handshake else 'N/A'}\n"
+                f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
+                f"   📊 Статистика по трафику:\n"
+                f"      За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
+                f"      За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
+                f"      За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
+                f"      Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
                 f"   ━━━━━━━━━━━━━━━━"
             )
 
         logger.info(f"Отправляю статистику по личным конфигам Wireguard -> Tid [{telegram_id}].")
+
+        # Суммарное сообщение по владельцам с несколькими конфигами
+        for owner_tid_local, agg in summary_by_owner.items():
+            if agg["count"] <= 1:
+                continue
+            if owner_tid_local not in username_cache:
+                username_cache[owner_tid_local] = await telegram_utils.get_username_by_id(owner_tid_local, context) if owner_tid_local else None
+            owner_username = username_cache[owner_tid_local]
+            owner_title = f"{owner_username} (ID {owner_tid_local})" if owner_tid_local else "Не назначен"
+            summary_text = (
+                f"📊 Суммарно по {agg['count']} конфигам владельца {owner_title}:\n"
+                f"   За сутки: ↑ {wireguard_stats.bytes_to_human(agg['day_sent'])} | ↓ {wireguard_stats.bytes_to_human(agg['day_recv'])}\n"
+                f"   За неделю: ↑ {wireguard_stats.bytes_to_human(agg['week_sent'])} | ↓ {wireguard_stats.bytes_to_human(agg['week_recv'])}\n"
+                f"   За месяц: ↑ {wireguard_stats.bytes_to_human(agg['month_sent'])} | ↓ {wireguard_stats.bytes_to_human(agg['month_recv'])}\n"
+                f"   Всего: ↑ {wireguard_stats.bytes_to_human(agg['total_sent'])} | ↓ {wireguard_stats.bytes_to_human(agg['total_recv'])}"
+            )
+            await update.message.reply_text(summary_text, parse_mode="HTML")
         
         # Разбиваем на батчи по указанному размеру
         batch_size = 5

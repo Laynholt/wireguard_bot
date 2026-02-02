@@ -284,20 +284,17 @@ class BotCommandHandler:
         self.__command_wrapper[BotCommand.GET_MY_STATS] = GetWireguardUserStatsCommand(
             database,
             config.wireguard_config_filepath,
-            config.wireguard_log_filepath,
             return_own_stats=True
         )
         self.__command_wrapper[BotCommand.GET_USER_STATS] = GetWireguardUserStatsCommand(
             database,
             config.wireguard_config_filepath,
-            config.wireguard_log_filepath,
             return_own_stats=False
         )
         self.__command_wrapper[BotCommand.GET_ALL_STATS] = GetAllWireguardUsersStatsCommand(
             database,
             semaphore,
-            config.wireguard_config_filepath,
-            config.wireguard_log_filepath
+            config.wireguard_config_filepath
         )
         
         # Команда перезапуска сервера WireGuard

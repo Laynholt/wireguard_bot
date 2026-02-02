@@ -1,6 +1,8 @@
 from __future__ import annotations
 from .base import *
 from libs.wireguard import stats as wireguard_stats
+from libs.wireguard import wg_db
+from datetime import datetime
 
 import re
 from enum import Enum
@@ -11,6 +13,12 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
     class SortSequence(Enum):
         ASCENDING = 1
         DESCENDING = 2
+
+    class Metric(Enum):
+        TOTAL = "total"
+        DAILY = "daily"
+        WEEKLY = "weekly"
+        MONTHLY = "monthly"
         
     @dataclass
     class Params:
@@ -18,8 +26,12 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         sort: "GetAllWireguardUsersStatsCommand.SortSequence" = field(
             default_factory=lambda: GetAllWireguardUsersStatsCommand.SortSequence.DESCENDING
         )
+        metric: "GetAllWireguardUsersStatsCommand.Metric" = field(
+            default_factory=lambda: GetAllWireguardUsersStatsCommand.Metric.TOTAL
+        )
         head: int = 0
         tail: int = 0
+        show_totals: bool = False
 
 
     def __init__(
@@ -27,7 +39,6 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         database: UserDatabase,
         semaphore: Semaphore,
         wireguard_config_path: str,
-        wireguard_log_path: str
     ) -> None:
         super().__init__(
             database
@@ -35,7 +46,6 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         self.command_name = BotCommand.GET_ALL_STATS
         self.semaphore = semaphore
         self.wireguard_config_path = wireguard_config_path
-        self.wireguard_log_path = wireguard_log_path
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -46,32 +56,24 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(
         """
-ℹ️ Формат ввода (в одну строку):
-sort=<тип> head=<N> tail=<M>
+Шпаргалка:
+Формат: sort=<a|d> metric=<t|d|w|m> head=<N> tail=<M> sum=<1|0>
 
-Параметры:
-• sort — порядок сортировки. Допустимые значения (без учёта регистра):
-— asc, ascending, 1  → ASCENDING
-— desc, descending, 2 → DESCENDING
-По умолчанию: DESCENDING.
+• sort: a/asc/воз/1 → ↑, d/desc/убыв/2 → ↓ (по умолчанию ↓)
+• metric: t=total (default), d=day, w=week, m=month
+• head=N — первые N, tail=M — последние M (N,M ≥ 0)
+• sum=1 — показать сводку (сутки/неделя/месяц/всё)
 
-• head — целое число (≥ 0). Берём первые N элементов. По умолчанию: 0 (не задано).
-
-• tail — целое число (≥ 0). Берём последние M элементов. По умолчанию: 0 (не задано).
-
-Правила:
-• Параметры могут идти в любом порядке и быть опущены.
-• Если указаны оба head и tail — учитываются оба (например: head=3 tail=2).
-• Если head == 0 и tail == 0 → возвращаются ВСЕ элементы.
-• Если head + tail >= длина_списка (диапазоны перекрываются или покрывают весь список) → возвращаются ВСЕ элементы.
-• При некорректных значениях (отрицательные числа, нецелые, неверный формат) → возвращаются ВСЕ элементы.
+Параметры в любом порядке, можно пропускать
+• head=0 tail=0 → список пуст (только sum, если включён)
+• Если head+tail >= len → выводятся все
+• Неверные head/tail → выводятся все элементы
 
 Примеры:
-• sort=asc head=5        — первые 5 элементов, сортировка ASCENDING
-• tail=4 sort=desc       — последние 4 элемента, сортировка DESCENDING
-• head=3 tail=2         — первые 3 и последние 2 элемента
-• (пустая строка)       — все элементы (по умолчанию)
-• head=7 tail=5 (len=10) — перекрытие → все элементы
+• sort=asc head=5
+• tail=4
+• head=3 tail=2
+• head=0 tail=0 sum=1
         """
         )
         if context.user_data is not None: 
@@ -96,16 +98,16 @@ sort=<тип> head=<N> tail=<M>
                 parsed_keys = self.__parse_params(
                     s=keys.strip(),
                     default_sort=self.SortSequence.DESCENDING,
+                    default_metric=self.Metric.TOTAL,
                     default_head=0,
                     default_tail=0
                 )
             
-            # Сначала получаем всю статистику
+            # Сначала получаем всю статистику (сортировку настроим вручную по metric)
             all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
                 conf_file_path=self.wireguard_config_path,
-                json_file_path=self.wireguard_log_path,
                 sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
-                reverse_sort=parsed_keys.sort == self.SortSequence.DESCENDING
+                reverse_sort=True
             )
 
             if not all_wireguard_stats:
@@ -127,13 +129,69 @@ sort=<тип> head=<N> tail=<M>
 
             lines = []
             inactive_usernames = wireguard.get_inactive_usernames()
+
+            # Подготовим сортировку по выбранному metric
+            def _metric_value(user_data: wireguard_stats.WgPeerData) -> int:
+                if parsed_keys.metric == self.Metric.TOTAL:
+                    return (
+                        wireguard_stats.human_to_bytes(user_data.transfer_sent)
+                        + wireguard_stats.human_to_bytes(user_data.transfer_received)
+                    )
+                if parsed_keys.metric == self.Metric.DAILY:
+                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+                    return stat.sent_bytes + stat.received_bytes
+                if parsed_keys.metric == self.Metric.WEEKLY:
+                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                    return stat.sent_bytes + stat.received_bytes
+                if parsed_keys.metric == self.Metric.MONTHLY:
+                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                    return stat.sent_bytes + stat.received_bytes
+                return 0
+
+            items_sorted = sorted(
+                all_wireguard_stats.items(),
+                key=lambda kv: _metric_value(kv[1]),
+                reverse=parsed_keys.sort == self.SortSequence.DESCENDING
+            )
             
             indexes = self.__make_index_range(
                 len(all_wireguard_stats.items()),
                 head=parsed_keys.head,
                 tail=parsed_keys.tail
             )
-            for i, (wg_user, user_data) in enumerate(all_wireguard_stats.items(), start=1):       
+
+            if parsed_keys.show_totals:
+                total_day_sent = total_day_recv = 0
+                total_week_sent = total_week_recv = 0
+                total_month_sent = total_month_recv = 0
+                total_sent = total_recv = 0
+                for _, user_data in all_wireguard_stats.items():
+                    day_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+                    week_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                    month_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                    total_day_sent += day_stat_all.sent_bytes
+                    total_day_recv += day_stat_all.received_bytes
+                    total_week_sent += week_stat_all.sent_bytes
+                    total_week_recv += week_stat_all.received_bytes
+                    total_month_sent += month_stat_all.sent_bytes
+                    total_month_recv += month_stat_all.received_bytes
+                    total_sent += wireguard_stats.human_to_bytes(user_data.transfer_sent)
+                    total_recv += wireguard_stats.human_to_bytes(user_data.transfer_received)
+
+                totals_text = (
+                    "📊 <b>Суммарно по всем конфигаx:</b>\n"
+                    f"   За сутки: ↑ {wireguard_stats.bytes_to_human(total_day_sent)} | ↓ {wireguard_stats.bytes_to_human(total_day_recv)}\n"
+                    f"   За неделю: ↑ {wireguard_stats.bytes_to_human(total_week_sent)} | ↓ {wireguard_stats.bytes_to_human(total_week_recv)}\n"
+                    f"   За месяц: ↑ {wireguard_stats.bytes_to_human(total_month_sent)} | ↓ {wireguard_stats.bytes_to_human(total_month_recv)}\n"
+                    f"   Всего: ↑ {wireguard_stats.bytes_to_human(total_sent)} | ↓ {wireguard_stats.bytes_to_human(total_recv)}"
+                )
+                await update.message.reply_text(totals_text, parse_mode="HTML")
+
+            for i, (wg_user, user_data) in enumerate(items_sorted, start=1):       
+                if not indexes:
+                    # Если индексы пусты (head=0 и tail=0), выводим только сводку sum (если была) и выходим
+                    logger.info("head=0 и tail=0 → список конфигов не выводится.")
+                    break
                 if i not in indexes:
                     continue
             
@@ -149,14 +207,32 @@ sort=<тип> head=<N> tail=<M>
                 else:
                     owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"
 
+                day_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+                week_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                handshake_text = wireguard_stats.format_handshake_age(user_data)
+                created_at_human = "N/A"
+                db_row = wg_db.get_user(wg_user)
+                if db_row is not None:
+                    created_raw = db_row["created_at"] if "created_at" in db_row.keys() else None
+                    if created_raw:
+                        try:
+                            created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
+                        except Exception:
+                            created_at_human = created_raw
+
                 lines.append(
                     f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                     f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
                     f"   {owner_part}\n"
+                    f"   🗓️ Создан: {created_at_human}\n"
                     f"   📡 IP: {user_data.allowed_ips}\n"
-                    f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
-                    f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
-                    f"   ⏱️ Последнее рукопожатие: {user_data.latest_handshake if user_data.latest_handshake else 'N/A'}\n"
+                    f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
+                    f"   📊 Статистика по трафику:\n"
+                    f"      За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
+                    f"      За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
+                    f"      За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
+                    f"      Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
                     f"   ━━━━━━━━━━━━━━━━"
                 )
 
@@ -188,17 +264,17 @@ sort=<тип> head=<N> tail=<M>
     def __map_sort(self, raw: Optional[str], default: SortSequence) -> SortSequence:
         """
         Преобразует строковое/числовое представление sort в SortSequence.
-        Поддерживает: 'asc', 'ascending', '1' -> ASCENDING
-                    'desc', 'descending', '2' -> DESCENDING
+        Поддерживает: 'a', 'asc', 'ascending', 'воз', '1' -> ASCENDING
+                    'd', 'desc', 'descending', 'убыв', '2' -> DESCENDING
         В противном случае возвращает default.
         """
         if raw is None:
             return default
 
         v = raw.strip().lower()
-        if v in {"asc", "ascending"}:
+        if v in {"a", "asc", "ascending", "воз"}:
             return self.SortSequence.ASCENDING
-        if v in {"desc", "descending"}:
+        if v in {"d", "desc", "descending", "убыв"}:
             return self.SortSequence.DESCENDING
 
         # Попробовать распарсить как число (1/2)
@@ -207,11 +283,30 @@ sort=<тип> head=<N> tail=<M>
             return self.SortSequence(n)
         except Exception:
             return default
+
+    def __map_metric(self, raw: Optional[str], default: Metric) -> Metric:
+        """
+        Преобразует строковое представление metric в Metric.
+        Поддерживает: total/t, day/d/daily, week/w/weekly, month/m/monthly.
+        """
+        if raw is None:
+            return default
+        v = raw.strip().lower()
+        if v in {"t", "total"}:
+            return self.Metric.TOTAL
+        if v in {"d", "day", "daily"}:
+            return self.Metric.DAILY
+        if v in {"w", "week", "weekly"}:
+            return self.Metric.WEEKLY
+        if v in {"m", "month", "monthly"}:
+            return self.Metric.MONTHLY
+        return default
             
     def __parse_params(
         self,
         s: str,
         default_sort: SortSequence = SortSequence.DESCENDING,
+        default_metric: Metric = Metric.TOTAL,
         default_head: int = 0,
         default_tail: int = 0,
 ) -> Params:
@@ -227,6 +322,11 @@ sort=<тип> head=<N> tail=<M>
         sort_raw  = m_sort.group(1) if m_sort else None
         sort_value = self.__map_sort(sort_raw, default_sort)
 
+        # поиск metric
+        m_metric = re.compile(r"\bmetric=([^\s]+)\b").search(s)
+        metric_raw = m_metric.group(1) if m_metric else None
+        metric_value = self.__map_metric(metric_raw, default_metric)
+
         # поиск head и tail (поддерживаем и отрицательные числа)
         m_head = re.compile(r"\bhead=([+-]?\d+)\b").search(s)
         m_tail = re.compile(r"\btail=([+-]?\d+)\b").search(s)
@@ -235,23 +335,36 @@ sort=<тип> head=<N> tail=<M>
             try:
                 head_value = int(m_head.group(1))
                 if head_value < 0:
-                    head_value = default_head
+                    head_value = -1  # сигнал "некорректно" -> показать все
             except ValueError:
-                head_value = default_head
+                head_value = -1
         else:
-            head_value = default_head
+            head_value = 0
 
         if m_tail:
             try:
                 tail_value = int(m_tail.group(1))
                 if tail_value < 0:
-                    tail_value = default_tail
+                    tail_value = -1  # сигнал "некорректно" -> показать все
             except ValueError:
-                tail_value = default_tail
+                tail_value = -1
         else:
-            tail_value = default_tail
+            tail_value = 0
 
-        return self.Params(sort=sort_value, head=head_value, tail=tail_value)
+        # поиск флага sum/summary
+        m_totals = re.compile(r"\b(sum|summary)=([^\s]+)\b", re.IGNORECASE).search(s)
+        show_totals = False
+        if m_totals:
+            v = m_totals.group(2).lower()
+            show_totals = v in {"1", "true", "yes", "y", "on", "да", "истина"}
+
+        return self.Params(
+            sort=sort_value,
+            metric=metric_value,
+            head=head_value,
+            tail=tail_value,
+            show_totals=show_totals
+        )
     
 
     def __make_index_range(self, elements_size: int, head: int = 0, tail: int = 0) -> List[int]:
@@ -264,16 +377,16 @@ sort=<тип> head=<N> tail=<M>
         Поведение при краевых ситуациях:
         - Если elements_size 0 -> вернём [].
         - Если head < 0 или tail < 0 -> некорректный ввод -> вернём все индексы.
-        - Если head == 0 and tail == 0 -> вернём все индексы.
+        - Если head == 0 and tail == 0 -> вернём [] (ничего не выводим).
         - Если head + tail >= len(elements) -> диапазоны пересекаются или покрывают всё -> вернём все индексы.
         Возвращаемые индексы — 1-based.
         """
         if elements_size == 0:
             return []
 
-        # Оба равны 0 -> вернуть все
+        # Оба равны 0 -> ничего не показываем
         if head == 0 and tail == 0:
-            return list(range(1, elements_size + 1))
+            return []
 
         # Если передали отрицательные значения — считаем ввод некорректным -> вернуть все индексы
         if head < 0 or tail < 0:

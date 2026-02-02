@@ -25,10 +25,8 @@ class Config(BaseModel):
     telegram_max_message_length: int = Field(default=3000)
 
     # Системные настройки
-    work_user: str = Field(default="")
     wireguard_folder: str = Field(default="")
     wireguard_config_filepath: str = Field(default="")
-    wireguard_log_filepath: str = Field(default="")
     system_names: List[str] = Field(default_factory=list)
 
     # Регулярное выражение для разрешённых символов

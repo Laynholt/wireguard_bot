@@ -1,14 +1,18 @@
 import os
 import re
-import pwd
-from typing import List, Literal
+from typing import List, Literal, Optional, Dict, Any
 import zipfile
 import ipaddress
 from enum import Enum
+import json
+import shutil
+import tempfile
+from datetime import datetime
+
+from . import wg_db
 
 from ..core import config
 from . import utils
-from . import stats
 
 
 class UserModifyType(Enum):
@@ -43,9 +47,77 @@ def __get_key(filename: str) -> str:
     except IOError:
         print(f'Не удалось открыть файл [{filename}] для чтения ключа!')
         return ''
+
+
+def migrate_legacy_users_to_db() -> None:
+    """
+    Мигрирует пользователей из старой структуры папок в SQLite.
+    - Читает legacy stats.json (если есть) для списка имён.
+    - Собирает ключи из /config/<user>/public|private|preshared files.
+    - created_at берётся из ctime папки.
+    - Если миграция успешна, удаляет папку пользователя.
+    - Пропускает пользователей, у которых нет ключей или папки.
+    """
+    wg_db.init_db()
+
+    legacy_stats: Dict[str, Any] = {}
+    # legacy_stats ранее брались из файла логов, которого теперь нет
+
+    base_dir = os.path.join(config.wireguard_folder, "config")
+    entries = [
+        d for d in os.listdir(base_dir)
+        if d not in config.system_names and os.path.isdir(os.path.join(base_dir, d))
+    ]
+
+    usernames = {name.lstrip("+") for name in entries}.union(set(legacy_stats.keys()))
+
+    for username in usernames:
+        folder = os.path.join(base_dir, username)
+        commented_folder = os.path.join(base_dir, f"+{username}")
+        folder_path = None
+        commented_flag = 0
+        if os.path.isdir(folder):
+            folder_path = folder
+        elif os.path.isdir(commented_folder):
+            folder_path = commented_folder
+            commented_flag = 1
+        if folder_path is None:
+            continue
+
+        priv_path = os.path.join(folder_path, f"privatekey-{username}")
+        pub_path = os.path.join(folder_path, f"publickey-{username}")
+        psk_path = os.path.join(folder_path, f"presharedkey-{username}")
+
+        if not (os.path.exists(priv_path) and os.path.exists(pub_path) and os.path.exists(psk_path)):
+            continue
+
+        private_key = __get_key(priv_path)
+        public_key = __get_key(pub_path)
+        preshared_key = __get_key(psk_path)
+
+        created_at = datetime.fromtimestamp(os.path.getctime(folder_path)).isoformat()
+        stats_blob = legacy_stats.get(username)
+        stats_json = json.dumps(stats_blob, ensure_ascii=False) if isinstance(stats_blob, dict) else None
+        allowed_ip = _get_allowed_ip_from_config(username)
+
+        wg_db.upsert_user(
+            name=username,
+            private_key=private_key,
+            public_key=public_key,
+            preshared_key=preshared_key,
+            created_at=created_at,
+            commented=commented_flag,
+            allowed_ip=allowed_ip,
+            stats_json=stats_json,
+        )
+
+        try:
+            shutil.rmtree(folder_path)
+        except Exception:
+            pass
     
 
-def __error_exit(user_name: str) -> None:
+def __error_exit() -> None:
     """
     Обрабатывает ошибочные ситуации и выполняет откат изменений.
 
@@ -53,15 +125,8 @@ def __error_exit(user_name: str) -> None:
         user_name (str): Имя пользователя.
     """
     filename = config.wireguard_config_filepath
-    command = (
-        f'docker exec wireguard bash -c "' 
-        f'rm -r /config/{user_name}'
-    )
-    utils.run_command(command).return_with_print()
-
     if os.path.exists(f'{filename}.bak'):
         utils.run_command(f'mv {filename}.bak {filename}').return_with_print()
-
     print(f'[{50*"-"}]\n')
 
 
@@ -90,6 +155,39 @@ def __get_next_available_ip() -> utils.FunctionResult:
         return utils.FunctionResult(status=False, description='Все IP-адреса в диапазоне заняты!')
     except IOError:
         return utils.FunctionResult(status=False, description=f'Не удалось открыть файл [{filename}] для анализа IP-адресов!')
+
+
+def __generate_keys() -> utils.FunctionResult:
+    """
+    Генерирует private/public/preshared keys через docker exec wireguard.
+    """
+    try:
+        priv_res = utils.run_command("docker exec wireguard wg genkey")
+        if not priv_res.status:
+            return priv_res
+        private_key = priv_res.description.strip()
+
+        pub_res = utils.run_command(f"echo {private_key} | docker exec -i wireguard wg pubkey")
+        if not pub_res.status:
+            return pub_res
+        public_key = pub_res.description.strip()
+
+        psk_res = utils.run_command("docker exec wireguard wg genpsk")
+        if not psk_res.status:
+            return psk_res
+        preshared_key = psk_res.description.strip()
+
+        return utils.FunctionResult(
+            status=True,
+            description="ok",
+            data={
+                "private": private_key,
+                "public": public_key,
+                "preshared": preshared_key
+            }
+        )
+    except Exception as e:
+        return utils.FunctionResult(status=False, description=f"Ошибка генерации ключей: {e}")
 
 
 def __strip_bad_symbols(username: str) -> str:
@@ -178,64 +276,31 @@ def add_user(user_name: str) -> utils.FunctionResult:
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата или ошибки.
     """
-    # Добавляем папку logs
-    utils.setup_logs_directory()
-
-    names = os.listdir(f'{config.wireguard_folder}/config')
-    print(f'\n[{50*"-"}]')
-
     stripped_user_name = __strip_bad_symbols(user_name)
     if len(user_name) != len(stripped_user_name):
-        return utils.FunctionResult(status=False, description=f'Имя пользователя может состоять только из латинских символов и цифр!').return_with_print(
+        return utils.FunctionResult(status=False, description='Имя пользователя может состоять только из латинских символов и цифр!').return_with_print(
             add_to_print=f'[{50*"-"}]\n')
-    
-    user_name_commented = f'+{user_name}'
 
-    if user_name in names or user_name_commented in names:
+    if wg_db.get_user(user_name) is not None:
         return utils.FunctionResult(status=False, description=f'Имя [{user_name}] уже существует!').return_with_print(
             add_to_print=f'[{50*"-"}]\n')
 
     try:
-        print(f'Введенное имя успешно обработано и получено: {user_name}.')
         print(f'Создаю ключи для [{user_name}]...')
+        key_res = __generate_keys()
+        if not key_res.status:
+            return key_res.return_with_print()
+        keys = key_res.data or {}
 
-        command = (
-            f'docker exec wireguard bash -c "' 
-            f'mkdir -m 777 /config/{user_name} && ' 
-            f'wg genkey | tee /config/{user_name}/privatekey-{user_name} | ' 
-            f'wg pubkey | tee /config/{user_name}/publickey-{user_name} && ' 
-            f'wg genpsk | tee /config/{user_name}/presharedkey-{user_name}"'
-        )
-        utils.run_command(command).return_with_print()
-
-        print(f'Ключи для [{user_name}] созданы!')
-
-        user_public_key = __get_key(f'{config.wireguard_folder}/config/{user_name}/publickey-{user_name}')
-        if not user_public_key:
-            return utils.FunctionResult(status=False,
-                                  description=f'Публичный ключ пользователя [{user_name}] пуст!').return_with_print(
-                                      error_handler=lambda: __error_exit(user_name))
-
-        user_preshared_key = __get_key(f'{config.wireguard_folder}/config/{user_name}/presharedkey-{user_name}')
-        if not user_preshared_key:
-            return utils.FunctionResult(status=False,
-                                  description=f'Предварительный общий ключ пользователя [{user_name}] пуст!').return_with_print(
-                                      error_handler=lambda: __error_exit(user_name))
-            
-        user_private_key = __get_key(f'{config.wireguard_folder}/config/{user_name}/privatekey-{user_name}')
-        if not user_private_key:
-            return utils.FunctionResult(status=False, description=f'Приватный ключ пользователя [{user_name}] пуст!').return_with_print(
-                                      error_handler=lambda: __error_exit(user_name))
-
-        server_public_key = __get_key(f'{config.wireguard_folder}/config/server/publickey-server')
+        server_public_key = _get_server_public_key()
         if not server_public_key:
             return utils.FunctionResult(status=False, description='Публичный ключ сервера пуст!').return_with_print(
-                                      error_handler=lambda: __error_exit(user_name))
+                error_handler=lambda: __error_exit())
 
         print(f'Добавляю [{user_name}] в конфиг...')
         ip_func_result = __get_next_available_ip()
         if ip_func_result.status is False:
-            return ip_func_result.return_with_print(error_handler=lambda: __error_exit(user_name))
+            return ip_func_result.return_with_print(error_handler=lambda: __error_exit())
         allowed_ip = ip_func_result.description
 
         filename = config.wireguard_config_filepath
@@ -246,98 +311,36 @@ def add_user(user_name: str) -> utils.FunctionResult:
                 file.write(
                     f'[Peer]\n'
                     f'# {user_name}\n'
-                    f'PublicKey = {user_public_key}\n'
-                    f'PresharedKey = {user_preshared_key}\n'
+                    f'PublicKey = {keys["public"]}\n'
+                    f'PresharedKey = {keys["preshared"]}\n'
                     f'AllowedIPs = {allowed_ip}\n\n'
                 )
             print(f'Данные для [{user_name}] добавлены в конфиг!')
         except IOError:
             return utils.FunctionResult(status=False,
                                   description=f'Не удалось открыть файл [{filename}] для добавления [{user_name}] в конфиг!').return_with_print(
-                                      error_handler=lambda: __error_exit(user_name))
+                                      error_handler=lambda: __error_exit())
 
-        print(f'Создаю конфиг пользователя {user_name}...\n')
-        filename = f'{config.wireguard_folder}/config/{user_name}/{user_name}.conf'
-        try:
-            with open(filename, 'w', encoding='utf-8') as file:
-                file.write(
-                    f'[Interface]\n'
-                    f'Address = {allowed_ip}\n'
-                    f'PrivateKey = {user_private_key}\n'
-                    # f'ListenPort = 51820\n'
-                    f'DNS = {__get_dsn_server_ip()}\n\n'
-                    f'[Peer]\n'
-                    f'PublicKey = {server_public_key}\n'
-                    f'PresharedKey = {user_preshared_key}\n'
-                    f'Endpoint = {config.server_ip}:{config.server_port}\n'
-                    f'AllowedIPs = 0.0.0.0/0\n'
-                    # f'PersistentKeepalive = 30\n'
-                )
-        except IOError:
-            return utils.FunctionResult(status=False,
-                                  description=f'Не удалось открыть файл [{filename}] для записи конфига для [{user_name}]!').return_with_print(
-                                      error_handler=lambda: __error_exit(user_name))
-        
-        command = (
-            f'docker exec wireguard bash -c "' 
-            f'qrencode -t png -o /config/{user_name}/{user_name}.png -r /config/{user_name}/{user_name}.conf"'
+        # Сохраняем в БД
+        wg_db.upsert_user(
+            name=user_name,
+            private_key=keys["private"],
+            public_key=keys["public"],
+            preshared_key=keys["preshared"],
+            created_at=datetime.utcnow().isoformat(),
+            commented=0,
+            allowed_ip=allowed_ip,
+            stats_json=None,
         )
-        utils.run_command(command).return_with_print()
 
         utils.backup_config()
 
-        print(f'Вывожу конфиг пользователя {user_name}:\n')
-        command = (
-            f'cat {config.wireguard_folder}/config/{user_name}/{user_name}.conf &&' 
-            f'docker exec wireguard bash -c "' 
-            f'qrencode -t ansiutf8 < /config/{user_name}/{user_name}.conf ;' 
-            f'rm /config/wg_confs/wg0.conf.bak"'
-        )
-        utils.run_command(command).return_with_print()
-
-        print(f'Меняю параметры доступа на 700 и владельца на {config.work_user}.')
-        
-        # Получение UID и GID пользователя WORK_USER
-        user_info = pwd.getpwnam(config.work_user) # type: ignore
-        uid = user_info.pw_uid
-        gid = user_info.pw_gid
-
-        utils.run_command(
-            f'docker exec wireguard bash -c "'
-            f'chmod 700 /config/{user_name} && '
-            f'chown -R {uid}:{gid} /config/{user_name}"'
-        ).return_with_print()
-
         return utils.FunctionResult(status=True, description=f'Пользователь [{user_name}] успешно добавлен!').return_with_print(
             add_to_print=f'[{50*"-"}]\n')
-    
+
     except KeyboardInterrupt:
         return utils.FunctionResult(status=False, description='Было вызвано прерывание (Ctrl+C).').return_with_print(
-            error_handler=lambda: __error_exit(user_name))
-    
-
-def __remove_user_folder(user_name: str, user_state: UserState) -> utils.FunctionResult:
-    """
-    Удаляет папку конфигурации указанного пользователя.
-
-    Args:
-        user_name (str): Имя пользователя, чья папка конфигурации должна быть удалена.
-        user_state (UserState): Статус имени пользователя (COMMENTED или UNCOMMENTED).
-
-    Returns:
-        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
-    """
-    folder_name = user_name if user_state == UserState.UNCOMMENTED else f'+{user_name}'
-    folder_path = os.path.join(f'{config.wireguard_folder}/config', folder_name)
-
-    if os.path.exists(folder_path):
-        try:
-            utils.run_command(f'rm -r {folder_path}').return_with_print()
-            return utils.FunctionResult(status=True, description=f'Папка для [{user_name}] удалена!')
-        except Exception as e:
-            return utils.FunctionResult(status=False, description=f'Ошибка при удалении папки для [{user_name}]: {e}')
-    else:
-        return utils.FunctionResult(status=False, description=f'Папка для [{user_name}] не найдена.')
+            error_handler=lambda: __error_exit())
 
 
 def __remove_user_from_config(user_name: str) -> utils.FunctionResult:
@@ -381,57 +384,6 @@ def __remove_user_from_config(user_name: str) -> utils.FunctionResult:
                                   description=f'Не удалось открыть файл [{filename}] для редактирования.')
 
 
-def __remove_user_from_logs(user_name: str) -> utils.FunctionResult:
-    """
-    Удаляет информацию о пользователе из файла логов WireGuard.
-
-    Args:
-        user_name (str): Имя пользователя, чьи данные должны быть удалены из файла логов WireGuard.
-
-    Returns:
-        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
-    """
-    # Загружаем логи
-    logs_data = stats.read_data_from_json(config.wireguard_log_filepath)
-    
-    # Удаляем пользователя из логов
-    if user_name in logs_data:
-        del logs_data[user_name]
-        
-        # Перезаписываем лог
-        stats.write_data_to_json(config.wireguard_log_filepath, logs_data)
-        return utils.FunctionResult(status=False,
-                                    description=f'Пользователь [{user_name}] успешно удален из логов.')
-    else:
-        return utils.FunctionResult(status=False,
-                                    description=f'Пользователь [{user_name}] отсутствует в файле логов.')
-        
-
-def __change_folder_state(user_name: str, action_type: ActionType) -> utils.FunctionResult:
-    """
-    Меняет состояние папки конфигурации пользователя (добавляет или удаляет префикс '+').
-
-    Args:
-        user_name (str): Имя пользователя, чья папка конфигурации должна быть перемещена.
-        action_type (ActionType): Тип действия (COMMENT или UNCOMMENT), определяющий, нужно ли добавить или удалить префикс '+'.
-
-    Returns:
-        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
-    """
-    old_folder = f'{config.wireguard_folder}/config/+{user_name}' if action_type == ActionType.UNCOMMENT else f'{config.wireguard_folder}/config/{user_name}'
-    new_folder = f'{config.wireguard_folder}/config/+{user_name}' if action_type == ActionType.COMMENT else f'{config.wireguard_folder}/config/{user_name}'
-    
-    if os.path.exists(old_folder):
-        try:
-            utils.run_command(f'mv {old_folder} {new_folder}').return_with_print()
-            action_text = 'раскомментирована' if action_type == ActionType.UNCOMMENT else 'закомментирована'
-            return utils.FunctionResult(status=True, description=f'Папка для [{user_name}] успешно {action_text}.')
-        except Exception as e:
-            return utils.FunctionResult(status=False, description=f'Ошибка при изменении состояния папки для [{user_name}]: {e}')
-    else:
-        return utils.FunctionResult(status=False, description=f'Папка для [{user_name}] не найдена.')
-
-
 def __comment_uncomment_in_config(user_name: str, action_type: ActionType) -> utils.FunctionResult:
     """
     Комментирует или раскомментирует блок пользователя в конфигурационном файле.
@@ -464,14 +416,14 @@ def __comment_uncomment_in_config(user_name: str, action_type: ActionType) -> ut
 
             with open(filename, 'w', encoding='utf-8') as file:
                 file.writelines(lines)
-
+            
             action = 'закомментированы' if action_type == ActionType.COMMENT else 'раскомментированы'
             return utils.FunctionResult(status=True, description=f'Данные для [{user_name}] были {action} в конфиге.')
         else:
             return utils.FunctionResult(status=False, description=f"Пользователь с именем [{user_name}] не найден в конфиге.")
     except IOError:
         return utils.FunctionResult(status=True, description=f'Ошибка при открытии файла [{filename}] для изменения данных [{user_name}]!')
-
+    
 
 def __modify_user(user_name: str, modify_type: UserModifyType) -> utils.FunctionResult:
     """
@@ -483,8 +435,6 @@ def __modify_user(user_name: str, modify_type: UserModifyType) -> utils.Function
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
     """
-    names = os.listdir(f'{config.wireguard_folder}/config')
-
     print(f'\n[{50 * "-"}]')
 
     stripped_user_name = __strip_bad_symbols(user_name)
@@ -493,39 +443,31 @@ def __modify_user(user_name: str, modify_type: UserModifyType) -> utils.Function
                               description=f'Имя пользователя может состоять только из латинских символов и цифр!').return_with_print(
                                   add_to_print=f'[{50*"-"}]\n')
 
-    user_name_commented = f'+{user_name}'
-
     if user_name in config.system_names:
         return utils.FunctionResult(status=False, description='Изменение системной папки запрещено!').return_with_print(
             add_to_print=f'[{50 * "-"}]\n'
         )
 
-    if modify_type == UserModifyType.REMOVE:
-        com_uncom_var = UserState.UNCOMMENTED if user_name in names else UserState.COMMENTED if user_name_commented in names else None
-    elif modify_type == UserModifyType.COMMENT_UNCOMMENT:
-        com_uncom_var = ActionType.COMMENT if user_name in names else ActionType.UNCOMMENT if user_name_commented in names else None
-
-    if com_uncom_var is None:
-        return utils.FunctionResult(status=False, description=f'Пользователя с именем [{user_name}] не существует.').return_with_print(
+    db_row = wg_db.get_user(user_name)
+    if db_row is None:
+        return utils.FunctionResult(status=False, description=f'Пользователь [{user_name}] не найден.').return_with_print(
             add_to_print=f'[{50 * "-"}]\n'
         )
-    
-    if modify_type == UserModifyType.REMOVE:
-        print(f'Удаляю папку конфигурации для [{user_name}]...')
-        __remove_user_folder(user_name, com_uncom_var).return_with_print() # type: ignore
-    elif modify_type == UserModifyType.COMMENT_UNCOMMENT:
-        text = 'Комментирую' if com_uncom_var == ActionType.COMMENT else 'Раскомментирую'
-        print(f'{text} папку конфигурации для [{user_name}]...')
-        __change_folder_state(user_name, com_uncom_var).return_with_print() # type: ignore
 
+    if modify_type == UserModifyType.REMOVE:
+        com_uncom_var = UserState.UNCOMMENTED
+    else:
+        com_uncom_var = ActionType.COMMENT if db_row["commented"] == 0 else ActionType.UNCOMMENT
+    
     if modify_type == UserModifyType.REMOVE:
         print(f'Удаляю [{user_name}] из конфига сервера...')
         ret_val = __remove_user_from_config(user_name).return_with_print()
-        __remove_user_from_logs(user_name).return_with_print()
+        wg_db.remove_user(user_name)
     elif modify_type == UserModifyType.COMMENT_UNCOMMENT:
         text = 'Комментирую' if com_uncom_var == ActionType.COMMENT else 'Раскомментирую'
         print(f'{text} [{user_name}] в конфиге сервера...')
         ret_val = __comment_uncomment_in_config(user_name, com_uncom_var).return_with_print() # type: ignore
+        wg_db.set_commented(user_name, 1 if com_uncom_var == ActionType.COMMENT else 0)
 
     if ret_val.status is True:
         utils.backup_config()
@@ -577,15 +519,24 @@ def print_user_qrcode(user_name: str) -> utils.FunctionResult:
     if ret_val.status is False:
         return ret_val.return_with_print(add_to_print=f'[{50 * "-"}]\n')
 
-    if not os.path.exists(f'{config.wireguard_folder}/config/{user_name}/{user_name}.conf'):
-        return utils.FunctionResult(status=False,
-                              description=f"Пользователь с именем [{user_name}] был некорректно создан и не имеет конфигурационного файла!")
-    
-    command = (
-        f'docker exec wireguard bash -c "'
-        f'qrencode -t ansiutf8 < /config/{user_name}/{user_name}.conf"'
-    )
+    conf_res = generate_temp_conf(user_name)
+    if not conf_res.status:
+        return conf_res.return_with_print(add_to_print=f'[{50 * "-"}]\n')
+
+    tmp_remote = f"/tmp/{user_name}.conf"
+    copy_to = utils.run_command(f"docker cp {conf_res.description} wireguard:{tmp_remote}")
+    if not copy_to.status:
+        return copy_to.return_with_print(add_to_print=f'[{50 * "-"}]\n')
+
+    command = f'docker exec wireguard bash -c "qrencode -t ansiutf8 < {tmp_remote}"'
     utils.run_command(command).return_with_print()
+
+    utils.run_command(f'docker exec wireguard rm -f {tmp_remote}')
+
+    try:
+        os.remove(conf_res.description)
+    except Exception:
+        pass
 
     return utils.FunctionResult(status=True, description=f"\nQrCode для [{user_name}] успешно отрисован.").return_with_print(
             add_to_print=f'[{50 * "-"}]\n'
@@ -605,11 +556,8 @@ def check_user_qr_code_exists(user_name: str) -> utils.FunctionResult:
     if ret_val.status is False:
         return ret_val
 
-    if not os.path.exists(f'{config.wireguard_folder}/config/{user_name}/{user_name}.png'):
-        return utils.FunctionResult(status=False,
-                              description=f"QR-кода для пользователя с именем [{user_name}] не существует.")
-    
-    return utils.FunctionResult(status=True, description=f"QR-код для пользователя с именем [{user_name}] найден.")
+    # QR теперь генерируется на лету, поэтому наличие файла не проверяем
+    return utils.FunctionResult(status=True, description=f"QR-код для пользователя с именем [{user_name}] может быть сгенерирован.")
 
 
 def check_user_exists(user_name: str) -> utils.FunctionResult:
@@ -622,21 +570,103 @@ def check_user_exists(user_name: str) -> utils.FunctionResult:
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
     """
-    names = os.listdir(f'{config.wireguard_folder}/config')
-    
-    stripped_user_name = __strip_bad_symbols(user_name)
-    if len(user_name) != len(stripped_user_name):
-        return utils.FunctionResult(status=False, description=f'Имя пользователя может состоять только из латинских символов и цифр!')
-    
-    user_name_commented = f'+{user_name}'
-
-    if user_name in config.system_names:
-        return utils.FunctionResult(status=False, description=f'Имя пользователя [{user_name}] совпадает с названием системной папки!')
-
-    if user_name not in names and user_name_commented not in names:
+    wg_db.init_db()
+    row = wg_db.get_user(user_name)
+    if row is None:
         return utils.FunctionResult(status=False, description=f"Пользователь с именем [{user_name}] не найден.")
-
     return utils.FunctionResult(status=True, description=f"Пользователь [{user_name}] найден.")
+
+
+def _get_user_keys_from_db(user_name: str) -> Optional[Dict[str, str]]:
+    wg_db.init_db()
+    row = wg_db.get_user(user_name)
+    if row is None:
+        return None
+    return {
+        "private": row["private_key"],
+        "public": row["public_key"],
+        "preshared": row["preshared_key"],
+        "commented": row["commented"],
+        "created_at": row["created_at"],
+        "allowed_ip": row["allowed_ip"],
+    }
+
+
+def _get_server_public_key() -> Optional[str]:
+    path = os.path.join(config.wireguard_folder, "config", "server", "publickey-server")
+    if not os.path.exists(path):
+        return None
+    return __get_key(path)
+
+
+def generate_temp_conf(user_name: str) -> utils.FunctionResult:
+    """
+    Генерирует временный .conf для пользователя из БД, возвращает путь.
+    """
+    keys = _get_user_keys_from_db(user_name)
+    if keys is None:
+        return utils.FunctionResult(status=False, description=f"Пользователь [{user_name}] не найден в БД.")
+    allowed_ip = keys.get("allowed_ip")
+    if allowed_ip is None:
+        return utils.FunctionResult(status=False, description=f"Не найден AllowedIP для [{user_name}] в базе. Обновите запись пользователя.")
+    server_public = _get_server_public_key()
+    if server_public is None:
+        return utils.FunctionResult(status=False, description="Не найден публичный ключ сервера.")
+
+    conf_content = (
+        f"[Interface]\n"
+        f"Address = {allowed_ip}\n"
+        f"PrivateKey = {keys['private']}\n"
+        f"DNS = {__get_dsn_server_ip()}\n\n"
+        f"[Peer]\n"
+        f"PublicKey = {server_public}\n"
+        f"PresharedKey = {keys['preshared']}\n"
+        f"Endpoint = {config.server_ip}:{config.server_port}\n"
+        f"AllowedIPs = 0.0.0.0/0\n"
+    )
+
+    path = os.path.join(tempfile.gettempdir(), f"{user_name}.conf")
+    try:
+        os.remove(path)
+    except Exception:
+        pass
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(conf_content)
+    return utils.FunctionResult(status=True, description=path)
+
+
+def generate_temp_qr(user_name: str, conf_path: str) -> utils.FunctionResult:
+    """
+    Генерирует временный png с QR, используя docker exec qrencode.
+    """
+    tmp_remote = f"/tmp/{user_name}.conf"
+    tmp_png_remote = f"/tmp/{user_name}.png"
+
+    # Копируем конфиг в контейнер
+    copy_to = utils.run_command(f"docker cp {conf_path} wireguard:{tmp_remote}")
+    if not copy_to.status:
+        return copy_to
+
+    qr_cmd = (
+        f'docker exec wireguard bash -c "qrencode -t png -o {tmp_png_remote} -r {tmp_remote}"'
+    )
+    qr_ret = utils.run_command(qr_cmd)
+    if not qr_ret.status:
+        return qr_ret
+
+    png_local = os.path.join(tempfile.gettempdir(), f"{user_name}.png")
+    try:
+        os.remove(png_local)
+    except Exception:
+        pass
+    copy_back = utils.run_command(f"docker cp wireguard:{tmp_png_remote} {png_local}")
+    if not copy_back.status:
+        return copy_back
+
+    # Чистим в контейнере
+    utils.run_command(f'docker exec wireguard rm -f {tmp_remote} {tmp_png_remote}')
+
+    return utils.FunctionResult(status=True, description=png_local)
 
 
 def create_zipfile(user_name: str) -> utils.FunctionResult:
@@ -650,36 +680,47 @@ def create_zipfile(user_name: str) -> utils.FunctionResult:
         utils.FunctionResult: Объект, содержащий статус выполнения и путь к созданному Zip файлу в описание результата.
     """
     try:
-        print(f'\n[{50*"-"}]')
-        zip_file_path = f'{config.wireguard_folder}/config/{user_name}/{user_name}.zip'
-        with zipfile.ZipFile(zip_file_path, 'w') as zipf:
-            png_path = f'{config.wireguard_folder}/config/{user_name}/{user_name}.png'
-            conf_path = f'{config.wireguard_folder}/config/{user_name}/{user_name}.conf'
-            if os.path.exists(png_path):
-                zipf.write(png_path, arcname=f'{user_name}.png')
-            if os.path.exists(conf_path):
-                zipf.write(conf_path, arcname=f'{user_name}.conf')
-        return utils.FunctionResult(status=True, description=zip_file_path).return_with_print()
-    except:
-        return utils.FunctionResult(status=False, description=f'Не удалось создать Zip файл для [{user_name}].').return_with_print(add_to_print=f'[{50*"-"}]\n')
+        conf_result = generate_temp_conf(user_name)
+        if conf_result.status is False:
+            return conf_result
+        qr_result = generate_temp_qr(user_name, conf_result.description)
+        if qr_result.status is False:
+            try:
+                os.remove(conf_result.description)
+            except Exception:
+                pass
+            return qr_result
+
+        zip_path = os.path.join(tempfile.gettempdir(), f"{user_name}.zip")
+        try:
+            os.remove(zip_path)
+        except Exception:
+            pass
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            zipf.write(conf_result.description, arcname=f'{user_name}.conf')
+            zipf.write(qr_result.description, arcname=f'{user_name}.png')
+
+        # очистка временных файлов
+        for tmp in (conf_result.description, qr_result.description):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+
+        return utils.FunctionResult(status=True, description=zip_path)
+    except Exception as e:
+        return utils.FunctionResult(status=False, description=f'Не удалось создать Zip файл для [{user_name}]: {e}')
 
 
 def remove_zipfile(user_name: str) -> None:
     """
-    Удаляет созданный Zip файл для переданного пользователя.
-
-    Args:
-        user_name (str): Имя пользователя Wireguard.
+    Удаляет временный zip для пользователя из системного temp.
     """
+    zip_path = os.path.join(tempfile.gettempdir(), f"{user_name}.zip")
     try:
-        zip_file_path = f'{config.wireguard_folder}/config/{user_name}/{user_name}.zip'
-        if os.path.exists(zip_file_path):
-            os.remove(zip_file_path)
-            print(f'Zip файл для [{user_name}] успешно удалён.')
-    except:
-        print(f'Не удалось удалить Zip файл для [{user_name}].')
-    finally:
-        print(f'[{50*"-"}]\n')
+        os.remove(zip_path)
+    except Exception:
+        pass
 
 
 def get_qrcode_path(user_name: str) -> utils.FunctionResult:
@@ -692,11 +733,15 @@ def get_qrcode_path(user_name: str) -> utils.FunctionResult:
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и путь к файлу Qr-кода в описание результата.
     """
-    print(f'\n[{50*"-"}]')
-    png_path = f'{config.wireguard_folder}/config/{user_name}/{user_name}.png'
-    if os.path.exists(png_path):
-        return utils.FunctionResult(status=True, description=png_path).return_with_print(add_to_print=f'[{50*"-"}]\n')
-    return utils.FunctionResult(status=False, description=f'Не удалось найти файл Qr-кода для [{user_name}].').return_with_print(add_to_print=f'[{50*"-"}]\n')
+    conf_result = generate_temp_conf(user_name)
+    if conf_result.status is False:
+        return conf_result
+    qr_result = generate_temp_qr(user_name, conf_result.description)
+    try:
+        os.remove(conf_result.description)
+    except Exception:
+        pass
+    return qr_result
 
 
 def get_usernames() -> List[str]:
@@ -706,7 +751,8 @@ def get_usernames() -> List[str]:
     Returns:
         list: Список имен конфигов всех пользователей Wireguard
     """
-    return [__strip_bad_symbols(user_name) for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names]
+    wg_db.init_db()
+    return [name for name, _ in wg_db.list_users()]
 
 
 def get_active_usernames() -> List[str]:
@@ -716,7 +762,8 @@ def get_active_usernames() -> List[str]:
     Returns:
         list: Список имен конфигов активных пользователей Wireguard
     """
-    return [user_name for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names and '+' not in user_name]
+    wg_db.init_db()
+    return [name for name, commented in wg_db.list_users() if not commented]
 
 
 def get_inactive_usernames() -> List[str]:
@@ -726,7 +773,8 @@ def get_inactive_usernames() -> List[str]:
     Returns:
         list: Список имен конфигов отключенных пользователей Wireguard
     """
-    return [user_name[1:] for user_name in os.listdir(f'{config.wireguard_folder}/config') if user_name not in config.system_names and '+' in user_name]
+    wg_db.init_db()
+    return [name for name, commented in wg_db.list_users() if commented]
 
 
 def is_username_commented(user_name: str) -> bool:
@@ -739,7 +787,11 @@ def is_username_commented(user_name: str) -> bool:
     Returns:
         bool: True - закомментирован, иначе False.
     """
-    return user_name in get_usernames() and user_name in get_inactive_usernames()
+    wg_db.init_db()
+    row = wg_db.get_user(user_name)
+    if row is None:
+        return False
+    return bool(row["commented"])
 
 
 def sanitize_string(string: str) -> str:
@@ -755,12 +807,9 @@ def sanitize_string(string: str) -> str:
     return string.strip().translate(str.maketrans('', '', ",;"))
 
 
-def add_torrent_blocking(backup: bool=True) -> utils.FunctionResult:
+def add_torrent_blocking() -> utils.FunctionResult:
     """
     Обновляет конфигурацию WireGuard, заменяя базовые правила на правила с блокировкой торрентов.
-    
-    Args:
-        backup (bool): Создать резервную копию перед изменением
     
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
@@ -772,20 +821,6 @@ def add_torrent_blocking(backup: bool=True) -> utils.FunctionResult:
             status=False,
             description=f"❌ Файл {config.wireguard_config_filepath} не найден!"
         )
-    
-    # Создаем резервную копию
-    if backup:
-        backup_path = f"{config.wireguard_config_filepath}.backup"
-        try:
-            with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as src, \
-                 open(backup_path, 'w', encoding='utf-8') as dst:
-                dst.write(src.read())
-            print(f"✅ Резервная копия создана: {backup_path}")
-        except Exception as e:
-            return utils.FunctionResult(
-                status=False,
-                description=f"❌ Ошибка создания резервной копии: {e}"
-            )
     
     # Читаем конфигурацию
     try:
@@ -857,41 +892,10 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
             description=f"❌ Ошибка записи файла: {e}"
         )
 
-def restore_backup() -> utils.FunctionResult:
-    """
-    Восстанавливает конфигурацию из резервной копии.
-      
-    Returns:
-        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
-    """
-    backup_path = f"{config.wireguard_config_filepath}.backup"
-    
-    if not os.path.exists(backup_path):
-        return utils.FunctionResult(
-            status=False,
-            description=f"❌ Резервная копия {backup_path} не найдена!"
-        )
-    
-    try:
-        with open(backup_path, 'r', encoding='utf-8') as src, \
-             open(config.wireguard_config_filepath, 'w', encoding='utf-8') as dst:
-            dst.write(src.read())
-        return utils.FunctionResult(
-            status=True,
-            description=f"✅ Конфигурация восстановлена из резервной копии"
-        )
-    except Exception as e:
-        return utils.FunctionResult(
-            status=False,
-            description=f"❌ Ошибка восстановления: {e}"
-        )
 
-def remove_torrent_blocking(backup: bool=True) -> utils.FunctionResult:
+def remove_torrent_blocking() -> utils.FunctionResult:
     """
     Удаляет правила блокировки торрентов, возвращая к базовым правилам WireGuard.
-    
-    Args:
-        backup (bool): Создать резервную копию перед изменением
     
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
@@ -903,20 +907,6 @@ def remove_torrent_blocking(backup: bool=True) -> utils.FunctionResult:
             status=False,
             description=f"❌ Файл {config.wireguard_config_filepath} не найден!"
         )
-    
-    # Создаем резервную копию
-    if backup:
-        backup_path = f"{config.wireguard_config_filepath}.backup"
-        try:
-            with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as src, \
-                 open(backup_path, 'w', encoding='utf-8') as dst:
-                dst.write(src.read())
-            print(f"✅ Резервная копия создана: {backup_path}")
-        except Exception as e:
-            return utils.FunctionResult(
-                status=False,
-                description=f"❌ Ошибка создания резервной копии: {e}"
-            )
     
     # Читаем конфигурацию
     try:

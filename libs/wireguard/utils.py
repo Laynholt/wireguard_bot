@@ -30,7 +30,7 @@ def run_command(command: str) -> FunctionResult:
 
 def backup_config() -> None:
     """
-    Создает резервную копию конфигурационного файла WireGuard
+    Создает резервную копию конфигурационного файла WireGuard и базы wg_users.db
     """
     try:
         os.makedirs(f'{config.wireguard_folder}/config/wg_confs_backup', exist_ok=True)
@@ -38,52 +38,28 @@ def backup_config() -> None:
             f'cp {config.wireguard_config_filepath}'
             f' {config.wireguard_folder}/config/wg_confs_backup/wg0.conf'
         ).return_with_print()
+        # Бэкап базы пользователей
+        db_src = f'{config.wireguard_folder}/config/wg_users.db'
+        db_dst = f'{config.wireguard_folder}/config/wg_confs_backup/wg_users.db'
+        if os.path.exists(db_src):
+            run_command(f'cp {db_src} {db_dst}').return_with_print()
+            print('Резервная копия базы пользователей создана.')
+        else:
+            print('База пользователей не найдена, пропускаю её бэкап.')
         print('Резервная копия конфига создана.')
     except Exception as e:
         print(f'Ошибка при создании резервной копии: {e}')
 
 
-def setup_logs_directory():
-    """
-    Проверяет, существует ли папка 'logs' в директории 'config'.
-    Если папка не существует, она создается.
-    """
-    log_dir = os.path.dirname(config.wireguard_log_filepath)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)  # Создаем папку, если её нет
-        print(f'Папка {log_dir} создана.')
-    else:
-        print(f'Папка {log_dir} уже существует.')
-
-
 def log_wireguard_status():
     """
-    Накопительно сохраняет статистику WireGuard в JSON-файл.
-
-    Функция:
-      1. Убеждается, что папка для логов (logs) существует.
-      2. Формирует путь к файлу конфигурации (wg0.conf).
-      3. Формирует путь к JSON-файлу для накопительной статистики (stats.json).
-      4. Вызывает функцию `accumulate_wireguard_stats`, которая:
-         - Читает прежние данные из stats.json.
-         - Парсит новый вывод WireGuard (docker exec wireguard wg show wg0).
-         - Суммирует трафик (transfer_received / transfer_sent).
-         - Обновляет поле latest_handshake.
-         - Перезаписывает обновлённые данные в stats.json.
-
-    Returns:
-        None
+    Накопительно сохраняет статистику WireGuard в БД.
     """
-    setup_logs_directory()  # Убедиться, что папка logs существует
-    
-    wireguard_stats = stats.accumulate_wireguard_stats(
+    stats.accumulate_wireguard_stats(
         conf_file_path=config.wireguard_config_filepath,
-        json_file_path=config.wireguard_log_filepath,
         sort_by=stats.SortBy.TRANSFER_SENT
     )
-    
-    stats.write_data_to_json(config.wireguard_log_filepath, wireguard_stats)
-    print(f"[+] Логи Wireguard успешно обновлены и сохранены в [{config.wireguard_log_filepath}]")
+    print(f"[+] Логи Wireguard успешно обновлены и сохранены в базе.")
 
 def log_and_restart_wireguard() -> bool:
     """

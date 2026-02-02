@@ -656,8 +656,8 @@ def __setup_scheduler():
         3. Запускает scheduler
         
     Job Parameters:
-        - Функция: reload_wireguard_server_schedule
-        - Триггер: интервальный (7 дней)
+        - Функция: update_wireguard_stats_schedule
+        - Триггер: интервальный (15 минут)
         - Первый запуск: через 10 секунд после старта
         
     Architecture:
@@ -676,8 +676,8 @@ def __setup_scheduler():
     
     scheduler = AsyncIOScheduler(event_loop=loop)  # Передаём loop явно
     scheduler.add_job(
-        reload_wireguard_server_schedule,
-        trigger=IntervalTrigger(days=7),
+        update_wireguard_stats_schedule,
+        trigger=IntervalTrigger(minutes=15),
         next_run_time=datetime.now() + timedelta(seconds=10)
     )
     scheduler.start()
@@ -685,33 +685,24 @@ def __setup_scheduler():
     loop.run_forever()  # Держим event loop активным
 
 
-async def reload_wireguard_server_schedule():
-    """Периодическая задача для автоматической перезагрузки WireGuard.
+async def update_wireguard_stats_schedule():
+    """Периодическая задача для обновления статистики WireGuard без перезагрузки.
     
-    Features:
-        - Запускается по расписанию через APScheduler
-        - Полностью асинхронная реализация
-        - Интеграция с системой логирования
-        
     Behavior:
-        1. Инициирует перезагрузку через __async_restart_wireguard()
-        2. Логирует результат операции
-        3. Перехватывает и логирует любые исключения
-        
+        1. Асинхронно вызывает log_wireguard_status() в пуле потоков
+        2. Логирует результат/ошибку
+    
     Schedule:
         - Первый запуск: через 10 секунд после старта приложения
-        - Интервал: каждые 7 дней
-        
-    Notes:
-        - Не принимает параметров и не возвращает значений
-        - Для работы требует предварительной настройки планировщика
+        - Интервал: каждые 15 минут
     """
-    logger.info("Запуск автоматической перезагрузки Wireguard...")
+    logger.info("Запуск планового обновления статистики Wireguard...")
+    loop = asyncio.get_running_loop()
     try:
-        success = await wireguard_utils.async_restart_wireguard()
-        logger.info(f"Перезагрузка прошла: {'успешно' if success else 'неудачно'}!")
+        await loop.run_in_executor(None, wireguard_utils.log_wireguard_status)
+        logger.info("Плановое обновление статистики завершено.")
     except Exception as e:
-        logger.error(f"Ошибка в расписании: {str(e)}")
+        logger.error(f"Ошибка при обновлении статистики: {str(e)}")
 
 # ---------------------- Точка входа в приложение ----------------------
 

@@ -51,10 +51,8 @@ cp base_config.json user_config.json
     "telegram_max_concurrent_messages": 5,
     "telegram_max_message_length": 3000,
 
-    "work_user": "user",
     "wireguard_folder": "/home/user/wireguard",
     "wireguard_config_filepath": "/home/user/wireguard/config/wg_confs/wg0.conf",
-    "wireguard_log_filepath": "/home/user/wireguard/config/logs/stats.json",
     "system_names": ["logs", "coredns", "server", "templates", "wg_confs", "wg_confs_backup", ".donoteditthisfile"],
 
     "allowed_username_pattern": "a-zA-Z0-9_"
@@ -116,17 +114,11 @@ cp base_config.json user_config.json
 
 #### Пути к WireGuard и системные настройки
 
-* **`work_user`** — системный пользователь, от имени которого будут выполняться команды
-  (например, `"user"` — должен существовать в системе).
-
 * **`wireguard_folder`** — корневая папка с конфигурацией WireGuard,
   например: `"/home/user/wireguard"`.
 
 * **`wireguard_config_filepath`** — путь к основному конфигу WireGuard-сервера,
   например: `"/home/user/wireguard/config/wg_confs/wg0.conf"`.
-
-* **`wireguard_log_filepath`** — путь к файлу статистики/логов WireGuard,
-  например: `"/home/user/wireguard/config/logs/stats.json"`.
 
 * **`system_names`** — список системных каталогов внутри `wireguard_folder`,
   которые используются сервисом (`logs`, `coredns`, `server`, `templates`, `wg_confs`, `wg_confs_backup`, `.donoteditthisfile` и т.п.) и не должны произвольно изменяться.

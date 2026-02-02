@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 class FunctionResult:
     """
@@ -8,9 +8,10 @@ class FunctionResult:
         status (bool): Статус выполнения операции (успешно или нет).
         description (str): Поясняющая строка, содержащая информацию об ошибке или успехе операции.
     """
-    def __init__(self, status: bool, description: str) -> None:
+    def __init__(self, status: bool, description: str, data: Optional[Any] = None) -> None:
         self.status = status 
         self.description = description
+        self.data = data
 
     def return_with_print(self, error_handler: Optional[Callable[[], None]] = None, add_to_print: str = '') -> 'FunctionResult':
         """
