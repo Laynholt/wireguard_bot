@@ -171,11 +171,11 @@ sort=<тип> metric=<период> head=<N> tail=<M> sum=<yes|no>
                 reverse=parsed_keys.sort == self.SortSequence.DESCENDING
             )
             
-        indexes = self.__make_index_range(
-            len(all_wireguard_stats.items()),
-            head=parsed_keys.head,
-            tail=parsed_keys.tail
-        )
+            indexes = self.__make_index_range(
+                len(all_wireguard_stats.items()),
+                head=parsed_keys.head,
+                tail=parsed_keys.tail
+            )
 
             if parsed_keys.show_totals:
                 total_day_sent = total_day_recv = 0
