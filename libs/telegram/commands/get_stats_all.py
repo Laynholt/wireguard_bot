@@ -57,7 +57,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             await update.message.reply_text(
         """
 ℹ️ Формат ввода (в одну строку):
-sort=<тип> metric=<период> head=<N> tail=<M>
+sort=<тип> metric=<период> head=<N> tail=<M> sum=<yes|no>
 
 Параметры:
 • sort — порядок сортировки. Допустимые значения (без учёта регистра):
@@ -71,22 +71,25 @@ sort=<тип> metric=<период> head=<N> tail=<M>
 — week / weekly / w — трафик за неделю
 — month / monthly / m — трафик за месяц
 
-• head — целое число (≥ 0). Берём первые N элементов. По умолчанию: 0 (не задано).
+• head — целое число (≥ 0). Берём первые N элементов. Значение 0 выводит 0 элементов.
 
-• tail — целое число (≥ 0). Берём последние M элементов. По умолчанию: 0 (не задано).
+• tail — целое число (≥ 0). Берём последние M элементов. Значение 0 выводит 0 элементов.
+
+• sum / summary — показать общую сумму по всем конфигаx за сутки, неделю, месяц и всё время.
+  Допустимые значения: 1/true/yes/y/on/да/истина. По умолчанию: не показывать.
 
 Правила:
 • Параметры могут идти в любом порядке и быть опущены.
 • Если указаны оба head и tail — учитываются оба (например: head=3 tail=2).
-• Если head == 0 и tail == 0 → возвращаются ВСЕ элементы.
+• Если head == 0 и tail == 0 → конфиги не выводятся (только сводка sum, если указана).
 • Если head + tail >= длина_списка (диапазоны перекрываются или покрывают весь список) → возвращаются ВСЕ элементы.
-• При некорректных значениях (отрицательные числа, нецелые, неверный формат) → возвращаются ВСЕ элементы.
+• При некорректных значениях (отрицательные числа, нецелые, неверный формат) → параметры head/tail считаются 0.
 
 Примеры:
 • sort=asc head=5        — первые 5 элементов, сортировка ASCENDING
 • tail=4 sort=desc       — последние 4 элемента, сортировка DESCENDING
-• head=3 tail=2         — первые 3 и последние 2 элемента
-• (пустая строка)       — все элементы (по умолчанию)
+• head=3 tail=2          — первые 3 и последние 2 элемента
+• head=0 tail=0 sum=1    — список не выводится, только общая сводка
 • head=7 tail=5 (len=10) — перекрытие → все элементы
         """
         )
@@ -168,11 +171,11 @@ sort=<тип> metric=<период> head=<N> tail=<M>
                 reverse=parsed_keys.sort == self.SortSequence.DESCENDING
             )
             
-            indexes = self.__make_index_range(
-                len(all_wireguard_stats.items()),
-                head=parsed_keys.head,
-                tail=parsed_keys.tail
-            )
+        indexes = self.__make_index_range(
+            len(all_wireguard_stats.items()),
+            head=parsed_keys.head,
+            tail=parsed_keys.tail
+        )
 
             if parsed_keys.show_totals:
                 total_day_sent = total_day_recv = 0
@@ -202,6 +205,10 @@ sort=<тип> metric=<период> head=<N> tail=<M>
                 await update.message.reply_text(totals_text, parse_mode="HTML")
 
             for i, (wg_user, user_data) in enumerate(items_sorted, start=1):       
+                if not indexes:
+                    # Если индексы пусты (head=0 и tail=0), выводим только сводку sum (если была) и выходим
+                    logger.info("head=0 и tail=0 → список конфигов не выводится.")
+                    break
                 if i not in indexes:
                     continue
             
@@ -345,24 +352,24 @@ sort=<тип> metric=<период> head=<N> tail=<M>
             try:
                 head_value = int(m_head.group(1))
                 if head_value < 0:
-                    head_value = default_head
+                    head_value = 0
             except ValueError:
-                head_value = default_head
+                head_value = 0
         else:
-            head_value = default_head
+            head_value = 0
 
         if m_tail:
             try:
                 tail_value = int(m_tail.group(1))
                 if tail_value < 0:
-                    tail_value = default_tail
+                    tail_value = 0
             except ValueError:
-                tail_value = default_tail
+                tail_value = 0
         else:
-            tail_value = default_tail
+            tail_value = 0
 
-        # поиск флага totals/summary
-        m_totals = re.compile(r"\b(totals|summary)=([^\s]+)\b", re.IGNORECASE).search(s)
+        # поиск флага sum/summary
+        m_totals = re.compile(r"\b(sum|summary)=([^\s]+)\b", re.IGNORECASE).search(s)
         show_totals = False
         if m_totals:
             v = m_totals.group(2).lower()
@@ -386,21 +393,21 @@ sort=<тип> metric=<период> head=<N> tail=<M>
         Предполагается, что `head` и `tail` — целые числа (int).
         Поведение при краевых ситуациях:
         - Если elements_size 0 -> вернём [].
-        - Если head < 0 или tail < 0 -> некорректный ввод -> вернём все индексы.
-        - Если head == 0 and tail == 0 -> вернём все индексы.
+        - Если head < 0 или tail < 0 -> некорректный ввод -> вернём [].
+        - Если head == 0 and tail == 0 -> вернём [] (ничего не выводим).
         - Если head + tail >= len(elements) -> диапазоны пересекаются или покрывают всё -> вернём все индексы.
         Возвращаемые индексы — 1-based.
         """
         if elements_size == 0:
             return []
 
-        # Оба равны 0 -> вернуть все
+        # Оба равны 0 -> ничего не показываем
         if head == 0 and tail == 0:
-            return list(range(1, elements_size + 1))
+            return []
 
-        # Если передали отрицательные значения — считаем ввод некорректным -> вернуть все индексы
+        # Если передали отрицательные значения — считаем ввод некорректным -> вернуть пустой список
         if head < 0 or tail < 0:
-            return list(range(1, elements_size + 1))
+            return []
 
         # Ограничиваем head/tail верхним пределом n (безопасно)
         if head > elements_size:
