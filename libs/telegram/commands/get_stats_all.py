@@ -56,8 +56,9 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         if update.message is not None:
             await update.message.reply_text(
         """
-Вот ультра-короткая шпаргалка:
+Шпаргалка:
 Формат: sort=<a|d> metric=<t|d|w|m> head=<N> tail=<M> sum=<1|0>
+
 • sort: a/asc/воз/1 → ↑, d/desc/убыв/2 → ↓ (по умолчанию ↓)
 • metric: t=total (default), d=day, w=week, m=month
 • head=N — первые N, tail=M — последние M (N,M ≥ 0)
@@ -67,7 +68,11 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
 • Если head+tail >= len → выводятся все
 • Неверные head/tail → считаются 0
 
-Примеры: sort=asc head=5 • tail=4 • head=3 tail=2 • head=0 tail=0 sum=1
+Примеры:
+• sort=asc head=5
+• tail=4
+• head=3 tail=2
+• head=0 tail=0 sum=1
         """
         )
         if context.user_data is not None: 
