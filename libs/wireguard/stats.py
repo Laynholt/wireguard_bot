@@ -3,12 +3,26 @@ import subprocess
 
 import json
 import ipaddress
-from typing import Optional, List, Dict, Any, Union
+from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Dict, Any, Union, Tuple
 
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import user_control
+
+class TrafficStat(BaseModel):
+    """Суммарный трафик (в байтах) за период."""
+    received_bytes: int = 0
+    sent_bytes: int = 0
+
+
+class PeriodizedTraffic(BaseModel):
+    """Трафик, разбитый по периодам."""
+    daily: Dict[str, TrafficStat] = Field(default_factory=dict)
+    weekly: Dict[str, TrafficStat] = Field(default_factory=dict)
+    monthly: Dict[str, TrafficStat] = Field(default_factory=dict)
+
 
 class WgPeerData(BaseModel):
     """
@@ -17,8 +31,12 @@ class WgPeerData(BaseModel):
     allowed_ips: Optional[str] = None
     endpoint: Optional[str] = None
     latest_handshake: Optional[str] = None
+    latest_handshake_at: Optional[str] = None  # ISO 8601 UTC время последнего рукопожатия
     transfer_received: Optional[str] = None
     transfer_sent: Optional[str] = None
+    raw_received_bytes: int = 0
+    raw_sent_bytes: int = 0
+    periods: PeriodizedTraffic = Field(default_factory=PeriodizedTraffic)
 
 class WgPeer(BaseModel):
     """
@@ -35,6 +53,12 @@ class SortBy(str, Enum):
     """
     ALLOWED_IPS = "allowed_ips"
     TRANSFER_SENT = "transfer_sent"
+
+
+class Period(str, Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
 
 class WgPeerList(BaseModel):
     """
@@ -188,6 +212,183 @@ def __convert_bytes_to_human_readable(num_bytes: int) -> str:
     return f"{gib_value:.2f} GiB"
 
 
+def bytes_to_human(num_bytes: int) -> str:
+    """
+    Публичная обёртка для __convert_bytes_to_human_readable.
+    """
+    return __convert_bytes_to_human_readable(num_bytes)
+
+
+def __parse_handshake_to_datetime(handshake_str: Optional[str]) -> Optional[datetime]:
+    """
+    Конвертирует строку вида '1 minute, 9 seconds ago' в UTC datetime.
+    Возвращает None, если строка пустая или не распознана.
+    """
+    if not handshake_str:
+        return None
+
+    s = handshake_str.strip().lower()
+    if s in {"n/a", "never"}:
+        return None
+
+    # Иногда wg выводит "now"
+    if s == "now" or s.startswith("0 "):
+        return datetime.now(timezone.utc)
+
+    total_seconds = 0
+    units = {
+        "second": 1,
+        "seconds": 1,
+        "minute": 60,
+        "minutes": 60,
+        "hour": 3600,
+        "hours": 3600,
+        "day": 86400,
+        "days": 86400,
+        "week": 604800,
+        "weeks": 604800,
+    }
+
+    parts = s.replace(" ago", "").replace("и ", "").split(",")
+    for part in parts:
+        chunk = part.strip()
+        if not chunk:
+            continue
+        tokens = chunk.split()
+        if len(tokens) < 2:
+            continue
+        try:
+            value = int(tokens[0])
+        except ValueError:
+            continue
+        unit = tokens[1]
+        total_seconds += value * units.get(unit, 0)
+
+    if total_seconds == 0:
+        return datetime.now(timezone.utc)
+
+    return datetime.now(timezone.utc) - timedelta(seconds=total_seconds)
+
+
+def __plural_ru(value: int, forms: tuple[str, str, str]) -> str:
+    """
+    Возвращает слово во множественном/единственном числе для русского языка.
+    forms: (1, 2-4, 5-0)
+    """
+    value_abs = abs(value)
+    mod10 = value_abs % 10
+    mod100 = value_abs % 100
+    if mod10 == 1 and mod100 != 11:
+        return forms[0]
+    if 2 <= mod10 <= 4 and not (12 <= mod100 <= 14):
+        return forms[1]
+    return forms[2]
+
+
+def __format_timedelta_ru(delta: timedelta) -> str:
+    """
+    Формирует строку вида '1 минута, 9 секунд назад' максимум с двумя компонентами.
+    """
+    seconds = int(delta.total_seconds())
+    if seconds < 0:
+        seconds = 0
+
+    units = [
+        (86400, ("день", "дня", "дней")),
+        (3600, ("час", "часа", "часов")),
+        (60, ("минута", "минуты", "минут")),
+        (1, ("секунда", "секунды", "секунд")),
+    ]
+
+    parts = []
+    for unit_seconds, titles in units:
+        if seconds >= unit_seconds:
+            value = seconds // unit_seconds
+            seconds -= value * unit_seconds
+            parts.append(f"{value} {__plural_ru(value, titles)}")
+        if len(parts) == 2:
+            break
+
+    if not parts:
+        parts.append("0 секунд")
+
+    return ", ".join(parts) + " назад"
+
+
+def __format_handshake_age(handshake_iso: Optional[str], now: Optional[datetime] = None) -> Optional[str]:
+    """
+    Возвращает строку с прошедшим временем от moment до now.
+    """
+    if not handshake_iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(handshake_iso)
+    except ValueError:
+        return None
+
+    now = now or datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return __format_timedelta_ru(now - dt)
+
+
+def __period_keys(now: datetime) -> Tuple[str, str, str]:
+    """
+    Возвращает ключи для daily/weekly/monthly.
+    daily: YYYY-MM-DD
+    weekly: YYYY-Www (ISO week)
+    monthly: YYYY-MM
+    """
+    date_key = now.strftime("%Y-%m-%d")
+    iso_year, iso_week, _ = now.isocalendar()
+    week_key = f"{iso_year}-W{iso_week:02d}"
+    month_key = now.strftime("%Y-%m")
+    return date_key, week_key, month_key
+
+
+def __update_period_stats(periods: PeriodizedTraffic, delta_received: int, delta_sent: int, now: datetime) -> None:
+    """
+    Добавляет приращение трафика в текущие сутки/неделю/месяц.
+    """
+    date_key, week_key, month_key = __period_keys(now)
+    for bucket, key in (
+        (periods.daily, date_key),
+        (periods.weekly, week_key),
+        (periods.monthly, month_key),
+    ):
+        stat = bucket.get(key)
+        if stat is None:
+            stat = TrafficStat()
+            bucket[key] = stat
+        stat.received_bytes += delta_received
+        stat.sent_bytes += delta_sent
+
+
+def get_period_usage(data: WgPeerData, period: Period, now: Optional[datetime] = None) -> TrafficStat:
+    """
+    Возвращает статистику за текущий день/неделю/месяц.
+    """
+    now = now or datetime.now(timezone.utc)
+    date_key, week_key, month_key = __period_keys(now)
+
+    if period == Period.DAILY:
+        return data.periods.daily.get(date_key, TrafficStat())
+    if period == Period.WEEKLY:
+        return data.periods.weekly.get(week_key, TrafficStat())
+    if period == Period.MONTHLY:
+        return data.periods.monthly.get(month_key, TrafficStat())
+
+    return TrafficStat()
+
+
+def format_handshake_age(data: WgPeerData, now: Optional[datetime] = None) -> str:
+    """
+    Публичный помощник для получения строки вида '1 минута, 9 секунд назад'.
+    """
+    age = __format_handshake_age(data.latest_handshake_at, now)
+    return age if age else (data.latest_handshake or "N/A")
+
+
 def collect_peer_data(peers: Dict[str, Any]) -> WgPeerList:
     """
     1. Получает «сырой» вывод wg show из Docker (wg0).
@@ -253,7 +454,15 @@ def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
     result = {}
     for key, val in raw_data.items():
         # val: dict => WgPeerData(**val)
-        result[key] = WgPeerData(**val)
+        data_obj = WgPeerData(**val)
+
+        # Заполняем raw_* из существующих строк, если они не были сохранены ранее (обратная совместимость).
+        if data_obj.raw_received_bytes == 0 and data_obj.transfer_received:
+            data_obj.raw_received_bytes = __convert_transfer_to_bytes(data_obj.transfer_received)
+        if data_obj.raw_sent_bytes == 0 and data_obj.transfer_sent:
+            data_obj.raw_sent_bytes = __convert_transfer_to_bytes(data_obj.transfer_sent)
+
+        result[key] = data_obj
 
     return result
 
@@ -271,13 +480,15 @@ def remove_user_from_log(file_path: str, username: str):
 
 def __merge_results(
     old_data: Dict[str, WgPeerData],
-    new_data: Dict[str, WgPeerData]
+    new_data: Dict[str, WgPeerData],
+    now: datetime
 ) -> Dict[str, WgPeerData]:
     """
     Объединяет старые и новые данные:
-    - latest_handshake и endpoint перезаписываем
-    - transfer_received/transfer_sent — суммируем
-    - allowed_ips — тоже обновляем
+    - latest_handshake_at и endpoint перезаписываем при наличии новых
+    - transfer_received/transfer_sent — накапливаем через приращения
+    - allowed_ips — обновляем при изменении
+    - periods — накапливаем приращения в daily/weekly/monthly
     """
     merged = dict(old_data)  # копия
 
@@ -285,28 +496,55 @@ def __merge_results(
         if user not in merged:
             # Пользователь встречается впервые
             merged[user] = new_info
+            __update_period_stats(
+                merged[user].periods,
+                new_info.raw_received_bytes,
+                new_info.raw_sent_bytes,
+                now
+            )
+            merged[user].transfer_received = __convert_bytes_to_human_readable(new_info.raw_received_bytes)
+            merged[user].transfer_sent = __convert_bytes_to_human_readable(new_info.raw_sent_bytes)
+            merged[user].latest_handshake = __format_handshake_age(new_info.latest_handshake_at, now) or new_info.latest_handshake
             continue
 
-        old_received = merged[user].transfer_received or "0 B"
-        old_sent = merged[user].transfer_sent or "0 B"
-        new_received = new_info.transfer_received or "0 B"
-        new_sent = new_info.transfer_sent or "0 B"
+        current = merged[user]
 
-        sum_received = __convert_transfer_to_bytes(old_received) + __convert_transfer_to_bytes(new_received)
-        sum_sent = __convert_transfer_to_bytes(old_sent) + __convert_transfer_to_bytes(new_sent)
+        old_received_raw = current.raw_received_bytes
+        old_sent_raw = current.raw_sent_bytes
+
+        new_received_raw = new_info.raw_received_bytes
+        new_sent_raw = new_info.raw_sent_bytes
+
+        # Поддержка перезапуска wg0: если счётчики обнулились, считаем дельтой новое значение
+        delta_received = new_received_raw - old_received_raw
+        delta_sent = new_sent_raw - old_sent_raw
+        if delta_received < 0:
+            delta_received = new_received_raw
+        if delta_sent < 0:
+            delta_sent = new_sent_raw
+
+        __update_period_stats(current.periods, delta_received, delta_sent, now)
+
+        # Обновляем накопительные totals
+        total_received_bytes = __convert_transfer_to_bytes(current.transfer_received or "0 B") + delta_received
+        total_sent_bytes = __convert_transfer_to_bytes(current.transfer_sent or "0 B") + delta_sent
+        current.transfer_received = __convert_bytes_to_human_readable(total_received_bytes)
+        current.transfer_sent = __convert_bytes_to_human_readable(total_sent_bytes)
+
+        # Сохраняем raw для последующего вычисления дельт
+        current.raw_received_bytes = new_received_raw
+        current.raw_sent_bytes = new_sent_raw
 
         # Обновляем latest_handshake
-        merged[user].latest_handshake = new_info.latest_handshake or "N/A"
+        if new_info.latest_handshake_at:
+            current.latest_handshake_at = new_info.latest_handshake_at
+        current.latest_handshake = __format_handshake_age(current.latest_handshake_at, now) or new_info.latest_handshake or current.latest_handshake
 
-        # Сохраняем суммированный трафик
-        merged[user].transfer_received = __convert_bytes_to_human_readable(sum_received)
-        merged[user].transfer_sent = __convert_bytes_to_human_readable(sum_sent)
-
-        # При желании обновляем и другие поля
+        # Обновляем прочие поля при наличии
         if new_info.allowed_ips:
-            merged[user].allowed_ips = new_info.allowed_ips
+            current.allowed_ips = new_info.allowed_ips
         if new_info.endpoint:
-            merged[user].endpoint = new_info.endpoint
+            current.endpoint = new_info.endpoint
 
     return merged
 
@@ -334,6 +572,8 @@ def accumulate_wireguard_stats(
     Returns:
         Возвращает объединенный словарь данных.
     """
+    now = datetime.now(timezone.utc)
+
     # 1. Старые результаты
     old_data = read_data_from_json(json_file_path)
 
@@ -349,22 +589,33 @@ def accumulate_wireguard_stats(
     for peer in peer_list.peers:
         if peer.data is None:
             continue
-        
         username = peer.username
+
+        raw_received_bytes = __convert_transfer_to_bytes(peer.data.transfer_received)
+        raw_sent_bytes = __convert_transfer_to_bytes(peer.data.transfer_sent)
+        handshake_dt = __parse_handshake_to_datetime(peer.data.latest_handshake)
+
         new_data[username] = WgPeerData(
             allowed_ips=peer.data.allowed_ips,
             endpoint=peer.data.endpoint,
             latest_handshake=peer.data.latest_handshake,
+            latest_handshake_at=handshake_dt.isoformat() if handshake_dt else None,
             transfer_received=peer.data.transfer_received,
-            transfer_sent=peer.data.transfer_sent
+            transfer_sent=peer.data.transfer_sent,
+            raw_received_bytes=raw_received_bytes,
+            raw_sent_bytes=raw_sent_bytes
         )
 
     # 5. Суммируем и сортируем
     merged = __sort_merged_data(
-        __merge_results(old_data, new_data),
+        __merge_results(old_data, new_data, now),
         sort_by=sort_by,
         reverse_sort=reverse_sort
     )
+
+    # Обновляем человекочитаемую строку рукопожатия для всех записей
+    for info in merged.values():
+        info.latest_handshake = format_handshake_age(info, now)
     
     return merged
 
@@ -423,13 +674,22 @@ def display_merged_data(merged_data: Dict[str, WgPeerData]) -> None:
         not_available = f'{RED}[Временно недоступен]{RESET}'
         print(f"{i:2}] User: {username_colored} {not_available if user_name in commented_users else ''}")
 
+        day_stat = get_period_usage(user_data, Period.DAILY)
+        week_stat = get_period_usage(user_data, Period.WEEKLY)
+        month_stat = get_period_usage(user_data, Period.MONTHLY)
+        handshake_str = format_handshake_age(user_data)
+
         if user_data.allowed_ips:
             print(f"  allowed ips: {user_data.allowed_ips}")
         if user_data.endpoint:
             print(f"  endpoint: {user_data.endpoint}")
         if user_data.latest_handshake:
-            print(f"  latest handshake: {user_data.latest_handshake}")
+            print(f"  latest handshake: {handshake_str}")
         if user_data.transfer_received and user_data.transfer_sent:
             print(f"  transfer: {user_data.transfer_received} received, {user_data.transfer_sent} sent")
+        print(f"  daily:   {bytes_to_human(day_stat.sent_bytes)} sent, {bytes_to_human(day_stat.received_bytes)} received")
+        print(f"  weekly:  {bytes_to_human(week_stat.sent_bytes)} sent, {bytes_to_human(week_stat.received_bytes)} received")
+        print(f"  monthly: {bytes_to_human(month_stat.sent_bytes)} sent, {bytes_to_human(month_stat.received_bytes)} received")
+        print(f"  total:   {user_data.transfer_sent or '0 B'} sent, {user_data.transfer_received or '0 B'} received")
 
         print()

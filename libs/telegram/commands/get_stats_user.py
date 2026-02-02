@@ -237,6 +237,11 @@ class GetWireguardUserStatsCommand(BaseCommand):
                 continue
 
             # Если всё в порядке, формируем строку со статистикой
+            day_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+            week_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+            month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+            handshake_text = wireguard_stats.format_handshake_age(user_data)
+
             lines.append(
                 f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                 f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
@@ -244,7 +249,11 @@ class GetWireguardUserStatsCommand(BaseCommand):
                 f"   📡 IP: {user_data.allowed_ips}\n"
                 f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
                 f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
-                f"   ⏱️ Последнее рукопожатие: {user_data.latest_handshake if user_data.latest_handshake else 'N/A'}\n"
+                f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
+                f"   📊 За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
+                f"   📈 За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
+                f"   📉 За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
+                f"   ♾️ Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
                 f"   ━━━━━━━━━━━━━━━━"
             )
 

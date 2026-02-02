@@ -51,8 +51,8 @@ sort=<тип> head=<N> tail=<M>
 
 Параметры:
 • sort — порядок сортировки. Допустимые значения (без учёта регистра):
-— asc, ascending, 1  → ASCENDING
-— desc, descending, 2 → DESCENDING
+— a, asc, ascending, воз, 1  → ASCENDING
+— d, desc, descending, убыв, 2 → DESCENDING
 По умолчанию: DESCENDING.
 
 • head — целое число (≥ 0). Берём первые N элементов. По умолчанию: 0 (не задано).
@@ -149,6 +149,11 @@ sort=<тип> head=<N> tail=<M>
                 else:
                     owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"
 
+                day_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+                week_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                handshake_text = wireguard_stats.format_handshake_age(user_data)
+
                 lines.append(
                     f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                     f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
@@ -156,7 +161,11 @@ sort=<тип> head=<N> tail=<M>
                     f"   📡 IP: {user_data.allowed_ips}\n"
                     f"   📤 Отправлено: {user_data.transfer_received if user_data.transfer_received else 'N/A'}\n"
                     f"   📥 Получено: {user_data.transfer_sent if user_data.transfer_sent else 'N/A'}\n"
-                    f"   ⏱️ Последнее рукопожатие: {user_data.latest_handshake if user_data.latest_handshake else 'N/A'}\n"
+                    f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
+                    f"   📊 За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
+                    f"   📈 За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
+                    f"   📉 За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
+                    f"   ♾️ Всего: ↑ {user_data.transfer_sent or '0 B'} | ↓ {user_data.transfer_received or '0 B'}\n"
                     f"   ━━━━━━━━━━━━━━━━"
                 )
 
@@ -188,17 +197,17 @@ sort=<тип> head=<N> tail=<M>
     def __map_sort(self, raw: Optional[str], default: SortSequence) -> SortSequence:
         """
         Преобразует строковое/числовое представление sort в SortSequence.
-        Поддерживает: 'asc', 'ascending', '1' -> ASCENDING
-                    'desc', 'descending', '2' -> DESCENDING
+        Поддерживает: 'a', 'asc', 'ascending', 'воз', '1' -> ASCENDING
+                    'd', 'desc', 'descending', 'убыв', '2' -> DESCENDING
         В противном случае возвращает default.
         """
         if raw is None:
             return default
 
         v = raw.strip().lower()
-        if v in {"asc", "ascending"}:
+        if v in {"a", "asc", "ascending", "воз"}:
             return self.SortSequence.ASCENDING
-        if v in {"desc", "descending"}:
+        if v in {"d", "desc", "descending", "убыв"}:
             return self.SortSequence.DESCENDING
 
         # Попробовать распарсить как число (1/2)
