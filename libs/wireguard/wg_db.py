@@ -36,19 +36,21 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS users (
                 name TEXT PRIMARY KEY,
+                allowed_ip TEXT,
                 private_key TEXT NOT NULL,
                 public_key TEXT NOT NULL,
                 preshared_key TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 commented INTEGER NOT NULL DEFAULT 0,
-                allowed_ip TEXT,
                 stats_json TEXT
             )
             """
         )
         cols = {row[1] for row in conn.execute('PRAGMA table_info(users)').fetchall()}
+        # если в старой схеме столбца нет, добавим его
         if "allowed_ip" not in cols:
             conn.execute('ALTER TABLE users ADD COLUMN allowed_ip TEXT')
+        # если allowed_ip уже есть, но порядок колонок другой, не трогаем (порядок в SQLite логический, не физический)
     try:
         os.chmod(_db_path(), 0o600)
     except OSError:
@@ -70,18 +72,18 @@ def upsert_user(
     with _conn() as conn:
         conn.execute(
             """
-            INSERT INTO users (name, private_key, public_key, preshared_key, created_at, commented, allowed_ip, stats_json)
+            INSERT INTO users (name, allowed_ip, private_key, public_key, preshared_key, created_at, commented, stats_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
+                allowed_ip=COALESCE(excluded.allowed_ip, users.allowed_ip),
                 private_key=excluded.private_key,
                 public_key=excluded.public_key,
                 preshared_key=excluded.preshared_key,
                 created_at=excluded.created_at,
                 commented=excluded.commented,
-                allowed_ip=COALESCE(excluded.allowed_ip, users.allowed_ip),
                 stats_json=COALESCE(excluded.stats_json, users.stats_json)
             """,
-            (name, private_key, public_key, preshared_key, created_at, commented, allowed_ip, stats_json),
+            (name, allowed_ip, private_key, public_key, preshared_key, created_at, commented, stats_json),
         )
 
 
