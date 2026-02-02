@@ -63,10 +63,11 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
 • metric: t=total (default), d=day, w=week, m=month
 • head=N — первые N, tail=M — последние M (N,M ≥ 0)
 • sum=1 — показать сводку (сутки/неделя/месяц/всё)
-• Параметры в любом порядке, можно пропускать
+
+Параметры в любом порядке, можно пропускать
 • head=0 tail=0 → список пуст (только sum, если включён)
 • Если head+tail >= len → выводятся все
-• Неверные head/tail → считаются 0
+• Неверные head/tail → выводятся все элементы
 
 Примеры:
 • sort=asc head=5
@@ -334,9 +335,9 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             try:
                 head_value = int(m_head.group(1))
                 if head_value < 0:
-                    head_value = 0
+                    head_value = -1  # сигнал "некорректно" -> показать все
             except ValueError:
-                head_value = 0
+                head_value = -1
         else:
             head_value = 0
 
@@ -344,9 +345,9 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             try:
                 tail_value = int(m_tail.group(1))
                 if tail_value < 0:
-                    tail_value = 0
+                    tail_value = -1  # сигнал "некорректно" -> показать все
             except ValueError:
-                tail_value = 0
+                tail_value = -1
         else:
             tail_value = 0
 
@@ -375,7 +376,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         Предполагается, что `head` и `tail` — целые числа (int).
         Поведение при краевых ситуациях:
         - Если elements_size 0 -> вернём [].
-        - Если head < 0 или tail < 0 -> некорректный ввод -> вернём [].
+        - Если head < 0 или tail < 0 -> некорректный ввод -> вернём все индексы.
         - Если head == 0 and tail == 0 -> вернём [] (ничего не выводим).
         - Если head + tail >= len(elements) -> диапазоны пересекаются или покрывают всё -> вернём все индексы.
         Возвращаемые индексы — 1-based.
@@ -387,9 +388,9 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         if head == 0 and tail == 0:
             return []
 
-        # Если передали отрицательные значения — считаем ввод некорректным -> вернуть пустой список
+        # Если передали отрицательные значения — считаем ввод некорректным -> вернуть все индексы
         if head < 0 or tail < 0:
-            return []
+            return list(range(1, elements_size + 1))
 
         # Ограничиваем head/tail верхним пределом n (безопасно)
         if head > elements_size:
