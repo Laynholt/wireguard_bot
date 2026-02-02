@@ -1,4 +1,3 @@
-import os
 import subprocess
 
 import json
@@ -436,50 +435,43 @@ def collect_peer_data(peers: Dict[str, Any]) -> WgPeerList:
     return peer_blocks
 
     
-def write_data_to_json(file_path: str, data: Dict[str, WgPeerData]) -> None:
+def save_stats_to_db(data: Dict[str, WgPeerData]) -> None:
     """
-    Сохраняет Dict[str, WgPeerData] в файл JSON.
-    В процессе сериализации каждый объект WgPeerData превращается в словарь.
+    Сохраняет Dict[str, WgPeerData] в БД.
     """
-    # Превращаем каждое значение (WgPeerData) в dict через .model_dump()
     raw_data = {key: val.model_dump() for key, val in data.items()}
     wg_db.init_db()
     for name, blob in raw_data.items():
-        # Не трогаем ключи, если пользователь уже есть; иначе создаём пустые поля.
         existing = wg_db.get_user(name)
+        payload = json.dumps(blob, ensure_ascii=False)
         if existing is None:
             wg_db.upsert_user(
                 name=name,
                 private_key="",
                 public_key="",
                 preshared_key="",
-                stats_json=json.dumps(blob, ensure_ascii=False),
+                stats_json=payload,
                 commented=0,
             )
         else:
-            wg_db.set_stats(name, json.dumps(blob, ensure_ascii=False))
+            wg_db.set_stats(name, payload)
 
 
-def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
+def load_stats_from_db() -> Dict[str, WgPeerData]:
     """
-    Загружает Dict[str, WgPeerData] из JSON-файла.
-    Если файл не существует, возвращает пустой словарь.
+    Загружает Dict[str, WgPeerData] из БД.
     """
-    # Теперь данные хранятся в БД
     wg_db.init_db()
-    raw_data = wg_db.get_stats_all()  # Dict[name, json_str]
+    raw_data = wg_db.get_stats_all()
 
-    # Превращаем каждую вложенную dict обратно в объект WgPeerData
     result = {}
     for key, val in raw_data.items():
-        # val: json str => dict => WgPeerData
         try:
             decoded = json.loads(val)
         except Exception:
             continue
         data_obj = WgPeerData(**decoded)
 
-        # Заполняем raw_* из существующих строк, если они не были сохранены ранее (обратная совместимость).
         if data_obj.raw_received_bytes == 0 and data_obj.transfer_received:
             data_obj.raw_received_bytes = __convert_transfer_to_bytes(data_obj.transfer_received)
         if data_obj.raw_sent_bytes == 0 and data_obj.transfer_sent:
@@ -489,17 +481,6 @@ def read_data_from_json(file_path: str) -> Dict[str, WgPeerData]:
 
     return result
 
-
-def remove_user_from_log(file_path: str, username: str):
-    """
-    Удаляет информацию о переданном пользователе в файле логов.
-    """
-    current_log_data = read_data_from_json(file_path)
-    
-    if username in current_log_data:
-        del current_log_data[username]
-        write_data_to_json(file_path, current_log_data)
-    
 
 def __merge_results(
     old_data: Dict[str, WgPeerData],
@@ -574,7 +555,6 @@ def __merge_results(
 
 def accumulate_wireguard_stats(
     conf_file_path: str,
-    json_file_path: str,
     sort_by: SortBy = SortBy.TRANSFER_SENT,
     reverse_sort: bool = True
 ) -> Dict[str, WgPeerData]:
@@ -598,7 +578,7 @@ def accumulate_wireguard_stats(
     now = datetime.now(timezone.utc)
 
     # 1. Старые результаты
-    old_data = read_data_from_json(json_file_path)
+    old_data = load_stats_from_db()
 
     # 2. Парсим файл конфигурации (получаем {public_key: username})
     peers = parse_wg_conf(conf_file_path)
@@ -639,7 +619,10 @@ def accumulate_wireguard_stats(
     # Обновляем человекочитаемую строку рукопожатия для всех записей
     for info in merged.values():
         info.latest_handshake = format_handshake_age(info, now)
-    
+
+    # Сохраняем в БД
+    save_stats_to_db(merged)
+
     return merged
 
 

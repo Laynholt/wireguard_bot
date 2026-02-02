@@ -36,7 +36,6 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         database: UserDatabase,
         semaphore: Semaphore,
         wireguard_config_path: str,
-        wireguard_log_path: str
     ) -> None:
         super().__init__(
             database
@@ -44,7 +43,6 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         self.command_name = BotCommand.GET_ALL_STATS
         self.semaphore = semaphore
         self.wireguard_config_path = wireguard_config_path
-        self.wireguard_log_path = wireguard_log_path
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -119,7 +117,6 @@ sort=<тип> metric=<период> head=<N> tail=<M>
             # Сначала получаем всю статистику (сортировку настроим вручную по metric)
             all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
                 conf_file_path=self.wireguard_config_path,
-                json_file_path=self.wireguard_log_path,
                 sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
                 reverse_sort=True
             )

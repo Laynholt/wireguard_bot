@@ -17,7 +17,6 @@ class GetWireguardUserStatsCommand(BaseCommand):
         self,
         database: UserDatabase,
         wireguard_config_path: str,
-        wireguard_log_path: str,
         return_own_stats: bool
     ) -> None:
         super().__init__(
@@ -48,7 +47,6 @@ class GetWireguardUserStatsCommand(BaseCommand):
         self.keyboard.add_parent(keyboards.WIREGUARD_STATS_KEYBOARD)
         
         self.wireguard_config_path = wireguard_config_path
-        self.wireguard_log_path = wireguard_log_path
     
     
     async def request_input(self, update: Update, context: CallbackContext):
@@ -176,7 +174,6 @@ class GetWireguardUserStatsCommand(BaseCommand):
         # Получаем полную статистику
         all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
             conf_file_path=self.wireguard_config_path,
-            json_file_path=self.wireguard_log_path,
             sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
         )
         
