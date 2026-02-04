@@ -119,6 +119,22 @@ TORRENT_COMMANDS_KEYBOARD = Keyboard(
     is_menu=True
 )
 
+# Подменю "Информация о сервере"
+SERVER_INFO_KEYBOARD = Keyboard(
+    title="🖥 Информация о сервере",
+    reply_keyboard=ReplyKeyboardMarkup(
+        (
+            (BotCommand.SERVER_STATUS.pretty_text,),
+            (BotCommand.VNSTAT_WEEK.pretty_text,),
+            (BotCommand.SPEEDTEST.pretty_text,),
+            (keys.ButtonText.TURN_BACK.value.text,)
+        ),
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    ),
+    is_menu=True
+)
+
 # Подменю "Основные команды"
 GENERAL_COMMANDS_KEYBOARD = Keyboard(
     title="🛠 Основные команды",
@@ -127,6 +143,7 @@ GENERAL_COMMANDS_KEYBOARD = Keyboard(
             (BotCommand.HELP.pretty_text,),
             (BotCommand.SEND_MESSAGE.pretty_text,),
             (BotCommand.RELOAD_WG_SERVER.pretty_text,),
+            (SERVER_INFO_KEYBOARD.title,),
             (TORRENT_COMMANDS_KEYBOARD.title,),
             (keys.ButtonText.TURN_BACK.value.text,)
         ),
@@ -136,6 +153,7 @@ GENERAL_COMMANDS_KEYBOARD = Keyboard(
     is_menu=True
 )
 GENERAL_COMMANDS_KEYBOARD.add_child(TORRENT_COMMANDS_KEYBOARD)
+GENERAL_COMMANDS_KEYBOARD.add_child(SERVER_INFO_KEYBOARD)
 
 
 # Подменю "Конфигурационные файлы WireGuard" для пользователей

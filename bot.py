@@ -387,6 +387,36 @@ async def reload_wireguard_server_command(update: Update, context: CallbackConte
 
 
 @wrappers.admin_required
+async def server_status_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды получения статуса сервера (CPU/RAM).
+    """
+    await bot_command_handler.command(
+        BotCommand.SERVER_STATUS
+    ).execute(update, context)
+
+
+@wrappers.admin_required
+async def vnstat_week_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды трафика за последние 7 дней (vnstat).
+    """
+    await bot_command_handler.command(
+        BotCommand.VNSTAT_WEEK
+    ).execute(update, context)
+
+
+@wrappers.admin_required
+async def speedtest_command(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик команды speedtest-cli.
+    """
+    await bot_command_handler.command(
+        BotCommand.SPEEDTEST
+    ).execute(update, context)
+
+
+@wrappers.admin_required
 async def get_torrent_state_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик команды получения статуса блокировки торрентов.
@@ -781,6 +811,9 @@ def main() -> None:
         BotCommand.GET_ALL_STATS.pretty_text: get_all_stats_command,
 
         BotCommand.RELOAD_WG_SERVER.pretty_text: reload_wireguard_server_command,
+        BotCommand.SERVER_STATUS.pretty_text: server_status_command,
+        BotCommand.VNSTAT_WEEK.pretty_text: vnstat_week_command,
+        BotCommand.SPEEDTEST.pretty_text: speedtest_command,
         
         BotCommand.TORRENT_STATE.pretty_text: get_torrent_state_command,
         BotCommand.TORRENT_RULES.pretty_text: get_torrent_rules_command,

@@ -66,6 +66,9 @@ class BotCommand(str, Enum):
 
     # Дополнительные команды
     RELOAD_WG_SERVER = ("reload_wg_server", "🔄 Перезагрузить сервер")
+    SERVER_STATUS = ("server_status", "🖥 Статус сервера")
+    VNSTAT_WEEK = ("vnstat_week", "📈 Трафик (7 дней)")
+    SPEEDTEST = ("speedtest", "⚡ Speedtest")
     
     TORRENT_STATE = ("get_torrent_state", "🧲 Статус блокировки торрентов")
     TORRENT_RULES = ("get_torrent_rules", "📋 Показать текущие правила")
@@ -162,6 +165,9 @@ class BotCommandHandler:
         from .get_stats_all     import GetAllWireguardUsersStatsCommand
 
         from .reload_wg         import ReloadWireguardServerCommand
+        from .server_status     import ServerStatusCommand
+        from .vnstat_summary    import VnstatSummaryCommand
+        from .speedtest         import SpeedtestCommand
 
         from .get_torrent_state import GetTorrentStateCommand
         from .get_torrent_rules import GetTorrentRulesCommand
@@ -299,6 +305,15 @@ class BotCommandHandler:
         
         # Команда перезапуска сервера WireGuard
         self.__command_wrapper[BotCommand.RELOAD_WG_SERVER] = ReloadWireguardServerCommand(
+            database
+        )
+        self.__command_wrapper[BotCommand.SERVER_STATUS] = ServerStatusCommand(
+            database
+        )
+        self.__command_wrapper[BotCommand.VNSTAT_WEEK] = VnstatSummaryCommand(
+            database
+        )
+        self.__command_wrapper[BotCommand.SPEEDTEST] = SpeedtestCommand(
             database
         )
         
