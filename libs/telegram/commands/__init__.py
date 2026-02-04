@@ -65,7 +65,7 @@ class BotCommand(str, Enum):
     GET_ALL_STATS = ("get_all_stats", "📉 Вся статистика")
 
     # Дополнительные команды
-    RELOAD_WG_SERVER = ("reload_wg_server", "🔄 Перезагрузить сервер")
+    RELOAD_WG_SERVER = ("reload_wg_server", "🔄 Перезагрузить Wireguard сервер")
     SERVER_STATUS = ("server_status", "🖥 Статус сервера")
     VNSTAT_WEEK = ("vnstat_week", "📈 Трафик (7 дней)")
     SPEEDTEST = ("speedtest", "⚡ Speedtest")
