@@ -12,6 +12,17 @@ from . import wg_db
 
 from . import user_control
 
+
+# Ретеншн периодов для избежания разрастания JSON в БД
+DAILY_RETENTION_DAYS = 90
+WEEKLY_RETENTION_WEEKS = 52
+MONTHLY_RETENTION_MONTHS = None  # без ограничения
+
+# Текущее время в часовом поясе сервера
+def __now_local() -> datetime:
+    return datetime.now().astimezone()
+
+
 class TrafficStat(BaseModel):
     """Суммарный трафик (в байтах) за период."""
     received_bytes: int = 0
@@ -241,7 +252,7 @@ def __parse_handshake_to_datetime(handshake_str: Optional[str]) -> Optional[date
 
     # Иногда wg выводит "now"
     if s == "now" or s.startswith("0 "):
-        return datetime.now(timezone.utc)
+        return __now_local()
 
     total_seconds = 0
     units = {
@@ -273,9 +284,9 @@ def __parse_handshake_to_datetime(handshake_str: Optional[str]) -> Optional[date
         total_seconds += value * units.get(unit, 0)
 
     if total_seconds == 0:
-        return datetime.now(timezone.utc)
+        return __now_local()
 
-    return datetime.now(timezone.utc) - timedelta(seconds=total_seconds)
+    return __now_local() - timedelta(seconds=total_seconds)
 
 
 def __plural_ru(value: int, forms: tuple[str, str, str]) -> str:
@@ -334,7 +345,7 @@ def __format_handshake_age(handshake_iso: Optional[str], now: Optional[datetime]
     except ValueError:
         return None
 
-    now = now or datetime.now(timezone.utc)
+    now = now or __now_local()
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return __format_timedelta_ru(now - dt)
@@ -352,12 +363,6 @@ def __period_keys(now: datetime) -> Tuple[str, str, str]:
     week_key = f"{iso_year}-W{iso_week:02d}"
     month_key = now.strftime("%Y-%m")
     return date_key, week_key, month_key
-
-
-# Ретеншн периодов для избежания разрастания JSON в БД
-DAILY_RETENTION_DAYS = 90
-WEEKLY_RETENTION_WEEKS = 52
-MONTHLY_RETENTION_MONTHS = None  # без ограничения
 
 
 def __prune_periods(periods: PeriodizedTraffic, now: datetime) -> None:
@@ -428,7 +433,7 @@ def get_period_usage(data: WgPeerData, period: Period, now: Optional[datetime] =
     """
     Возвращает статистику за текущий день/неделю/месяц.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or __now_local()
     date_key, week_key, month_key = __period_keys(now)
 
     if period == Period.DAILY:
@@ -627,7 +632,7 @@ def accumulate_wireguard_stats(
     Returns:
         Возвращает объединенный словарь данных.
     """
-    now = datetime.now(timezone.utc)
+    now = __now_local()
 
     # 1. Старые результаты
     old_data = load_stats_from_db()
