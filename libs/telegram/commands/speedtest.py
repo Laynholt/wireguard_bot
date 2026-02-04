@@ -17,6 +17,9 @@ class SpeedtestCommand(BaseCommand):
         if update.message is None:
             return
 
+        # Сообщаем, что начинается тест
+        await update.message.reply_text("⚡ Запускаю speedtest, это может занять ~30–60 секунд...")
+
         code, stdout, stderr = await self.__run_speedtest()
         if code != 0 or not stdout:
             await update.message.reply_text(

@@ -38,9 +38,9 @@ class VnstatSummaryCommand(BaseCommand):
         lines = [f"📈 <b>Трафик за 7 дней ({iface})</b>"]
         for d in recent:
             day_date = date(d["date"]["year"], d["date"]["month"], d["date"]["day"])
-            rx = self.__format_bytes(d.get("rx", 0) * 1024)
-            tx = self.__format_bytes(d.get("tx", 0) * 1024)
-            total = self.__format_bytes((d.get("rx", 0) + d.get("tx", 0)) * 1024)
+            rx = self.__format_bytes(d.get("rx", 0))
+            tx = self.__format_bytes(d.get("tx", 0))
+            total = self.__format_bytes((d.get("rx", 0) + d.get("tx", 0)))
             lines.append(f"{day_date:%d.%m}: ↓ {rx} ↑ {tx} (Σ {total})")
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -92,9 +92,12 @@ class VnstatSummaryCommand(BaseCommand):
         )
         return sorted_days[-count:]
 
-    def __format_bytes(self, num_bytes: int) -> str:
+    def __format_bytes(self, num_kib: int) -> str:
+        """
+        vnstat json возвращает rx/tx в КиБ, поэтому используем их напрямую.
+        """
         units = ["B", "KiB", "MiB", "GiB", "TiB"]
-        value = float(num_bytes)
+        value = float(num_kib) * 1024  # перевод в байты для нормальной шкалы
         for unit in units:
             if value < 1024 or unit == units[-1]:
                 return f"{value:.1f} {unit}"

@@ -35,8 +35,9 @@ class ServerStatusCommand(BaseCommand):
         if load is not None:
             one, five, fifteen, perc_one, perc_five, perc_fifteen = load
             message_lines.append(
-                f"🧠 CPU load (1/5/15): {one:.2f} / {five:.2f} / {fifteen:.2f} "
-                f"({perc_one:.0f}% / {perc_five:.0f}% / {perc_fifteen:.0f}% по ядрам)"
+                "🧠 CPU load за 1/5/15 минут: "
+                f"{one:.2f} / {five:.2f} / {fifteen:.2f} "
+                f"({perc_one:.0f}% / {perc_five:.0f}% / {perc_fifteen:.0f}% от числа ядер)"
             )
         else:
             message_lines.append("🧠 CPU load: не удалось получить данные.")
