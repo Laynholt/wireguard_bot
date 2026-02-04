@@ -141,9 +141,9 @@ GENERAL_COMMANDS_KEYBOARD = Keyboard(
     reply_keyboard=ReplyKeyboardMarkup(
         (
             (BotCommand.HELP.pretty_text,),
+            (SERVER_INFO_KEYBOARD.title,),
             (BotCommand.SEND_MESSAGE.pretty_text,),
             (BotCommand.RELOAD_WG_SERVER.pretty_text,),
-            (SERVER_INFO_KEYBOARD.title,),
             (TORRENT_COMMANDS_KEYBOARD.title,),
             (keys.ButtonText.TURN_BACK.value.text,)
         ),
