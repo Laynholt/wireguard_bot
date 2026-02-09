@@ -57,12 +57,12 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             await update.message.reply_text(
         """
 Шпаргалка:
-Формат: sort=<a|d> metric=<t|d|w|m> head=<N> tail=<M> sum=<1|0>
+Формат: <em>sort=[a|d] metric=[t|d|w|m] head=[N] tail=[M] sum=[1|0]</em>
 
-• sort: a/asc/воз/1 → ↑, d/desc/убыв/2 → ↓ (по умолчанию ↓)
-• metric: t=total (default), d=day, w=week, m=month
-• head=N — первые N, tail=M — последние M (N,M ≥ 0)
-• sum=1 — показать сводку (сутки/неделя/месяц/всё)
+• <b>sort</b>: a/asc/воз/1 → ↑, d/desc/убыв/2 → ↓ (по умолчанию ↓)
+• <b>metric</b>: t=total (default), d=day, w=week, m=month
+• <b>head=N</b> — первые N, <b>tail=M</b> — последние M (N,M ≥ 0)
+• <b>sum=1</b> — показать сводку (сутки/неделя/месяц/всё)
 
 Параметры в любом порядке, можно пропускать
 • head=0 tail=0 → список пуст (только sum, если включён)
@@ -70,11 +70,15 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
 • Неверные head/tail → выводятся все элементы
 
 Примеры:
-• sort=asc head=5
-• tail=4
-• head=3 tail=2
-• head=0 tail=0 sum=1
-        """
+• <code>sort=asc head=5</code>
+• <code>tail=4</code>
+• <code>head=3 tail=2</code>
+• <code>head=0 sum=1</code>
+• <code>head=5 sum=1</code>
+• <code>head=5 metric=d sum=1</code>
+
+        """,
+        parse_mode="HTML"
         )
         if context.user_data is not None: 
             context.user_data[ContextDataKeys.COMMAND] = self.command_name
