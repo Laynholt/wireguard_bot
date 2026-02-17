@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import logging
 
@@ -138,7 +139,7 @@ class BaseCommand(ABC):
         if not await self._validate_username(update, user_name):
             return False
 
-        check_result = wireguard.check_user_exists(user_name)
+        check_result = await asyncio.to_thread(wireguard.check_user_exists, user_name)
         if check_result.status:
             if context.user_data is not None:
                 context.user_data[ContextDataKeys.WIREGUARD_USERS].append(user_name)

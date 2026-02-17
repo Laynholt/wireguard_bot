@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from .base import *
 from libs.wireguard import stats as wireguard_stats
 from libs.wireguard import wg_db
@@ -104,7 +105,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                 )
             
             # Сначала получаем всю статистику (сортировку настроим вручную по metric)
-            all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
+            all_wireguard_stats = await asyncio.to_thread(
+                wireguard_stats.accumulate_wireguard_stats,
                 conf_file_path=self.wireguard_config_path,
                 sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
                 reverse_sort=True
@@ -128,7 +130,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             )
 
             lines = []
-            inactive_usernames = wireguard.get_inactive_usernames()
+            inactive_usernames = await asyncio.to_thread(wireguard.get_inactive_usernames)
 
             # Подготовим сортировку по выбранному metric
             def _metric_value(user_data: wireguard_stats.WgPeerData) -> int:
@@ -153,9 +155,10 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                 key=lambda kv: _metric_value(kv[1]),
                 reverse=parsed_keys.sort == self.SortSequence.DESCENDING
             )
+            created_at_by_user = wg_db.get_users_created_at(all_wireguard_stats.keys())
             
             indexes = self.__make_index_range(
-                len(all_wireguard_stats.items()),
+                len(all_wireguard_stats),
                 head=parsed_keys.head,
                 tail=parsed_keys.tail
             )
@@ -212,14 +215,12 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                 month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
                 handshake_text = wireguard_stats.format_handshake_age(user_data)
                 created_at_human = "N/A"
-                db_row = wg_db.get_user(wg_user)
-                if db_row is not None:
-                    created_raw = db_row["created_at"] if "created_at" in db_row.keys() else None
-                    if created_raw:
-                        try:
-                            created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
-                        except Exception:
-                            created_at_human = created_raw
+                created_raw = created_at_by_user.get(wg_user)
+                if created_raw:
+                    try:
+                        created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        created_at_human = created_raw
 
                 lines.append(
                     f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "

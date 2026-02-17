@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from asyncio import Semaphore
 
@@ -33,8 +35,8 @@ class ShowWireguardUsersStateCommand(BaseCommand):
             return
 
         linked_users = self.database.get_all_linked_data()
-        active_usernames = sorted(wireguard.get_active_usernames())
-        inactive_usernames = sorted(wireguard.get_inactive_usernames())
+        active_usernames = sorted(await asyncio.to_thread(wireguard.get_active_usernames))
+        inactive_usernames = sorted(await asyncio.to_thread(wireguard.get_inactive_usernames))
 
         linked_dict_tg_wg = telegram_utils.create_linked_dict(linked_users)
 

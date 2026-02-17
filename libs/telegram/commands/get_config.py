@@ -1,3 +1,5 @@
+import asyncio
+
 from curses.ascii import isdigit
 from .base import *
 from libs.telegram import messages
@@ -187,7 +189,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
         formatted_user = f"🔐 <em>{user_name}</em>"
 
         # Проверка существования конфига
-        user_exists_result = wireguard.check_user_exists(user_name)
+        user_exists_result = await asyncio.to_thread(wireguard.check_user_exists, user_name)
         if not user_exists_result.status:
             logger.error(f"Конфиг [{user_name}] не найден. Удаляю привязку.")
             await update.message.reply_text(
@@ -199,7 +201,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
             self.database.delete_user(user_name)
             return
 
-        if wireguard.is_username_commented(user_name):
+        if await asyncio.to_thread(wireguard.is_username_commented, user_name):
             logger.info(f"Конфиг [{user_name}] на данный момент закомментирован.")
             await update.message.reply_text(
                 f"⚠️ Конфигурация {formatted_user} временно заблокирована!\n\n"
@@ -214,7 +216,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 f"пользователю Tid [{requester_telegram_id}]."
             )
             
-            zip_result = wireguard.create_zipfile(user_name)
+            zip_result = await asyncio.to_thread(wireguard.create_zipfile, user_name)
             if zip_result.status:
                 # Экранируем все специальные символы
                 caption = (
@@ -234,12 +236,13 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                     f"╚━━━━━━━━━━━━━━━━━"
                 )
                 
-                await update.message.reply_document(
-                    document=open(zip_result.description, "rb"),
-                    caption=caption,
-                    parse_mode="HTML"
-                )
-                wireguard.remove_zipfile(user_name)
+                with open(zip_result.description, "rb") as zip_file:
+                    await update.message.reply_document(
+                        document=zip_file,
+                        caption=caption,
+                        parse_mode="HTML"
+                    )
+                await asyncio.to_thread(wireguard.remove_zipfile, user_name)
             else:
                 logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{zip_result.description}]')
                 await update.message.reply_text(
@@ -254,7 +257,7 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 f"пользователю Tid [{requester_telegram_id}]."
             )
             
-            png_path = wireguard.get_qrcode_path(user_name)
+            png_path = await asyncio.to_thread(wireguard.get_qrcode_path, user_name)
             if png_path.status:
                 caption = (
                     "<b>📲 QR-код для подключения</b>\u2003\u2003\u2003\n"
@@ -267,11 +270,12 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                     "╚━━━━━━━━━━━━━━━"
                 )
                 
-                await update.message.reply_photo(
-                    photo=open(png_path.description, "rb"),
-                    caption=caption,
-                    parse_mode="HTML"
-                )
+                with open(png_path.description, "rb") as png_file:
+                    await update.message.reply_photo(
+                        photo=png_file,
+                        caption=caption,
+                        parse_mode="HTML"
+                    )
             else:
                 logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{png_path.description}]')
                 await update.message.reply_text(

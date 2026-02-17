@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from libs.telegram import messages
 
@@ -121,13 +123,13 @@ class SendConfigCommand(BaseCommand):
         ) or "NoUsername"
 
         for user_name in context.user_data[ContextDataKeys.WIREGUARD_USERS]:
-            check_result = wireguard.check_user_exists(user_name)
+            check_result = await asyncio.to_thread(wireguard.check_user_exists, user_name)
             if not check_result.status:
                 logger.error(f"Конфиг [{user_name}] не найден.")
                 await update.message.reply_text(f"Конфигурация [{user_name}] не найдена.")
                 return
 
-            if wireguard.is_username_commented(user_name):
+            if await asyncio.to_thread(wireguard.is_username_commented, user_name):
                 logger.info(f"Конфиг [{user_name}] на данный момент закомментирован.")
                 await update.message.reply_text(
                     f"Конфигурация [{user_name}] на данный момент заблокирована."
@@ -138,7 +140,7 @@ class SendConfigCommand(BaseCommand):
                 f"Создаю и отправляю Zip-архив и Qr-код пользователя Wireguard [{user_name}] "
                 f"пользователю [{telegram_username} ({telegram_id})]."
             )
-            zip_result = wireguard.create_zipfile(user_name)
+            zip_result = await asyncio.to_thread(wireguard.create_zipfile, user_name)
             try:
                 if zip_result.status:
                     formatted_user = f"🔐 <em>{user_name}</em>"
@@ -159,18 +161,15 @@ class SendConfigCommand(BaseCommand):
                         f"╚━━━━━━━━━━━━━━━━━━"
                     )
                     
-                    await context.bot.send_document(
-                        chat_id=telegram_id,
-                        document=open(zip_result.description, "rb"),
-                        caption=caption,
-                        parse_mode="HTML"
-                    )
+                    with open(zip_result.description, "rb") as zip_file:
+                        await context.bot.send_document(
+                            chat_id=telegram_id,
+                            document=zip_file,
+                            caption=caption,
+                            parse_mode="HTML"
+                        )
 
-                    wireguard.remove_zipfile(user_name)
-
-                    # png_path = wireguard.get_qrcode_path(user_name)
-                    # if png_path.status:
-                    #     await context.bot.send_photo(chat_id=tid, photo=open(png_path.description, "rb"))
+                    await asyncio.to_thread(wireguard.remove_zipfile, user_name)
 
                     current_admin_id = -1
                     current_admin_name = "NoUsername"

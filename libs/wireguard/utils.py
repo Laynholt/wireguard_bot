@@ -2,6 +2,9 @@ import os
 import logging
 import asyncio
 import subprocess
+import shlex
+import shutil
+from typing import Sequence, Union, Optional
 
 from .types import FunctionResult
 from ..core import config
@@ -11,21 +14,39 @@ from . import stats
 logger = logging.getLogger(__name__)
 
 
-def run_command(command: str) -> FunctionResult:
+def run_command(
+    command: Union[str, Sequence[str]],
+    timeout_sec: int = 60,
+    stdin_data: Optional[str] = None,
+) -> FunctionResult:
     """
-    Выполняет команду в системной оболочке и проверяет, успешно ли она завершилась.
+    Выполняет команду и проверяет, успешно ли она завершилась.
 
     Args:
-        command (str): Команда для выполнения.
+        command (Union[str, Sequence[str]]): Команда для выполнения.
+        timeout_sec (int): Таймаут выполнения в секундах.
+        stdin_data (Optional[str]): Текст для передачи в stdin процесса.
 
     Returns:
-        bool: True, если команда успешно выполнена, иначе False.
+        FunctionResult: Результат выполнения команды.
     """
     try:
-        result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
+        args = shlex.split(command) if isinstance(command, str) else list(command)
+        result = subprocess.run(
+            args,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            input=stdin_data,
+        )
         return FunctionResult(status=True, description=f'{result.stdout}')
     except subprocess.CalledProcessError as e:
-        return FunctionResult(status=False, description=f'{e.stderr}')
+        return FunctionResult(status=False, description=f'{e.stderr or e.stdout}')
+    except subprocess.TimeoutExpired as e:
+        return FunctionResult(status=False, description=f'Команда превысила таймаут {timeout_sec}s: {e}')
+    except FileNotFoundError as e:
+        return FunctionResult(status=False, description=f'Не найден исполняемый файл: {e}')
 
 
 def backup_config() -> None:
@@ -33,16 +54,17 @@ def backup_config() -> None:
     Создает резервную копию конфигурационного файла WireGuard и базы wg_users.db
     """
     try:
-        os.makedirs(f'{config.wireguard_folder}/config/wg_confs_backup', exist_ok=True)
-        run_command(
-            f'cp {config.wireguard_config_filepath}'
-            f' {config.wireguard_folder}/config/wg_confs_backup/wg0.conf'
-        ).return_with_print()
+        backup_dir = os.path.join(config.wireguard_folder, "config", "wg_confs_backup")
+        os.makedirs(backup_dir, exist_ok=True)
+
+        cfg_dst = os.path.join(backup_dir, "wg0.conf")
+        shutil.copy2(config.wireguard_config_filepath, cfg_dst)
+
         # Бэкап базы пользователей
-        db_src = f'{config.wireguard_folder}/config/wg_users.db'
-        db_dst = f'{config.wireguard_folder}/config/wg_confs_backup/wg_users.db'
+        db_src = os.path.join(config.wireguard_folder, "config", "wg_users.db")
+        db_dst = os.path.join(backup_dir, "wg_users.db")
         if os.path.exists(db_src):
-            run_command(f'cp {db_src} {db_dst}').return_with_print()
+            shutil.copy2(db_src, db_dst)
             print('Резервная копия базы пользователей создана.')
         else:
             print('База пользователей не найдена, пропускаю её бэкап.')
@@ -68,7 +90,11 @@ def log_and_restart_wireguard() -> bool:
     """
     log_wireguard_status()  # Записываем лог с выводом show_info.py
     print('Перезагружаю Wireguard...')
-    run_command(f'docker compose -f {config.wireguard_folder}/docker-compose.yml restart wireguard').return_with_print()  # Перезагрузка WireGuard
+    run_command([
+        "docker", "compose",
+        "-f", os.path.join(config.wireguard_folder, "docker-compose.yml"),
+        "restart", "wireguard",
+    ]).return_with_print()  # Перезагрузка WireGuard
     return True
 
 async def async_restart_wireguard() -> bool:

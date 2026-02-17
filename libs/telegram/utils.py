@@ -63,7 +63,7 @@ async def send_long_message(
     max_length: int = config.telegram_max_message_length,
     parse_mode: Optional[str] = None,
     groups_before_delay: int = 2,
-    delay_between_groups: float = 0.5,
+    delay_between_groups: float = 0.5
 ) -> None:
     """
     Отправляет сообщение (или несколько), разбивая его на части, если оно превышает ограничение,
@@ -87,7 +87,10 @@ async def send_long_message(
             await update.message.reply_text(message[i : i + max_length], parse_mode=parse_mode)
             sent_messages += 1
             # Если это не последний блок, то делаем задержку после groups_before_delay отправленных сообщений
-            if sent_messages % groups_before_delay == 0 and (i + max_length) < len(message):
+            if (
+                sent_messages % groups_before_delay == 0
+                and (i + max_length) < len(message)
+            ):
                 await asyncio.sleep(delay_between_groups)
 
     elif isinstance(message, list):
@@ -98,7 +101,10 @@ async def send_long_message(
                 await update.message.reply_text("".join(message[start_index:i]), parse_mode=parse_mode)
                 sent_messages += 1
                 # Если это не последний блок, то делаем задержку
-                if sent_messages % groups_before_delay == 0 and i < len(message):
+                if (
+                    sent_messages % groups_before_delay == 0
+                    and i < len(message)
+                ):
                     await asyncio.sleep(delay_between_groups)
                 start_index = i
                 current_length = len(line)
@@ -143,7 +149,10 @@ async def send_batched_messages(
 
         sent_groups += 1
         # Управление задержками между группами сообщений
-        if sent_groups % groups_before_delay == 0 and batch_idx != total_batches:
+        if (
+            sent_groups % groups_before_delay == 0
+            and batch_idx != total_batches
+        ):
             await asyncio.sleep(delay_between_groups)
 
 
@@ -210,19 +219,20 @@ async def get_usernames_in_bulk(
     Returns:
         dict[TelegramId, Optional[TelegramUserName]]: Словарь вида {telegram_id: "@username" или None}.
     """
-    if not telegram_ids:
+    ids = list(telegram_ids)
+    if not ids:
         return {}
     
     # Создаем задачи для асинхронного получения username 
     # с использованием ограничения на количество запросов
     tasks = [
         get_username_with_limit(tid, context, semaphore)
-        for tid in telegram_ids
+        for tid in ids
     ]
     # Выполняем все задачи параллельно с помощью asyncio.gather,
     # возвращая результаты как список
     usernames = await asyncio.gather(*tasks)
     return {
         tid: username
-        for tid, username in zip(telegram_ids, usernames)
+        for tid, username in zip(ids, usernames)
     }

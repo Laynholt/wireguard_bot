@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from libs.telegram import messages
 from libs.wireguard.user_control import sanitize_string
@@ -53,7 +55,7 @@ class CommentWireguardUserCommand(BaseCommand):
         if not await self._validate_username(update, user_name):
             return False
         
-        ret_val = wireguard.comment_or_uncomment_user(user_name)
+        ret_val = await asyncio.to_thread(wireguard.comment_or_uncomment_user, user_name)
         if ret_val.status is True:
             logger.info(ret_val.description)
         else:

@@ -7,7 +7,7 @@ from enum import Enum
 import json
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 
 from . import wg_db
 
@@ -115,7 +115,34 @@ def migrate_legacy_users_to_db() -> None:
             shutil.rmtree(folder_path)
         except Exception:
             pass
-    
+
+
+def _get_allowed_ip_from_config(user_name: str) -> Optional[str]:
+    """
+    Ищет AllowedIPs для пользователя в wg0.conf.
+    """
+    if not os.path.exists(config.wireguard_config_filepath):
+        return None
+    with open(config.wireguard_config_filepath, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f]
+    for i, line in enumerate(lines):
+        if line.startswith("#"):
+            name = line.lstrip("#").strip()
+            if name == user_name and i + 2 < len(lines):
+                # next lines: PublicKey, PresharedKey, AllowedIPs
+                for j in range(i + 1, min(len(lines), i + 6)):
+                    if lines[j].startswith("AllowedIPs"):
+                        return lines[j].split("=")[1].strip()
+        elif line == "[Peer]" and i + 1 < len(lines):
+            name_line = lines[i + 1]
+            if name_line.startswith("#"):
+                name = name_line.lstrip("#").strip()
+                if name == user_name:
+                    for j in range(i + 1, min(len(lines), i + 6)):
+                        if lines[j].startswith("AllowedIPs"):
+                            return lines[j].split("=")[1].strip()
+    return None
+
 
 def __error_exit() -> None:
     """
@@ -125,9 +152,25 @@ def __error_exit() -> None:
         user_name (str): Имя пользователя.
     """
     filename = config.wireguard_config_filepath
-    if os.path.exists(f'{filename}.bak'):
-        utils.run_command(f'mv {filename}.bak {filename}').return_with_print()
+    backup_path = f'{filename}.bak'
+    if os.path.exists(backup_path):
+        try:
+            shutil.move(backup_path, filename)
+        except Exception as e:
+            print(f'Не удалось восстановить бэкап [{backup_path}] -> [{filename}]: {e}')
     print(f'[{50*"-"}]\n')
+
+
+def __cleanup_backup_file(filename: str) -> None:
+    """
+    Удаляет временный .bak-файл после успешной операции.
+    """
+    backup_path = f"{filename}.bak"
+    try:
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+    except Exception as e:
+        print(f'Не удалось удалить временный бэкап [{backup_path}]: {e}')
 
 
 def __get_next_available_ip() -> utils.FunctionResult:
@@ -162,17 +205,20 @@ def __generate_keys() -> utils.FunctionResult:
     Генерирует private/public/preshared keys через docker exec wireguard.
     """
     try:
-        priv_res = utils.run_command("docker exec wireguard wg genkey")
+        priv_res = utils.run_command(["docker", "exec", "wireguard", "wg", "genkey"])
         if not priv_res.status:
             return priv_res
         private_key = priv_res.description.strip()
 
-        pub_res = utils.run_command(f"echo {private_key} | docker exec -i wireguard wg pubkey")
+        pub_res = utils.run_command(
+            ["docker", "exec", "-i", "wireguard", "wg", "pubkey"],
+            stdin_data=f"{private_key}\n",
+        )
         if not pub_res.status:
             return pub_res
         public_key = pub_res.description.strip()
 
-        psk_res = utils.run_command("docker exec wireguard wg genpsk")
+        psk_res = utils.run_command(["docker", "exec", "wireguard", "wg", "genpsk"])
         if not psk_res.status:
             return psk_res
         preshared_key = psk_res.description.strip()
@@ -254,8 +300,11 @@ def __get_dsn_server_ip() -> str:
     dns_container_name: str = dns_tokens[0] if dns_tokens else dns_raw
 
     ret_val = utils.run_command(
-        "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "
-        + dns_container_name
+        [
+            "docker", "inspect",
+            "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+            dns_container_name,
+        ]
     )
 
     if not ret_val.status:
@@ -305,7 +354,7 @@ def add_user(user_name: str) -> utils.FunctionResult:
 
         filename = config.wireguard_config_filepath
         try:
-            utils.run_command(f'cp {filename} {filename}.bak').return_with_print()
+            shutil.copy2(filename, f"{filename}.bak")
 
             with open(filename, 'a', encoding='utf-8') as file:
                 file.write(
@@ -327,13 +376,14 @@ def add_user(user_name: str) -> utils.FunctionResult:
             private_key=keys["private"],
             public_key=keys["public"],
             preshared_key=keys["preshared"],
-            created_at=datetime.utcnow().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
             commented=0,
             allowed_ip=allowed_ip,
             stats_json=None,
         )
 
         utils.backup_config()
+        __cleanup_backup_file(filename)
 
         return utils.FunctionResult(status=True, description=f'Пользователь [{user_name}] успешно добавлен!').return_with_print(
             add_to_print=f'[{50*"-"}]\n')
@@ -341,6 +391,36 @@ def add_user(user_name: str) -> utils.FunctionResult:
     except KeyboardInterrupt:
         return utils.FunctionResult(status=False, description='Было вызвано прерывание (Ctrl+C).').return_with_print(
             error_handler=lambda: __error_exit())
+
+
+def __find_peer_block_bounds(lines: List[str], user_name: str) -> Optional[tuple[int, int]]:
+    """
+    Находит границы peer-блока пользователя в wg-конфиге.
+
+    Возвращает кортеж (start_idx, end_idx), где end_idx не включается.
+    """
+    peer_starts: List[int] = []
+    for idx, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith("[Peer]") or stripped.startswith("#[Peer]"):
+            peer_starts.append(idx)
+
+    for block_idx, start_idx in enumerate(peer_starts):
+        end_idx = peer_starts[block_idx + 1] if block_idx + 1 < len(peer_starts) else len(lines)
+        found_user = False
+
+        for line in lines[start_idx:end_idx]:
+            stripped = line.strip()
+            if not stripped.startswith("#"):
+                continue
+            if stripped.lstrip("#").strip() == user_name:
+                found_user = True
+                break
+
+        if found_user:
+            return (start_idx, end_idx)
+
+    return None
 
 
 def __remove_user_from_config(user_name: str) -> utils.FunctionResult:
@@ -358,18 +438,10 @@ def __remove_user_from_config(user_name: str) -> utils.FunctionResult:
         with open(filename, 'r', encoding='utf-8') as file:
             lines = file.readlines()
 
-        found = False
-        peer_index = -1
-        for i, line in enumerate(lines):
-            if line.startswith('#'):
-                name = line.replace('#', '').strip()
-                if name == user_name:
-                    found = True
-                    peer_index = i - 1
-                    break
-
-        if found and peer_index >= 0:
-            del lines[peer_index:peer_index + 6]  # Удаляем 6 строк, включая [Peer]
+        block_bounds = __find_peer_block_bounds(lines, user_name)
+        if block_bounds is not None:
+            start_idx, end_idx = block_bounds
+            del lines[start_idx:end_idx]
 
             with open(filename, 'w', encoding='utf-8') as file:
                 file.writelines(lines)
@@ -400,19 +472,20 @@ def __comment_uncomment_in_config(user_name: str, action_type: ActionType) -> ut
         with open(filename, 'r', encoding='utf-8') as file:
             lines = file.readlines()
 
-        found = False
-        peer_index = -1
-        for i, line in enumerate(lines):
-            if line.startswith('#'):
-                name = line.replace('#', '').strip()
-                if name == user_name:
-                    found = True
-                    peer_index = i - 1
-                    break
+        block_bounds = __find_peer_block_bounds(lines, user_name)
+        if block_bounds is not None:
+            start_idx, end_idx = block_bounds
 
-        if found and peer_index >= 0:
-            for i in range(peer_index, peer_index + 5):
-                lines[i] = f'#{lines[i]}' if action_type == ActionType.COMMENT else lines[i][1:]
+            for i in range(start_idx, end_idx):
+                line = lines[i]
+                if not line.strip():
+                    continue
+
+                if action_type == ActionType.COMMENT:
+                    lines[i] = f'#{line}'
+                else:
+                    if line.startswith('#'):
+                        lines[i] = line[1:]
 
             with open(filename, 'w', encoding='utf-8') as file:
                 file.writelines(lines)
@@ -422,7 +495,7 @@ def __comment_uncomment_in_config(user_name: str, action_type: ActionType) -> ut
         else:
             return utils.FunctionResult(status=False, description=f"Пользователь с именем [{user_name}] не найден в конфиге.")
     except IOError:
-        return utils.FunctionResult(status=True, description=f'Ошибка при открытии файла [{filename}] для изменения данных [{user_name}]!')
+        return utils.FunctionResult(status=False, description=f'Ошибка при открытии файла [{filename}] для изменения данных [{user_name}]!')
     
 
 def __modify_user(user_name: str, modify_type: UserModifyType) -> utils.FunctionResult:
@@ -524,14 +597,14 @@ def print_user_qrcode(user_name: str) -> utils.FunctionResult:
         return conf_res.return_with_print(add_to_print=f'[{50 * "-"}]\n')
 
     tmp_remote = f"/tmp/{user_name}.conf"
-    copy_to = utils.run_command(f"docker cp {conf_res.description} wireguard:{tmp_remote}")
+    copy_to = utils.run_command(["docker", "cp", conf_res.description, f"wireguard:{tmp_remote}"])
     if not copy_to.status:
         return copy_to.return_with_print(add_to_print=f'[{50 * "-"}]\n')
 
-    command = f'docker exec wireguard bash -c "qrencode -t ansiutf8 < {tmp_remote}"'
+    command = ["docker", "exec", "wireguard", "sh", "-c", f"qrencode -t ansiutf8 < {tmp_remote}"]
     utils.run_command(command).return_with_print()
 
-    utils.run_command(f'docker exec wireguard rm -f {tmp_remote}')
+    utils.run_command(["docker", "exec", "wireguard", "rm", "-f", tmp_remote])
 
     try:
         os.remove(conf_res.description)
@@ -643,13 +716,14 @@ def generate_temp_qr(user_name: str, conf_path: str) -> utils.FunctionResult:
     tmp_png_remote = f"/tmp/{user_name}.png"
 
     # Копируем конфиг в контейнер
-    copy_to = utils.run_command(f"docker cp {conf_path} wireguard:{tmp_remote}")
+    copy_to = utils.run_command(["docker", "cp", conf_path, f"wireguard:{tmp_remote}"])
     if not copy_to.status:
         return copy_to
 
-    qr_cmd = (
-        f'docker exec wireguard bash -c "qrencode -t png -o {tmp_png_remote} -r {tmp_remote}"'
-    )
+    qr_cmd = [
+        "docker", "exec", "wireguard", "sh", "-c",
+        f"qrencode -t png -o {tmp_png_remote} -r {tmp_remote}"
+    ]
     qr_ret = utils.run_command(qr_cmd)
     if not qr_ret.status:
         return qr_ret
@@ -659,12 +733,12 @@ def generate_temp_qr(user_name: str, conf_path: str) -> utils.FunctionResult:
         os.remove(png_local)
     except Exception:
         pass
-    copy_back = utils.run_command(f"docker cp wireguard:{tmp_png_remote} {png_local}")
+    copy_back = utils.run_command(["docker", "cp", f"wireguard:{tmp_png_remote}", png_local])
     if not copy_back.status:
         return copy_back
 
     # Чистим в контейнере
-    utils.run_command(f'docker exec wireguard rm -f {tmp_remote} {tmp_png_remote}')
+    utils.run_command(["docker", "exec", "wireguard", "rm", "-f", tmp_remote, tmp_png_remote])
 
     return utils.FunctionResult(status=True, description=png_local)
 
