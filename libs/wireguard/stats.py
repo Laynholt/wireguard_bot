@@ -42,6 +42,8 @@ class WgPeerData(BaseModel):
     """
     allowed_ips: Optional[str] = None
     endpoint: Optional[str] = None
+    endpoint_ips: List[str] = Field(default_factory=list)
+    endpoint_last_seen_at: Dict[str, str] = Field(default_factory=dict)  # {endpoint_ip: ISO 8601}
     latest_handshake: Optional[str] = None
     latest_handshake_at: Optional[str] = None  # ISO 8601 UTC время последнего рукопожатия
     transfer_received: Optional[str] = None
@@ -236,6 +238,220 @@ def human_to_bytes(transfer: Optional[str]) -> int:
     Публичная обёртка для __convert_transfer_to_bytes.
     """
     return __convert_transfer_to_bytes(transfer)
+
+
+def __extract_endpoint_ip(endpoint: Optional[str]) -> Optional[str]:
+    """
+    Извлекает IP-часть из endpoint вида "IP:port" или "[IPv6]:port".
+    Возвращает None, если IP не удалось корректно распознать.
+    """
+    if not endpoint:
+        return None
+
+    endpoint_raw = endpoint.strip()
+    if not endpoint_raw:
+        return None
+
+    candidate = endpoint_raw
+    if endpoint_raw.startswith("["):
+        close_bracket = endpoint_raw.find("]")
+        if close_bracket <= 1:
+            return None
+        candidate = endpoint_raw[1:close_bracket]
+    elif ":" in endpoint_raw:
+        candidate = endpoint_raw.rsplit(":", 1)[0]
+
+    candidate = candidate.strip()
+    try:
+        ipaddress.ip_address(candidate)
+    except ValueError:
+        return None
+    return candidate
+
+
+def __parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    """
+    Парсит ISO 8601 в timezone-aware datetime. Возвращает None при ошибке.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def __pick_latest_iso(old_iso: Optional[str], new_iso: Optional[str]) -> Optional[str]:
+    """
+    Возвращает более позднюю дату из двух ISO-строк.
+    """
+    old_dt = __parse_iso_datetime(old_iso)
+    new_dt = __parse_iso_datetime(new_iso)
+    if old_dt and new_dt:
+        return old_dt.isoformat() if old_dt >= new_dt else new_dt.isoformat()
+    if old_dt:
+        return old_dt.isoformat()
+    if new_dt:
+        return new_dt.isoformat()
+    return None
+
+
+def __normalize_endpoint_ips(endpoint_ips: Optional[List[str]]) -> List[str]:
+    """
+    Нормализует историю endpoint IP: оставляет только валидные уникальные IP
+    и сохраняет порядок их первого появления.
+    """
+    if not endpoint_ips:
+        return []
+
+    result: List[str] = []
+    seen: set[str] = set()
+    for endpoint_ip in endpoint_ips:
+        if not endpoint_ip:
+            continue
+        candidate = endpoint_ip.strip()
+        if not candidate or candidate in seen:
+            continue
+        try:
+            ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        result.append(candidate)
+        seen.add(candidate)
+    return result
+
+
+def __normalize_endpoint_last_seen_map(endpoint_last_seen_at: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """
+    Нормализует словарь {endpoint_ip: last_seen_iso}:
+    - оставляет только валидные IP и корректные ISO-значения.
+    """
+    if not endpoint_last_seen_at:
+        return {}
+
+    result: Dict[str, str] = {}
+    for endpoint_ip, seen_at_iso in endpoint_last_seen_at.items():
+        if not endpoint_ip:
+            continue
+        candidate_ip = endpoint_ip.strip()
+        if not candidate_ip:
+            continue
+        try:
+            ipaddress.ip_address(candidate_ip)
+        except ValueError:
+            continue
+
+        normalized_iso = __pick_latest_iso(None, seen_at_iso)
+        if normalized_iso:
+            result[candidate_ip] = normalized_iso
+    return result
+
+
+def __add_endpoint_to_history(endpoint_ips: List[str], endpoint: Optional[str]) -> List[str]:
+    """
+    Добавляет IP из endpoint в историю endpoint_ips, если такого IP ещё не было.
+    """
+    history = __normalize_endpoint_ips(endpoint_ips)
+    endpoint_ip = __extract_endpoint_ip(endpoint)
+    if endpoint_ip and endpoint_ip not in history:
+        history.append(endpoint_ip)
+    return history
+
+
+def __update_endpoint_last_seen(
+    endpoint_last_seen_at: Dict[str, str],
+    endpoint: Optional[str],
+    handshake_at_iso: Optional[str],
+    now_iso: str,
+) -> Dict[str, str]:
+    """
+    Обновляет last_seen для endpoint IP:
+    - при наличии handshake_at_iso использует его;
+    - иначе для нового IP фиксирует текущее время наблюдения now_iso;
+    - для существующего IP без handshake оставляет предыдущее значение.
+    """
+    result = __normalize_endpoint_last_seen_map(endpoint_last_seen_at)
+    endpoint_ip = __extract_endpoint_ip(endpoint)
+    if not endpoint_ip:
+        return result
+
+    existing_iso = result.get(endpoint_ip)
+    candidate_iso = handshake_at_iso if handshake_at_iso else (existing_iso if existing_iso else now_iso)
+    merged_iso = __pick_latest_iso(existing_iso, candidate_iso)
+    if merged_iso:
+        result[endpoint_ip] = merged_iso
+    return result
+
+
+def __merge_endpoint_last_seen_maps(
+    left: Dict[str, str],
+    right: Dict[str, str],
+) -> Dict[str, str]:
+    """
+    Объединяет два словаря endpoint_last_seen_at, сохраняя максимально позднюю дату по каждому IP.
+    """
+    result = __normalize_endpoint_last_seen_map(left)
+    right_norm = __normalize_endpoint_last_seen_map(right)
+    for endpoint_ip, seen_at_iso in right_norm.items():
+        result[endpoint_ip] = __pick_latest_iso(result.get(endpoint_ip), seen_at_iso) or seen_at_iso
+    return result
+
+
+def __format_iso_datetime_local(dt_iso: Optional[str]) -> str:
+    """
+    Форматирует ISO-дату в локальное время сервера: YYYY-MM-DD HH:MM:SS.
+    """
+    dt = __parse_iso_datetime(dt_iso)
+    if not dt:
+        return "N/A"
+    return dt.astimezone(__now_local().tzinfo).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_other_endpoint_ips(data: WgPeerData) -> List[str]:
+    """
+    Возвращает список прочих endpoint IP (кроме текущего endpoint IP).
+    """
+    history = __add_endpoint_to_history(data.endpoint_ips, data.endpoint)
+    latest_ip = __extract_endpoint_ip(data.endpoint)
+    if latest_ip:
+        return [ip for ip in history if ip != latest_ip]
+    return history
+
+
+def get_endpoint_last_seen_map(data: WgPeerData) -> Dict[str, str]:
+    """
+    Возвращает нормализованный словарь endpoint_ip -> last_seen_iso.
+    Для текущего endpoint при необходимости дополняет last_seen.
+    """
+    return __update_endpoint_last_seen(
+        data.endpoint_last_seen_at,
+        data.endpoint,
+        data.latest_handshake_at,
+        now_iso=__now_local().isoformat(),
+    )
+
+
+def get_other_endpoint_ips_with_last_seen(data: WgPeerData) -> List[Tuple[str, str]]:
+    """
+    Возвращает список прочих endpoint IP с датой последнего наблюдаемого коннекта.
+    """
+    other_ips = get_other_endpoint_ips(data)
+    last_seen_map = get_endpoint_last_seen_map(data)
+    return [(ip, __format_iso_datetime_local(last_seen_map.get(ip))) for ip in other_ips]
+
+
+def get_current_endpoint_last_seen_text(data: WgPeerData) -> str:
+    """
+    Возвращает дату последнего коннекта для текущего endpoint.
+    """
+    endpoint_ip = __extract_endpoint_ip(data.endpoint)
+    if not endpoint_ip:
+        return "N/A"
+    last_seen_map = get_endpoint_last_seen_map(data)
+    return __format_iso_datetime_local(last_seen_map.get(endpoint_ip))
 
 
 def __parse_handshake_to_datetime(handshake_str: Optional[str]) -> Optional[datetime]:
@@ -528,6 +744,13 @@ def load_stats_from_db() -> Dict[str, WgPeerData]:
         except Exception:
             continue
         data_obj = WgPeerData(**decoded)
+        data_obj.endpoint_ips = __add_endpoint_to_history(data_obj.endpoint_ips, data_obj.endpoint)
+        data_obj.endpoint_last_seen_at = __update_endpoint_last_seen(
+            data_obj.endpoint_last_seen_at,
+            data_obj.endpoint,
+            data_obj.latest_handshake_at,
+            now_iso=__now_local().isoformat(),
+        )
 
         if data_obj.raw_received_bytes == 0 and data_obj.transfer_received:
             data_obj.raw_received_bytes = __convert_transfer_to_bytes(data_obj.transfer_received)
@@ -552,11 +775,22 @@ def __merge_results(
     - periods — накапливаем приращения в daily/weekly/monthly
     """
     merged = dict(old_data)  # копия
+    now_iso = now.isoformat()
 
     for user, new_info in new_data.items():
         if user not in merged:
             # Пользователь встречается впервые
             merged[user] = new_info
+            merged[user].endpoint_ips = __add_endpoint_to_history(
+                merged[user].endpoint_ips,
+                merged[user].endpoint,
+            )
+            merged[user].endpoint_last_seen_at = __update_endpoint_last_seen(
+                merged[user].endpoint_last_seen_at,
+                merged[user].endpoint,
+                merged[user].latest_handshake_at,
+                now_iso=now_iso,
+            )
             __update_period_stats(
                 merged[user].periods,
                 new_info.raw_received_bytes,
@@ -569,6 +803,15 @@ def __merge_results(
             continue
 
         current = merged[user]
+        current.endpoint_ips = __add_endpoint_to_history(current.endpoint_ips, current.endpoint)
+        current.endpoint_last_seen_at = __update_endpoint_last_seen(
+            current.endpoint_last_seen_at,
+            current.endpoint,
+            current.latest_handshake_at,
+            now_iso=now_iso,
+        )
+        incoming_endpoint_ips = __normalize_endpoint_ips(new_info.endpoint_ips)
+        incoming_endpoint_last_seen_at = __normalize_endpoint_last_seen_map(new_info.endpoint_last_seen_at)
 
         old_received_raw = current.raw_received_bytes
         old_sent_raw = current.raw_sent_bytes
@@ -606,6 +849,18 @@ def __merge_results(
             current.allowed_ips = new_info.allowed_ips
         if new_info.endpoint:
             current.endpoint = new_info.endpoint
+        current.endpoint_ips = __normalize_endpoint_ips(current.endpoint_ips + incoming_endpoint_ips)
+        current.endpoint_ips = __add_endpoint_to_history(current.endpoint_ips, current.endpoint)
+        current.endpoint_last_seen_at = __merge_endpoint_last_seen_maps(
+            current.endpoint_last_seen_at,
+            incoming_endpoint_last_seen_at,
+        )
+        current.endpoint_last_seen_at = __update_endpoint_last_seen(
+            current.endpoint_last_seen_at,
+            current.endpoint,
+            current.latest_handshake_at,
+            now_iso=now_iso,
+        )
 
     return merged
 
@@ -658,6 +913,13 @@ def accumulate_wireguard_stats(
         new_data[username] = WgPeerData(
             allowed_ips=peer.data.allowed_ips,
             endpoint=peer.data.endpoint,
+            endpoint_ips=__add_endpoint_to_history([], peer.data.endpoint),
+            endpoint_last_seen_at=__update_endpoint_last_seen(
+                {},
+                peer.data.endpoint,
+                handshake_dt.isoformat() if handshake_dt else None,
+                now_iso=now.isoformat(),
+            ),
             latest_handshake=peer.data.latest_handshake,
             latest_handshake_at=handshake_dt.isoformat() if handshake_dt else None,
             transfer_received=peer.data.transfer_received,
@@ -745,7 +1007,11 @@ def display_merged_data(merged_data: Dict[str, WgPeerData]) -> None:
         if user_data.allowed_ips:
             print(f"  allowed ips: {user_data.allowed_ips}")
         if user_data.endpoint:
-            print(f"  endpoint: {user_data.endpoint}")
+            print(f"  latest endpoint: {user_data.endpoint} (last seen: {get_current_endpoint_last_seen_text(user_data)})")
+        other_endpoint_ips = get_other_endpoint_ips_with_last_seen(user_data)
+        if other_endpoint_ips:
+            other_pretty = ", ".join([f"{ip} ({seen_at})" for ip, seen_at in other_endpoint_ips])
+            print(f"  other endpoint ips: {other_pretty}")
         if user_data.latest_handshake:
             print(f"  latest handshake: {handshake_str}")
         if user_data.transfer_received and user_data.transfer_sent:

@@ -215,6 +215,13 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                 week_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
                 month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
                 handshake_text = wireguard_stats.format_handshake_age(user_data)
+                endpoint_last_seen_text = wireguard_stats.get_current_endpoint_last_seen_text(user_data)
+                other_endpoint_ips = wireguard_stats.get_other_endpoint_ips_with_last_seen(user_data)
+                other_endpoint_text = (
+                    ", ".join([f"{ip} ({seen_at})" for ip, seen_at in other_endpoint_ips])
+                    if other_endpoint_ips else
+                    "нет"
+                )
                 created_at_human = "N/A"
                 db_row = wg_db.get_user(wg_user)
                 if db_row is not None:
@@ -231,6 +238,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                     f"   {owner_part}\n"
                     f"   🗓️ Создан: {created_at_human}\n"
                     f"   📡 IP: {user_data.allowed_ips}\n"
+                    f"   🌍 Последний endpoint: {user_data.endpoint or 'N/A'} ({endpoint_last_seen_text})\n"
+                    f"   🧭 Другие endpoint IP: {other_endpoint_text}\n"
                     f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
                     f"   📊 Статистика по трафику:\n"
                     f"      За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
