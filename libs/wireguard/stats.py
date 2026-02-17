@@ -172,7 +172,8 @@ def __process_peer_block(block: List[str], peers: Dict[str, Any]) -> Union[WgPee
 
     for line in block[1:]:
         if "endpoint:" in line:
-            endpoint = line.split("endpoint:")[1].strip()
+            endpoint_raw = line.split("endpoint:")[1].strip()
+            endpoint = __extract_endpoint_ip(endpoint_raw)
         elif "allowed ips:" in line:
             allowed_ips = line.split("allowed ips:")[1].strip()
         elif "latest handshake:" in line:
@@ -744,6 +745,7 @@ def load_stats_from_db() -> Dict[str, WgPeerData]:
         except Exception:
             continue
         data_obj = WgPeerData(**decoded)
+        data_obj.endpoint = __extract_endpoint_ip(data_obj.endpoint)
         data_obj.endpoint_ips = __add_endpoint_to_history(data_obj.endpoint_ips, data_obj.endpoint)
         data_obj.endpoint_last_seen_at = __update_endpoint_last_seen(
             data_obj.endpoint_last_seen_at,
@@ -803,6 +805,7 @@ def __merge_results(
             continue
 
         current = merged[user]
+        current.endpoint = __extract_endpoint_ip(current.endpoint)
         current.endpoint_ips = __add_endpoint_to_history(current.endpoint_ips, current.endpoint)
         current.endpoint_last_seen_at = __update_endpoint_last_seen(
             current.endpoint_last_seen_at,
@@ -848,7 +851,7 @@ def __merge_results(
         if new_info.allowed_ips:
             current.allowed_ips = new_info.allowed_ips
         if new_info.endpoint:
-            current.endpoint = new_info.endpoint
+            current.endpoint = __extract_endpoint_ip(new_info.endpoint)
         current.endpoint_ips = __normalize_endpoint_ips(current.endpoint_ips + incoming_endpoint_ips)
         current.endpoint_ips = __add_endpoint_to_history(current.endpoint_ips, current.endpoint)
         current.endpoint_last_seen_at = __merge_endpoint_last_seen_maps(
@@ -912,7 +915,7 @@ def accumulate_wireguard_stats(
 
         new_data[username] = WgPeerData(
             allowed_ips=peer.data.allowed_ips,
-            endpoint=peer.data.endpoint,
+            endpoint=__extract_endpoint_ip(peer.data.endpoint),
             endpoint_ips=__add_endpoint_to_history([], peer.data.endpoint),
             endpoint_last_seen_at=__update_endpoint_last_seen(
                 {},
