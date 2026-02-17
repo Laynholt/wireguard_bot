@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from libs.telegram import messages
 from libs.telegram.commands.bind import BIND_KEYBOARD
@@ -74,13 +76,14 @@ class AddWireguardUserCommand(BaseCommand):
         if not await self._validate_username(update, user_name):
             return False
 
-        add_result = wireguard.add_user(user_name)
+        add_result = await asyncio.to_thread(wireguard.add_user, user_name)
         if add_result.status:
-            zip_result = wireguard.create_zipfile(user_name)
+            zip_result = await asyncio.to_thread(wireguard.create_zipfile, user_name)
             
             if zip_result.status and update.message is not None:
-                await update.message.reply_document(document=open(zip_result.description, "rb"))
-                wireguard.remove_zipfile(user_name)
+                with open(zip_result.description, "rb") as file_to_send:
+                    await update.message.reply_document(document=file_to_send)
+                await asyncio.to_thread(wireguard.remove_zipfile, user_name)
                 
                 if context.user_data is not None:
                     context.user_data[ContextDataKeys.WIREGUARD_USERS].append(user_name)

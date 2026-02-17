@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from asyncio import Semaphore
 
@@ -37,7 +39,7 @@ class ShowAllBindingsCommand(BaseCommand):
 
         linked_users = self.database.get_all_linked_data()
         telegram_info = {tid: status for tid, status in self.database.get_all_telegram_users()}
-        available_usernames = wireguard.get_usernames()
+        available_usernames = await asyncio.to_thread(wireguard.get_usernames)
 
         # Словарь вида {telegram_id: [user_names]}
         linked_dict = telegram_utils.create_linked_dict(linked_users)

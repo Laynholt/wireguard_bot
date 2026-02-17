@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from .base import *
 import libs.wireguard.utils as wireguard_utils
@@ -32,9 +33,9 @@ class UnblockTorrentCommand(BaseCommand):
         logger.info(f"Отправляю ответ на команду [unblock_torrent] -> Tid [{telegram_id}].")
         
         try:
-            status = wireguard.check_torrent_blocking_status()
+            status = await asyncio.to_thread(wireguard.check_torrent_blocking_status)
             if status == "enabled":
-                result = wireguard.remove_torrent_blocking()
+                result = await asyncio.to_thread(wireguard.remove_torrent_blocking)
                 if update.message is not None:    
                     await update.message.reply_text(
                         (
@@ -44,10 +45,14 @@ class UnblockTorrentCommand(BaseCommand):
                     )
                 if result.status is True:
                     if update.message is not None:    
+                        current_rules = await asyncio.to_thread(
+                            wireguard.get_current_rules,
+                            html_formatting=True
+                        )
                         await update.message.reply_text(
                             (
                                 '📋 Обновленные правила:'
-                                f'\n{wireguard.get_current_rules(html_formatting=True).description}'
+                                f'\n{current_rules.description}'
                             ),
                             parse_mode="HTML"
                         )

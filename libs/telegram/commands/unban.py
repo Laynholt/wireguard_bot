@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from libs.telegram import messages
 
@@ -141,8 +143,8 @@ class UnbanTelegramUserCommand(BaseCommand):
         
         need_restart_wireguard = False
         for user in user_configs:
-            if wireguard.is_username_commented(user):
-                ret_val = wireguard.comment_or_uncomment_user(user)
+            if await asyncio.to_thread(wireguard.is_username_commented, user):
+                ret_val = await asyncio.to_thread(wireguard.comment_or_uncomment_user, user)
                 
                 if ret_val is not None:
                     # Выводим сообщение с результатом (ошибка или успех)

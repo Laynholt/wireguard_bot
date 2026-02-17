@@ -1,3 +1,4 @@
+import asyncio
 from curses.ascii import isdigit
 from typing import final
 from .base import *
@@ -174,7 +175,8 @@ class GetWireguardUserStatsCommand(BaseCommand):
             return
 
         # Получаем полную статистику
-        all_wireguard_stats = wireguard_stats.accumulate_wireguard_stats(
+        all_wireguard_stats = await asyncio.to_thread(
+            wireguard_stats.accumulate_wireguard_stats,
             conf_file_path=self.wireguard_config_path,
             sort_by=wireguard_stats.SortBy.TRANSFER_SENT,
         )
@@ -199,21 +201,20 @@ class GetWireguardUserStatsCommand(BaseCommand):
         summary_by_owner: dict[int, dict[str, int]] = {}
 
         lines = []
-        inactive_usernames = wireguard.get_inactive_usernames()
+        inactive_usernames = await asyncio.to_thread(wireguard.get_inactive_usernames)
+        created_at_by_user = wg_db.get_users_created_at(wireguard_users)
         
         username_cache: dict[int, Optional[str]] = {}
 
         for i, wg_user in enumerate(wireguard_users, start=1):
             user_data = all_wireguard_stats.get(wg_user, None)
             created_at_human = "N/A"
-            db_row = wg_db.get_user(wg_user)
-            if db_row is not None:
-                created_raw = db_row["created_at"] if "created_at" in db_row.keys() else None
-                if created_raw:
-                    try:
-                        created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
-                    except Exception:
-                        created_at_human = created_raw
+            created_raw = created_at_by_user.get(wg_user)
+            if created_raw:
+                try:
+                    created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    created_at_human = created_raw
 
             # Случай, когда статистики для пользователя нет
             # Это может быть только в том случае, если она отсутствует в логах, 
@@ -223,9 +224,9 @@ class GetWireguardUserStatsCommand(BaseCommand):
             # лучше удалить его, раз он как-то некорректно создался, либо когда-то неправильно удалился. 
             if user_data is None:
                 # Проверяем, существует ли конфиг этого пользователя фактически
-                check_result = wireguard.check_user_exists(wg_user)
+                check_result = await asyncio.to_thread(wireguard.check_user_exists, wg_user)
                 if check_result.status:
-                    remove_result = wireguard.remove_user(wg_user)
+                    remove_result = await asyncio.to_thread(wireguard.remove_user, wg_user)
                     if remove_result.status:
                         logger.info(remove_result.description)
                     else:

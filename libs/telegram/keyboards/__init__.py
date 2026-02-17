@@ -1,4 +1,3 @@
-from encodings.punycode import T
 from typing import Dict, Final
 from .keys import *
 from .keyboards import *
@@ -20,6 +19,17 @@ class KeyboardManager:
             self.__user_keyboard.id: self.__user_keyboard
         }
 
+    def __register_keyboard_tree(self, keyboard: Keyboard) -> None:
+        """
+        Регистрирует клавиатуру и всех её потомков в кеше менеджера.
+        """
+        queue = [keyboard]
+        while queue:
+            current = queue.pop(0)
+            self.__manager[current.id] = current
+            if current.children:
+                queue.extend(current.children)
+
     def __add_to_keyboard(self, keyboard: Keyboard, is_admin_keyboard: bool = False) -> None:
         kb = self.__admin_keyboard if is_admin_keyboard else self.__user_keyboard
         kb.add_child(keyboard)
@@ -31,7 +41,7 @@ class KeyboardManager:
             one_time_keyboard=False,
         )
         
-        self.__manager.update({keyboard.id: keyboard})
+        self.__register_keyboard_tree(keyboard)
 
     def add_to_admin_keyboard(self, keyboard: Keyboard) -> None:
         """
@@ -62,7 +72,11 @@ class KeyboardManager:
         if keyboard is not None:
             return keyboard
         
-        return self.__user_keyboard.get_descendant_by_id(index)
+        keyboard = self.__user_keyboard.get_descendant_by_id(index)
+        if keyboard is not None:
+            # Кешируем найденный потомок для последующих O(1)-поисков.
+            self.__manager[keyboard.id] = keyboard
+        return keyboard
         
     def get_admin_main_keyboard(self) -> Keyboard:
         return self.__admin_keyboard

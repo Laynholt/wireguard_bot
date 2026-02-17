@@ -2,7 +2,7 @@ import os
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Iterable, Tuple
 
 from ..core import config
@@ -68,7 +68,7 @@ def upsert_user(
     stats_json: Optional[str] = None,
 ) -> None:
     init_db()
-    created_at = created_at or datetime.utcnow().isoformat()
+    created_at = created_at or datetime.now(timezone.utc).isoformat()
     with _conn() as conn:
         conn.execute(
             """
@@ -115,6 +115,24 @@ def get_user(name: str) -> Optional[sqlite3.Row]:
     with _conn() as conn:
         row = conn.execute("SELECT * FROM users WHERE name=?", (name,)).fetchone()
     return row
+
+
+def get_users_created_at(names: Iterable[str]) -> Dict[str, Optional[str]]:
+    """
+    Возвращает created_at для списка пользователей одним запросом.
+    """
+    unique_names = list(dict.fromkeys(names))
+    if not unique_names:
+        return {}
+
+    placeholders = ",".join(["?"] * len(unique_names))
+    query = f"SELECT name, created_at FROM users WHERE name IN ({placeholders})"
+
+    init_db()
+    with _conn() as conn:
+        rows = conn.execute(query, unique_names).fetchall()
+
+    return {row["name"]: row["created_at"] for row in rows}
 
 
 def remove_user(name: str) -> None:

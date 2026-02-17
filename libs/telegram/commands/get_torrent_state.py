@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 
 class GetTorrentStateCommand(BaseCommand):
@@ -31,7 +33,7 @@ class GetTorrentStateCommand(BaseCommand):
         
         try:
             if update.message is not None:
-                status = wireguard.check_torrent_blocking_status()
+                status = await asyncio.to_thread(wireguard.check_torrent_blocking_status)
                 if status == "enabled":
                     status = "✅ Блокировка торрентов включена"
                 elif status == "disabled":

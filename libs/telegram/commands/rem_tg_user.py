@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from libs.telegram import messages
 
@@ -138,7 +140,7 @@ class RemoveTelegramUserCommand(BaseCommand):
         need_restart_wireguard = False
         for user in user_configs:
             # Удаляем конфиг пользователя
-            ret_val = wireguard.remove_user(user)
+            ret_val = await asyncio.to_thread(wireguard.remove_user, user)
             
             if ret_val is not None:
                 # Выводим сообщение с результатом (ошибка или успех)

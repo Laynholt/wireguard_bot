@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 
 class GetTorrentRulesCommand(BaseCommand):
@@ -31,8 +33,12 @@ class GetTorrentRulesCommand(BaseCommand):
         
         try:
             if update.message is not None:
+                rules = await asyncio.to_thread(
+                    wireguard.get_current_rules,
+                    html_formatting=True
+                )
                 await update.message.reply_text(
-                    wireguard.get_current_rules(html_formatting=True).description,
+                    rules.description,
                     parse_mode="HTML"
                 )
                 

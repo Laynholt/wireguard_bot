@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import *
 from libs.telegram import messages
 from libs.wireguard.user_control import sanitize_string
@@ -52,7 +54,7 @@ class RemoveWireguardUserCommand(BaseCommand):
         if not await self._validate_username(update, user_name):
             return False
 
-        remove_result = wireguard.remove_user(user_name)
+        remove_result = await asyncio.to_thread(wireguard.remove_user, user_name)
         if remove_result.status:
             logger.info(remove_result.description)
             if await self._check_database_state(update):
