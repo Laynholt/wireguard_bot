@@ -70,6 +70,7 @@ def build_batched_lines(
     lines: List[str],
     max_items_per_batch: int = 5,
     max_message_length: int = config.telegram_max_message_length,
+    joiner: str = "\n",
 ) -> List[List[str]]:
     """
     Формирует батчи строк с ограничением по числу элементов и длине сообщения.
@@ -79,7 +80,9 @@ def build_batched_lines(
         max_items_per_batch (int, optional):
             Максимальное количество элементов в одном батче.
         max_message_length (int, optional):
-            Максимальная длина итогового сообщения после объединения строк батча.
+            Максимальная длина итогового сообщения после объединения строк через `joiner`.
+        joiner (str, optional):
+            Разделитель для объединения строк батча в одно сообщение.
 
     Returns:
         List[List[str]]:
@@ -96,6 +99,7 @@ def build_batched_lines(
     result: List[List[str]] = []
     current_batch: List[str] = []
     current_length = 0
+    joiner_length = len(joiner)
 
     for line in lines:
         if not current_batch:
@@ -103,7 +107,7 @@ def build_batched_lines(
             current_length = len(line)
             continue
 
-        candidate_length = current_length + len(line)
+        candidate_length = current_length + joiner_length + len(line)
         if (
             len(current_batch) >= max_items_per_batch
             or candidate_length > max_message_length
@@ -204,7 +208,7 @@ async def send_batched_messages(
 
     for batch_idx, batch in enumerate(batched_lines, 1):
         # Формируем сообщение из текущего батча
-        message = "".join(batch)
+        message = "\n".join(batch)
         
         try:
             await update.message.reply_text(message, parse_mode=parse_mode)
