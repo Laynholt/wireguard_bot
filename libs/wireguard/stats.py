@@ -302,8 +302,8 @@ def __pick_latest_iso(old_iso: Optional[str], new_iso: Optional[str]) -> Optiona
 
 def __normalize_endpoint_ips(endpoint_ips: Optional[List[str]]) -> List[str]:
     """
-    Нормализует историю endpoint IP: оставляет только валидные уникальные IP
-    и сохраняет порядок их первого появления.
+    Нормализует историю endpoint: оставляет валидные уникальные IP и /24 подсети
+    (для IPv4) и сохраняет порядок их первого появления.
     """
     if not endpoint_ips:
         return []
@@ -316,19 +316,18 @@ def __normalize_endpoint_ips(endpoint_ips: Optional[List[str]]) -> List[str]:
         candidate = endpoint_ip.strip()
         if not candidate or candidate in seen:
             continue
-        try:
-            ipaddress.ip_address(candidate)
-        except ValueError:
+        normalized_key = __normalize_endpoint_history_key(candidate)
+        if not normalized_key:
             continue
-        result.append(candidate)
-        seen.add(candidate)
+        result.append(normalized_key)
+        seen.add(normalized_key)
     return result
 
 
 def __normalize_endpoint_last_seen_map(endpoint_last_seen_at: Optional[Dict[str, str]]) -> Dict[str, str]:
     """
     Нормализует словарь {endpoint_ip: last_seen_iso}:
-    - оставляет только валидные IP и корректные ISO-значения.
+    - оставляет только валидные IP или IPv4 /24 подсети и корректные ISO-значения.
     """
     if not endpoint_last_seen_at:
         return {}
@@ -340,14 +339,144 @@ def __normalize_endpoint_last_seen_map(endpoint_last_seen_at: Optional[Dict[str,
         candidate_ip = endpoint_ip.strip()
         if not candidate_ip:
             continue
-        try:
-            ipaddress.ip_address(candidate_ip)
-        except ValueError:
+        normalized_key = __normalize_endpoint_history_key(candidate_ip)
+        if not normalized_key:
             continue
 
         normalized_iso = __pick_latest_iso(None, seen_at_iso)
         if normalized_iso:
-            result[candidate_ip] = normalized_iso
+            result[normalized_key] = normalized_iso
+    return result
+
+
+def __normalize_endpoint_history_key(value: str) -> Optional[str]:
+    """
+    Нормализует ключ истории endpoint:
+    - точный IP (IPv4/IPv6)
+    - IPv4 подсеть /24
+    """
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        pass
+
+    try:
+        network = ipaddress.ip_network(candidate, strict=False)
+    except ValueError:
+        return None
+
+    if isinstance(network, ipaddress.IPv4Network) and network.prefixlen == 24:
+        return str(network)
+    return None
+
+
+def __endpoint_key_is_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
+
+
+def __endpoint_key_is_ipv4_ip(value: str) -> bool:
+    try:
+        return isinstance(ipaddress.ip_address(value), ipaddress.IPv4Address)
+    except ValueError:
+        return False
+
+
+def __endpoint_key_to_ipv4_subnet24(value: str) -> Optional[str]:
+    """
+    Преобразует IPv4 адрес или IPv4 /24 подсеть к каноническому виду подсети /24.
+    """
+    try:
+        ip_obj = ipaddress.ip_address(value)
+        if isinstance(ip_obj, ipaddress.IPv4Address):
+            return str(ipaddress.ip_network(f"{ip_obj}/24", strict=False))
+        return None
+    except ValueError:
+        pass
+
+    try:
+        network = ipaddress.ip_network(value, strict=False)
+    except ValueError:
+        return None
+
+    if isinstance(network, ipaddress.IPv4Network) and network.prefixlen == 24:
+        return str(network)
+    return None
+
+
+def __get_collapsible_ipv4_subnet_keys(keys: List[str]) -> set[str]:
+    """
+    Возвращает набор IPv4 /24 подсетей, которые нужно хранить в агрегированном виде.
+    Подсеть схлопывается, если:
+    - в истории уже есть запись подсети /24, или
+    - в истории есть >= 2 точных IPv4 адресов из одной /24.
+    """
+    ipv4_ip_counts: Dict[str, int] = {}
+    subnet_keys_already_present: set[str] = set()
+
+    for key in keys:
+        subnet_key = __endpoint_key_to_ipv4_subnet24(key)
+        if not subnet_key:
+            continue
+        if __endpoint_key_is_ip(key):
+            if __endpoint_key_is_ipv4_ip(key):
+                ipv4_ip_counts[subnet_key] = ipv4_ip_counts.get(subnet_key, 0) + 1
+        else:
+            subnet_keys_already_present.add(subnet_key)
+
+    result = set(subnet_keys_already_present)
+    result.update({subnet for subnet, count in ipv4_ip_counts.items() if count >= 2})
+    return result
+
+
+def __compact_endpoint_ips(endpoint_ips: Optional[List[str]]) -> List[str]:
+    """
+    Схлопывает IPv4 адреса одной /24 подсети в одну запись подсети.
+    """
+    history = __normalize_endpoint_ips(endpoint_ips)
+    if not history:
+        return []
+
+    collapsible_subnets = __get_collapsible_ipv4_subnet_keys(history)
+    if not collapsible_subnets:
+        return history
+
+    result: List[str] = []
+    seen: set[str] = set()
+    for key in history:
+        subnet_key = __endpoint_key_to_ipv4_subnet24(key)
+        candidate = subnet_key if subnet_key in collapsible_subnets else key
+        if candidate in seen:
+            continue
+        result.append(candidate)
+        seen.add(candidate)
+    return result
+
+
+def __compact_endpoint_last_seen_map(endpoint_last_seen_at: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """
+    Схлопывает endpoint_last_seen_at по IPv4 /24, сохраняя самое позднее время по подсети.
+    """
+    normalized = __normalize_endpoint_last_seen_map(endpoint_last_seen_at)
+    if not normalized:
+        return {}
+
+    collapsible_subnets = __get_collapsible_ipv4_subnet_keys(list(normalized.keys()))
+    if not collapsible_subnets:
+        return normalized
+
+    result: Dict[str, str] = {}
+    for key, seen_at_iso in normalized.items():
+        subnet_key = __endpoint_key_to_ipv4_subnet24(key)
+        candidate_key = subnet_key if subnet_key in collapsible_subnets else key
+        result[candidate_key] = __pick_latest_iso(result.get(candidate_key), seen_at_iso) or seen_at_iso
     return result
 
 
@@ -355,11 +484,11 @@ def __add_endpoint_to_history(endpoint_ips: List[str], endpoint: Optional[str]) 
     """
     Добавляет IP из endpoint в историю endpoint_ips, если такого IP ещё не было.
     """
-    history = __normalize_endpoint_ips(endpoint_ips)
+    history = __compact_endpoint_ips(endpoint_ips)
     endpoint_ip = __extract_endpoint_ip(endpoint)
     if endpoint_ip and endpoint_ip not in history:
         history.append(endpoint_ip)
-    return history
+    return __compact_endpoint_ips(history)
 
 
 def __update_endpoint_last_seen(
@@ -374,17 +503,23 @@ def __update_endpoint_last_seen(
     - иначе для нового IP фиксирует текущее время наблюдения now_iso;
     - для существующего IP без handshake оставляет предыдущее значение.
     """
-    result = __normalize_endpoint_last_seen_map(endpoint_last_seen_at)
+    result = __compact_endpoint_last_seen_map(endpoint_last_seen_at)
     endpoint_ip = __extract_endpoint_ip(endpoint)
     if not endpoint_ip:
         return result
 
     existing_iso = result.get(endpoint_ip)
-    candidate_iso = handshake_at_iso if handshake_at_iso else (existing_iso if existing_iso else now_iso)
+    existing_subnet_iso = None
+    subnet_key = __endpoint_key_to_ipv4_subnet24(endpoint_ip)
+    if subnet_key:
+        existing_subnet_iso = result.get(subnet_key)
+
+    existing_effective_iso = existing_iso or existing_subnet_iso
+    candidate_iso = handshake_at_iso if handshake_at_iso else (existing_effective_iso if existing_effective_iso else now_iso)
     merged_iso = __pick_latest_iso(existing_iso, candidate_iso)
     if merged_iso:
         result[endpoint_ip] = merged_iso
-    return result
+    return __compact_endpoint_last_seen_map(result)
 
 
 def __merge_endpoint_last_seen_maps(
@@ -394,11 +529,11 @@ def __merge_endpoint_last_seen_maps(
     """
     Объединяет два словаря endpoint_last_seen_at, сохраняя максимально позднюю дату по каждому IP.
     """
-    result = __normalize_endpoint_last_seen_map(left)
-    right_norm = __normalize_endpoint_last_seen_map(right)
+    result = __compact_endpoint_last_seen_map(left)
+    right_norm = __compact_endpoint_last_seen_map(right)
     for endpoint_ip, seen_at_iso in right_norm.items():
         result[endpoint_ip] = __pick_latest_iso(result.get(endpoint_ip), seen_at_iso) or seen_at_iso
-    return result
+    return __compact_endpoint_last_seen_map(result)
 
 
 def __format_iso_datetime_local(dt_iso: Optional[str]) -> str:
@@ -452,7 +587,12 @@ def get_current_endpoint_last_seen_text(data: WgPeerData) -> str:
     if not endpoint_ip:
         return "N/A"
     last_seen_map = get_endpoint_last_seen_map(data)
-    return __format_iso_datetime_local(last_seen_map.get(endpoint_ip))
+    seen_at = last_seen_map.get(endpoint_ip)
+    if not seen_at:
+        subnet_key = __endpoint_key_to_ipv4_subnet24(endpoint_ip)
+        if subnet_key:
+            seen_at = last_seen_map.get(subnet_key)
+    return __format_iso_datetime_local(seen_at)
 
 
 def __parse_handshake_to_datetime(handshake_str: Optional[str]) -> Optional[datetime]:
