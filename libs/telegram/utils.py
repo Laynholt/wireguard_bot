@@ -48,13 +48,78 @@ def create_linked_dict(
     linked_users: Iterable[Tuple[TelegramId, WireguardUserName]]
 ) -> Dict[TelegramId, List[WireguardUserName]]:
     """
-    Принимает список кортежей (telegram_id, wireguard_user_name)
-    и возвращает словарь вида {telegram_id: [user_names]}.
+    Преобразует список связок (telegram_id, wireguard_user_name)
+    в словарь вида {telegram_id: [user_names]}.
+
+    Args:
+        linked_users (Iterable[Tuple[TelegramId, WireguardUserName]]):
+            Итерируемая коллекция пар (Telegram ID, имя пользователя WireGuard).
+
+    Returns:
+        Dict[TelegramId, List[WireguardUserName]]:
+            Словарь, где каждому Telegram ID соответствует список
+            WireGuard-пользователей.
     """
     linked_dict = {}
     for tid, user_name in linked_users:
         linked_dict.setdefault(tid, []).append(user_name)
     return linked_dict
+
+
+def build_batched_lines(
+    lines: List[str],
+    max_items_per_batch: int = 5,
+    max_message_length: int = config.telegram_max_message_length,
+) -> List[List[str]]:
+    """
+    Формирует батчи строк с ограничением по числу элементов и длине сообщения.
+
+    Args:
+        lines (List[str]): Список строк (например, блоков статистики по инстансам).
+        max_items_per_batch (int, optional):
+            Максимальное количество элементов в одном батче.
+        max_message_length (int, optional):
+            Максимальная длина итогового сообщения после объединения строк батча.
+
+    Returns:
+        List[List[str]]:
+            Список батчей строк. Если очередная строка не помещается в текущий
+            батч, она переносится в следующий. Если одна строка длиннее лимита
+            сама по себе, она помещается в отдельный батч.
+    """
+    if not lines:
+        return []
+
+    if max_items_per_batch <= 0:
+        return [lines]
+
+    result: List[List[str]] = []
+    current_batch: List[str] = []
+    current_length = 0
+
+    for line in lines:
+        if not current_batch:
+            current_batch = [line]
+            current_length = len(line)
+            continue
+
+        candidate_length = current_length + len(line)
+        if (
+            len(current_batch) >= max_items_per_batch
+            or candidate_length > max_message_length
+        ):
+            result.append(current_batch)
+            current_batch = [line]
+            current_length = len(line)
+            continue
+
+        current_batch.append(line)
+        current_length = candidate_length
+
+    if current_batch:
+        result.append(current_batch)
+
+    return result
 
 
 async def send_long_message(
@@ -139,7 +204,7 @@ async def send_batched_messages(
 
     for batch_idx, batch in enumerate(batched_lines, 1):
         # Формируем сообщение из текущего батча
-        message = "\n".join(batch)
+        message = "".join(batch)
         
         try:
             await update.message.reply_text(message, parse_mode=parse_mode)

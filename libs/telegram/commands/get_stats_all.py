@@ -257,11 +257,10 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             logger.info(f"Отправляю статистику по всем конфигам Wireguard -> Tid [{tid}].")
             
             # Разбиваем на батчи по указанному размеру
-            batch_size = 5
-            batched_lines = [
-                lines[i:i + batch_size]
-                for i in range(0, len(lines), batch_size)
-            ]
+            batched_lines = telegram_utils.build_batched_lines(
+                lines=lines,
+                max_items_per_batch=5,
+            )
             
             await telegram_utils.send_batched_messages(
                 update=update,

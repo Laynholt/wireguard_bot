@@ -14,7 +14,7 @@
     "telegram_token": "",
     "telegram_admin_ids": [],
     "telegram_max_concurrent_messages": 5,
-    "telegram_max_message_length": 3000,
+    "telegram_max_message_length": 4000,
 
     "wireguard_folder": "/home/user/wireguard",
     "wireguard_config_filepath": "/home/user/wireguard/config/wg_confs/wg0.conf",

@@ -1,6 +1,4 @@
 import asyncio
-from curses.ascii import isdigit
-from typing import final
 from .base import *
 from libs.telegram import messages
 from libs.wireguard import stats as wireguard_stats
@@ -332,11 +330,10 @@ class GetWireguardUserStatsCommand(BaseCommand):
             await update.message.reply_text(summary_text, parse_mode="HTML")
         
         # Разбиваем на батчи по указанному размеру
-        batch_size = 5
-        batched_lines = [
-            lines[i:i + batch_size]
-            for i in range(0, len(lines), batch_size)
-        ]
+        batched_lines = telegram_utils.build_batched_lines(
+            lines=lines,
+            max_items_per_batch=5,
+        )
         
         await telegram_utils.send_batched_messages(
             update=update,
