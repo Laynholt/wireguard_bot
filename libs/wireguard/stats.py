@@ -17,6 +17,7 @@ from . import user_control
 DAILY_RETENTION_DAYS = 90
 WEEKLY_RETENTION_WEEKS = 52
 MONTHLY_RETENTION_MONTHS = None  # без ограничения
+ENDPOINT_HISTORY_RETENTION_DAYS = 7
 
 # Текущее время в часовом поясе сервера
 def __now_local() -> datetime:
@@ -503,8 +504,12 @@ def __update_endpoint_last_seen(
     - иначе для нового IP фиксирует текущее время наблюдения now_iso;
     - для существующего IP без handshake оставляет предыдущее значение.
     """
-    result = __compact_endpoint_last_seen_map(endpoint_last_seen_at)
     endpoint_ip = __extract_endpoint_ip(endpoint)
+    preexisting_exact_iso = None
+    if endpoint_ip:
+        preexisting_exact_iso = __normalize_endpoint_last_seen_map(endpoint_last_seen_at).get(endpoint_ip)
+
+    result = __compact_endpoint_last_seen_map(endpoint_last_seen_at)
     if not endpoint_ip:
         return result
 
@@ -514,12 +519,17 @@ def __update_endpoint_last_seen(
     if subnet_key:
         existing_subnet_iso = result.get(subnet_key)
 
-    existing_effective_iso = existing_iso or existing_subnet_iso
+    existing_effective_iso = preexisting_exact_iso or existing_iso or existing_subnet_iso
     candidate_iso = handshake_at_iso if handshake_at_iso else (existing_effective_iso if existing_effective_iso else now_iso)
     merged_iso = __pick_latest_iso(existing_iso, candidate_iso)
     if merged_iso:
         result[endpoint_ip] = merged_iso
-    return __compact_endpoint_last_seen_map(result)
+
+    exact_seen_to_keep = __pick_latest_iso(preexisting_exact_iso, result.get(endpoint_ip))
+    compacted = __compact_endpoint_last_seen_map(result)
+    if exact_seen_to_keep:
+        compacted[endpoint_ip] = __pick_latest_iso(compacted.get(endpoint_ip), exact_seen_to_keep) or exact_seen_to_keep
+    return compacted
 
 
 def __merge_endpoint_last_seen_maps(
@@ -529,11 +539,11 @@ def __merge_endpoint_last_seen_maps(
     """
     Объединяет два словаря endpoint_last_seen_at, сохраняя максимально позднюю дату по каждому IP.
     """
-    result = __compact_endpoint_last_seen_map(left)
-    right_norm = __compact_endpoint_last_seen_map(right)
+    result = __normalize_endpoint_last_seen_map(left)
+    right_norm = __normalize_endpoint_last_seen_map(right)
     for endpoint_ip, seen_at_iso in right_norm.items():
         result[endpoint_ip] = __pick_latest_iso(result.get(endpoint_ip), seen_at_iso) or seen_at_iso
-    return __compact_endpoint_last_seen_map(result)
+    return result
 
 
 def __format_iso_datetime_local(dt_iso: Optional[str]) -> str:
@@ -593,6 +603,119 @@ def get_current_endpoint_last_seen_text(data: WgPeerData) -> str:
         if subnet_key:
             seen_at = last_seen_map.get(subnet_key)
     return __format_iso_datetime_local(seen_at)
+
+
+def __get_effective_endpoint_last_seen_iso(
+    endpoint_key: str,
+    endpoint_last_seen_at: Dict[str, str]
+) -> Optional[str]:
+    """
+    Возвращает last_seen для ключа endpoint.
+    Для точного IPv4 адреса допускает fallback на запись /24 подсети.
+    """
+    seen_at = endpoint_last_seen_at.get(endpoint_key)
+    if seen_at:
+        return seen_at
+
+    subnet_key = __endpoint_key_to_ipv4_subnet24(endpoint_key)
+    if subnet_key:
+        return endpoint_last_seen_at.get(subnet_key)
+    return None
+
+
+def __sort_endpoint_last_seen_map_old_to_new(endpoint_last_seen_at: Dict[str, str]) -> Dict[str, str]:
+    """
+    Сортирует endpoint_last_seen_at по времени от старого к новому.
+    """
+    normalized = __normalize_endpoint_last_seen_map(endpoint_last_seen_at)
+    sorted_items = sorted(
+        normalized.items(),
+        key=lambda item: (
+            __parse_iso_datetime(item[1]) or datetime.min.replace(tzinfo=timezone.utc),
+            item[0],
+        )
+    )
+    return {key: value for key, value in sorted_items}
+
+
+def __finalize_endpoint_history_state(data: WgPeerData, now: Optional[datetime] = None) -> None:
+    """
+    Приводит endpoint-history к каноническому виду:
+    - нормализация/компактизация,
+    - сохранение точного last_seen для текущего endpoint,
+    - ретеншн "прочих endpoint" за последнюю неделю,
+    - сортировка по времени от старого к новому.
+    """
+    now = now or __now_local()
+
+    data.endpoint = __extract_endpoint_ip(data.endpoint)
+    current_endpoint_ip = __extract_endpoint_ip(data.endpoint)
+    preexisting_last_seen_map = __normalize_endpoint_last_seen_map(data.endpoint_last_seen_at)
+    preexisting_exact_current_seen = (
+        preexisting_last_seen_map.get(current_endpoint_ip)
+        if current_endpoint_ip else None
+    )
+
+    data.endpoint_ips = __add_endpoint_to_history(data.endpoint_ips, data.endpoint)
+    data.endpoint_last_seen_at = __update_endpoint_last_seen(
+        data.endpoint_last_seen_at,
+        data.endpoint,
+        data.latest_handshake_at,
+        now_iso=now.isoformat(),
+    )
+
+    last_seen_map = dict(data.endpoint_last_seen_at)
+
+    # Сохраняем точный last_seen для текущего endpoint, даже если история схлопнута в /24.
+    if current_endpoint_ip:
+        effective_seen = (
+            __pick_latest_iso(preexisting_exact_current_seen, data.latest_handshake_at)
+            or preexisting_exact_current_seen
+            or __get_effective_endpoint_last_seen_iso(current_endpoint_ip, last_seen_map)
+        )
+        if effective_seen:
+            last_seen_map[current_endpoint_ip] = (
+                __pick_latest_iso(last_seen_map.get(current_endpoint_ip), effective_seen) or effective_seen
+            )
+
+    cutoff_dt = now - timedelta(days=ENDPOINT_HISTORY_RETENTION_DAYS)
+    protected_keys = {current_endpoint_ip} if current_endpoint_ip else set()
+
+    pruned_last_seen_map: Dict[str, str] = {}
+    for endpoint_key, seen_at_iso in last_seen_map.items():
+        if endpoint_key in protected_keys:
+            pruned_last_seen_map[endpoint_key] = seen_at_iso
+            continue
+
+        seen_dt = __parse_iso_datetime(seen_at_iso)
+        if seen_dt and seen_dt >= cutoff_dt:
+            pruned_last_seen_map[endpoint_key] = seen_at_iso
+
+    pruned_last_seen_map = __sort_endpoint_last_seen_map_old_to_new(pruned_last_seen_map)
+
+    history = __compact_endpoint_ips(data.endpoint_ips)
+    pruned_history: List[str] = []
+    for endpoint_key in history:
+        if endpoint_key in protected_keys:
+            pruned_history.append(endpoint_key)
+            continue
+
+        seen_at_iso = __get_effective_endpoint_last_seen_iso(endpoint_key, pruned_last_seen_map)
+        seen_dt = __parse_iso_datetime(seen_at_iso) if seen_at_iso else None
+        if seen_dt and seen_dt >= cutoff_dt:
+            pruned_history.append(endpoint_key)
+
+    pruned_history = sorted(
+        __normalize_endpoint_ips(pruned_history),
+        key=lambda key: (
+            __parse_iso_datetime(__get_effective_endpoint_last_seen_iso(key, pruned_last_seen_map))
+            or datetime.min.replace(tzinfo=timezone.utc),
+            key,
+        )
+    )
+
+    data.endpoint_last_seen_at = pruned_last_seen_map
+    data.endpoint_ips = pruned_history
 
 
 def __parse_handshake_to_datetime(handshake_str: Optional[str]) -> Optional[datetime]:
@@ -853,6 +976,10 @@ def save_stats_to_db(data: Dict[str, WgPeerData]) -> None:
     """
     Сохраняет Dict[str, WgPeerData] в БД.
     """
+    now = __now_local()
+    for val in data.values():
+        __finalize_endpoint_history_state(val, now)
+
     raw_data = {key: val.model_dump() for key, val in data.items()}
     wg_db.init_db()
     for name, blob in raw_data.items():
@@ -899,6 +1026,7 @@ def load_stats_from_db() -> Dict[str, WgPeerData]:
         if data_obj.raw_sent_bytes == 0 and data_obj.transfer_sent:
             data_obj.raw_sent_bytes = __convert_transfer_to_bytes(data_obj.transfer_sent)
 
+        __finalize_endpoint_history_state(data_obj)
         result[key] = data_obj
 
     return result
