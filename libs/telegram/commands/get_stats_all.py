@@ -104,8 +104,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                     s=keys.strip(),
                     default_sort=self.SortSequence.DESCENDING,
                     default_metric=self.Metric.TOTAL,
-                    default_head=0,
-                    default_tail=0
+                    default_head=-1,
+                    default_tail=-1
                 )
             
             # Сначала получаем всю статистику (сортировку настроим вручную по metric)
