@@ -320,8 +320,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         s: str,
         default_sort: SortSequence = SortSequence.DESCENDING,
         default_metric: Metric = Metric.TOTAL,
-        default_head: int = 0,
-        default_tail: int = 0,
+        default_head: int = -1,
+        default_tail: int = -1,
 ) -> Params:
         """
         Разбирает строку вида 'sort=sortType head=N tail=M'.
@@ -352,7 +352,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             except ValueError:
                 head_value = -1
         else:
-            head_value = 0
+            head_value = default_head
 
         if m_tail:
             try:
@@ -362,7 +362,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             except ValueError:
                 tail_value = -1
         else:
-            tail_value = 0
+            tail_value = default_tail
 
         # поиск флага sum/summary
         m_totals = re.compile(r"\b(sum|summary)=([^\s]+)\b", re.IGNORECASE).search(s)
