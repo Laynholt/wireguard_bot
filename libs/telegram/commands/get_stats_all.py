@@ -263,18 +263,18 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                         created_at_human = datetime.fromisoformat(created_raw).strftime("%Y-%m-%d %H:%M:%S")
                     except Exception:
                         created_at_human = created_raw
+                date_line = f"   📅 Дата статистики: {stats_date_label}\n" if stats_date_label is not None else ""
 
                 lines.append(
                     f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                     f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
                     f"   {owner_part}\n"
-                    f"{'' if stats_date_label is None else f'   📅 Дата статистики: {stats_date_label}\\n'}"
                     f"   🗓️ Создан: {created_at_human}\n"
                     f"   📡 IP: {user_data.allowed_ips}\n"
                     f"   🌍 Последний endpoint: {user_data.endpoint or 'N/A'} ({endpoint_last_seen_text})\n"
                     f"   🧭 Другие endpoint IP: {other_endpoint_text}\n"
                     f"   ⏱️ Последнее рукопожатие: {handshake_text if handshake_text else 'N/A'}\n"
-                    f"   📊 Статистика по трафику:\n"
+                    f"   📊 Статистика по трафику:\n{date_line}"
                     f"      За сутки: ↑ {wireguard_stats.bytes_to_human(day_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(day_stat.received_bytes)}\n"
                     f"      За неделю: ↑ {wireguard_stats.bytes_to_human(week_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(week_stat.received_bytes)}\n"
                     f"      За месяц: ↑ {wireguard_stats.bytes_to_human(month_stat.sent_bytes)} | ↓ {wireguard_stats.bytes_to_human(month_stat.received_bytes)}\n"
