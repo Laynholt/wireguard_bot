@@ -3,7 +3,7 @@ import asyncio
 from .base import *
 from libs.wireguard import stats as wireguard_stats
 from libs.wireguard import wg_db
-from datetime import datetime
+from datetime import datetime, date as dt_date
 
 import re
 from enum import Enum
@@ -11,6 +11,11 @@ from asyncio import Semaphore
 from dataclasses import dataclass, field
 
 class GetAllWireguardUsersStatsCommand(BaseCommand):
+    ARG_PATTERN = re.compile(
+        r"\b(?P<key>sort|metric|head|tail|sum|summary|date|day)\s*=\s*(?P<value>[^\s]+)",
+        re.IGNORECASE
+    )
+
     class SortSequence(Enum):
         ASCENDING = 1
         DESCENDING = 2
@@ -33,6 +38,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         head: int = 0
         tail: int = 0
         show_totals: bool = False
+        target_date: Optional[dt_date] = None
+        date_error: Optional[str] = None
 
 
     def __init__(
@@ -58,12 +65,13 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             await update.message.reply_text(
         """
 Шпаргалка:
-Формат: <em>sort=[a|d] metric=[t|d|w|m] head=[N] tail=[M] sum=[1|0]</em>
+Формат: <em>sort=[a|d] metric=[t|d|w|m] head=[N] tail=[M] sum=[1|0] date=[YYYY-MM-DD]</em>
 
 • <b>sort</b>: a/asc/воз/1 → ↑, d/desc/убыв/2 → ↓ (по умолчанию ↓)
 • <b>metric</b>: t=total (default), d=day, w=week, m=month
 • <b>head=N</b> — первые N, <b>tail=M</b> — последние M (N,M ≥ 0)
 • <b>sum=1</b> — показать сводку (сутки/неделя/месяц/всё)
+• <b>date=YYYY-MM-DD</b> — срез статистики на указанную дату
 
 Параметры в любом порядке, можно пропускать
 • head=0 tail=0 → список пуст (только sum, если включён)
@@ -77,6 +85,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
 • <code>head=0 sum=1</code>
 • <code>head=5 sum=1</code>
 • <code>head=5 metric=d sum=1</code>
+• <code>metric=d date=2026-03-01</code>
 
         """,
         parse_mode="HTML"
@@ -104,9 +113,23 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                     s=keys.strip(),
                     default_sort=self.SortSequence.DESCENDING,
                     default_metric=self.Metric.TOTAL,
-                    default_head=-1,
-                    default_tail=-1
+                    default_head=0,
+                    default_tail=0
                 )
+
+            if parsed_keys.date_error is not None:
+                await update.message.reply_text(
+                    f"Неверный формат даты: <code>{parsed_keys.date_error}</code>. "
+                    "Используйте <code>date=YYYY-MM-DD</code>.",
+                    parse_mode="HTML",
+                )
+                return
+
+            stats_now: Optional[datetime] = None
+            stats_date_label: Optional[str] = None
+            if parsed_keys.target_date is not None:
+                stats_now = datetime.combine(parsed_keys.target_date, datetime.min.time())
+                stats_date_label = parsed_keys.target_date.isoformat()
             
             # Сначала получаем всю статистику (сортировку настроим вручную по metric)
             all_wireguard_stats = await asyncio.to_thread(
@@ -136,6 +159,11 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             lines = []
             inactive_usernames = await asyncio.to_thread(wireguard.get_inactive_usernames)
 
+            def _period_usage(user_data: wireguard_stats.WgPeerData, period: wireguard_stats.Period) -> wireguard_stats.TrafficStat:
+                if stats_now is None:
+                    return wireguard_stats.get_period_usage(user_data, period)
+                return wireguard_stats.get_period_usage(user_data, period, now=stats_now)
+
             # Подготовим сортировку по выбранному metric
             def _metric_value(user_data: wireguard_stats.WgPeerData) -> int:
                 if parsed_keys.metric == self.Metric.TOTAL:
@@ -144,13 +172,13 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                         + wireguard_stats.human_to_bytes(user_data.transfer_received)
                     )
                 if parsed_keys.metric == self.Metric.DAILY:
-                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
+                    stat = _period_usage(user_data, wireguard_stats.Period.DAILY)
                     return stat.sent_bytes + stat.received_bytes
                 if parsed_keys.metric == self.Metric.WEEKLY:
-                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                    stat = _period_usage(user_data, wireguard_stats.Period.WEEKLY)
                     return stat.sent_bytes + stat.received_bytes
                 if parsed_keys.metric == self.Metric.MONTHLY:
-                    stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                    stat = _period_usage(user_data, wireguard_stats.Period.MONTHLY)
                     return stat.sent_bytes + stat.received_bytes
                 return 0
 
@@ -173,9 +201,9 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                 total_month_sent = total_month_recv = 0
                 total_sent = total_recv = 0
                 for _, user_data in all_wireguard_stats.items():
-                    day_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
-                    week_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
-                    month_stat_all = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                    day_stat_all = _period_usage(user_data, wireguard_stats.Period.DAILY)
+                    week_stat_all = _period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                    month_stat_all = _period_usage(user_data, wireguard_stats.Period.MONTHLY)
                     total_day_sent += day_stat_all.sent_bytes
                     total_day_recv += day_stat_all.received_bytes
                     total_week_sent += week_stat_all.sent_bytes
@@ -185,8 +213,11 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                     total_sent += wireguard_stats.human_to_bytes(user_data.transfer_sent)
                     total_recv += wireguard_stats.human_to_bytes(user_data.transfer_received)
 
+                totals_header = "📊 <b>Суммарно по всем конфигаx:</b>"
+                if stats_date_label is not None:
+                    totals_header = f"📊 <b>Суммарно по всем конфигаx на {stats_date_label}:</b>"
                 totals_text = (
-                    "📊 <b>Суммарно по всем конфигаx:</b>\n"
+                    f"{totals_header}\n"
                     f"   За сутки: ↑ {wireguard_stats.bytes_to_human(total_day_sent)} | ↓ {wireguard_stats.bytes_to_human(total_day_recv)}\n"
                     f"   За неделю: ↑ {wireguard_stats.bytes_to_human(total_week_sent)} | ↓ {wireguard_stats.bytes_to_human(total_week_recv)}\n"
                     f"   За месяц: ↑ {wireguard_stats.bytes_to_human(total_month_sent)} | ↓ {wireguard_stats.bytes_to_human(total_month_recv)}\n"
@@ -214,9 +245,9 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                 else:
                     owner_part = "   👤 <b>Владелец:</b>\n      └ 🚫 <i>Не назначен</i>"
 
-                day_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.DAILY)
-                week_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.WEEKLY)
-                month_stat = wireguard_stats.get_period_usage(user_data, wireguard_stats.Period.MONTHLY)
+                day_stat = _period_usage(user_data, wireguard_stats.Period.DAILY)
+                week_stat = _period_usage(user_data, wireguard_stats.Period.WEEKLY)
+                month_stat = _period_usage(user_data, wireguard_stats.Period.MONTHLY)
                 handshake_text = wireguard_stats.format_handshake_age(user_data)
                 endpoint_last_seen_text = wireguard_stats.get_current_endpoint_last_seen_text(user_data)
                 other_endpoint_ips = wireguard_stats.get_other_endpoint_ips_with_last_seen(user_data)
@@ -237,6 +268,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
                     f"\n<b>{i}]</b> <b>🌐 Конфиг:</b> <i>{wg_user}</i> "
                     f"{'🔴 <b>[Неактивен]</b>' if wg_user in inactive_usernames else '🟢 <b>[Активен]</b>'}\n"
                     f"   {owner_part}\n"
+                    f"{'' if stats_date_label is None else f'   📅 Дата статистики: {stats_date_label}\\n'}"
                     f"   🗓️ Создан: {created_at_human}\n"
                     f"   📡 IP: {user_data.allowed_ips}\n"
                     f"   🌍 Последний endpoint: {user_data.endpoint or 'N/A'} ({endpoint_last_seen_text})\n"
@@ -320,8 +352,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         s: str,
         default_sort: SortSequence = SortSequence.DESCENDING,
         default_metric: Metric = Metric.TOTAL,
-        default_head: int = -1,
-        default_tail: int = -1,
+        default_head: int = 0,
+        default_tail: int = 0,
 ) -> Params:
         """
         Разбирает строку вида 'sort=sortType head=N tail=M'.
@@ -330,45 +362,58 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         if not isinstance(s, str):
             s = str(s)
 
-        # поиск sort
-        m_sort = re.compile(r"\bsort=([^\s]+)\b").search(s)
-        sort_raw  = m_sort.group(1) if m_sort else None
-        sort_value = self.__map_sort(sort_raw, default_sort)
+        parsed_args: Dict[str, str] = {}
+        for match in self.ARG_PATTERN.finditer(s):
+            key = match.group("key").lower()
+            value = match.group("value").strip()
+            parsed_args[key] = value
 
-        # поиск metric
-        m_metric = re.compile(r"\bmetric=([^\s]+)\b").search(s)
-        metric_raw = m_metric.group(1) if m_metric else None
-        metric_value = self.__map_metric(metric_raw, default_metric)
+        sort_value = self.__map_sort(parsed_args.get("sort"), default_sort)
+        metric_value = self.__map_metric(parsed_args.get("metric"), default_metric)
 
-        # поиск head и tail (поддерживаем и отрицательные числа)
-        m_head = re.compile(r"\bhead=([+-]?\d+)\b").search(s)
-        m_tail = re.compile(r"\btail=([+-]?\d+)\b").search(s)
+        head_raw = parsed_args.get("head")
+        tail_raw = parsed_args.get("tail")
 
-        if m_head:
+        if head_raw is not None:
             try:
-                head_value = int(m_head.group(1))
+                head_value = int(head_raw)
                 if head_value < 0:
                     head_value = -1  # сигнал "некорректно" -> показать все
-            except ValueError:
+            except (TypeError, ValueError):
                 head_value = -1
         else:
             head_value = default_head
 
-        if m_tail:
+        if tail_raw is not None:
             try:
-                tail_value = int(m_tail.group(1))
+                tail_value = int(tail_raw)
                 if tail_value < 0:
                     tail_value = -1  # сигнал "некорректно" -> показать все
-            except ValueError:
+            except (TypeError, ValueError):
                 tail_value = -1
         else:
             tail_value = default_tail
 
+        # Если head и tail не переданы вообще -> показываем все элементы.
+        if head_raw is None and tail_raw is None:
+            head_value = -1
+            tail_value = -1
+
+        # поиск даты отчета
+        target_date: Optional[dt_date] = None
+        date_error: Optional[str] = None
+        date_raw = parsed_args.get("date") or parsed_args.get("day")
+        if date_raw is not None:
+            try:
+                target_date = datetime.strptime(date_raw, "%Y-%m-%d").date()
+            except ValueError:
+                date_error = date_raw
+
         # поиск флага sum/summary
-        m_totals = re.compile(r"\b(sum|summary)=([^\s]+)\b", re.IGNORECASE).search(s)
         show_totals = False
-        if m_totals:
-            v = m_totals.group(2).lower()
+        totals_raw = parsed_args.get("sum") or parsed_args.get("summary")
+        if totals_raw is not None:
+            v = totals_raw.lower()
             show_totals = v in {"1", "true", "yes", "y", "on", "да", "истина"}
 
         return self.Params(
@@ -376,7 +421,9 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             metric=metric_value,
             head=head_value,
             tail=tail_value,
-            show_totals=show_totals
+            show_totals=show_totals,
+            target_date=target_date,
+            date_error=date_error,
         )
     
 
