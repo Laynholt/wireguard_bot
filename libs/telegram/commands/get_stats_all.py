@@ -6,6 +6,7 @@ from libs.wireguard import wg_db
 from datetime import datetime, date as dt_date
 
 import re
+from typing import Dict
 from enum import Enum
 from asyncio import Semaphore
 from dataclasses import dataclass, field
@@ -65,13 +66,13 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             await update.message.reply_text(
         """
 Шпаргалка:
-Формат: <em>sort=[a|d] metric=[t|d|w|m] head=[N] tail=[M] sum=[1|0] date=[YYYY-MM-DD]</em>
+Формат: <em>sort=[a|d] metric=[t|d|w|m] head=[N] tail=[M] sum=[1|0] date=[YYYY-MM-DD|MM-DD|DD]</em>
 
 • <b>sort</b>: a/asc/воз/1 → ↑, d/desc/убыв/2 → ↓ (по умолчанию ↓)
 • <b>metric</b>: t=total (default), d=day, w=week, m=month
 • <b>head=N</b> — первые N, <b>tail=M</b> — последние M (N,M ≥ 0)
 • <b>sum=1</b> — показать сводку (сутки/неделя/месяц/всё)
-• <b>date=YYYY-MM-DD</b> — срез статистики на указанную дату
+• <b>date</b>: YYYY-MM-DD или MM-DD (текущий год) или DD (текущий месяц/год)
 
 Параметры в любом порядке, можно пропускать
 • head=0 tail=0 → список пуст (только sum, если включён)
@@ -86,6 +87,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
 • <code>head=5 sum=1</code>
 • <code>head=5 metric=d sum=1</code>
 • <code>metric=d date=2026-03-01</code>
+• <code>metric=d date=03-01</code>
+• <code>metric=d date=1</code>
 
         """,
         parse_mode="HTML"
@@ -120,7 +123,7 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
             if parsed_keys.date_error is not None:
                 await update.message.reply_text(
                     f"Неверный формат даты: <code>{parsed_keys.date_error}</code>. "
-                    "Используйте <code>date=YYYY-MM-DD</code>.",
+                    "Используйте <code>date=YYYY-MM-DD</code>, <code>date=MM-DD</code> или <code>date=DD</code>.",
                     parse_mode="HTML",
                 )
                 return
@@ -346,6 +349,42 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         if v in {"m", "month", "monthly"}:
             return self.Metric.MONTHLY
         return default
+
+    def __parse_flexible_date(self, raw: str) -> Optional[dt_date]:
+        """
+        Поддерживаемые форматы:
+        - YYYY-MM-DD
+        - MM-DD (год берётся текущий)
+        - DD (месяц и год берутся текущие)
+        """
+        value = raw.strip()
+        if not value:
+            return None
+
+        m_full = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", value)
+        if m_full:
+            try:
+                return dt_date(int(m_full.group(1)), int(m_full.group(2)), int(m_full.group(3)))
+            except ValueError:
+                return None
+
+        m_month_day = re.fullmatch(r"(\d{1,2})-(\d{1,2})", value)
+        if m_month_day:
+            now = datetime.now().date()
+            try:
+                return dt_date(now.year, int(m_month_day.group(1)), int(m_month_day.group(2)))
+            except ValueError:
+                return None
+
+        m_day = re.fullmatch(r"(\d{1,2})", value)
+        if m_day:
+            now = datetime.now().date()
+            try:
+                return dt_date(now.year, now.month, int(m_day.group(1)))
+            except ValueError:
+                return None
+
+        return None
             
     def __parse_params(
         self,
@@ -404,9 +443,8 @@ class GetAllWireguardUsersStatsCommand(BaseCommand):
         date_error: Optional[str] = None
         date_raw = parsed_args.get("date") or parsed_args.get("day")
         if date_raw is not None:
-            try:
-                target_date = datetime.strptime(date_raw, "%Y-%m-%d").date()
-            except ValueError:
+            target_date = self.__parse_flexible_date(date_raw)
+            if target_date is None:
                 date_error = date_raw
 
         # поиск флага sum/summary
