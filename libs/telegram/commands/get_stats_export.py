@@ -38,7 +38,7 @@ class GetWireguardStatsExportCommand(BaseCommand):
         r"\b(?P<key>from|to|start|end|date_from|date_to|с|по|от|до)\s*=\s*(?P<value>[^\s]+)",
         re.IGNORECASE
     )
-    DATE_TOKEN_PATTERN = re.compile(r"\b\d{1,4}(?:-\d{1,2}){0,2}\b")
+    DATE_TOKEN_PATTERN = re.compile(r"\b\d{1,4}(?:[-./]\d{1,2}){0,2}\b")
 
     class Scope:
         OWN = "own"
@@ -334,7 +334,9 @@ class GetWireguardStatsExportCommand(BaseCommand):
                 "Поддерживаются варианты:\n"
                 "• <code>all</code> или <code>*</code> — все даты\n"
                 "• <code>from=2026-03-01 to=2026-03-20</code>\n"
+                "• <code>from=2026/03/01 to=2026.03.20</code>\n"
                 "• <code>from=03-01</code>\n"
+                "• <code>from=03/01</code>\n"
                 "• <code>to=20</code>\n"
                 "• <code>2026-03-01 2026-03-20</code>\n\n"
                 "Если одна из границ невалидна или выходит за доступный диапазон, "
@@ -505,14 +507,14 @@ class GetWireguardStatsExportCommand(BaseCommand):
         if not value:
             return None
 
-        m_full = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", value)
+        m_full = re.fullmatch(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", value)
         if m_full:
             try:
                 return dt_date(int(m_full.group(1)), int(m_full.group(2)), int(m_full.group(3)))
             except ValueError:
                 return None
 
-        m_month_day = re.fullmatch(r"(\d{1,2})-(\d{1,2})", value)
+        m_month_day = re.fullmatch(r"(\d{1,2})[-./](\d{1,2})", value)
         if m_month_day:
             now = datetime.now().date()
             try:
