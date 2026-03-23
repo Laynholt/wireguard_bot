@@ -23,6 +23,12 @@ class Config(BaseModel):
     telegram_admin_ids: List[int] = Field(default_factory=list)
     telegram_max_concurrent_messages: int = Field(default=5)
     telegram_max_message_length: int = Field(default=3000)
+    telegram_system_monitor_enabled: bool = Field(default=True)
+    telegram_system_monitor_interval_seconds: int = Field(default=60)
+    telegram_system_monitor_cpu_threshold_percent: float = Field(default=90.0)
+    telegram_system_monitor_cpu_duration_minutes: int = Field(default=3)
+    telegram_system_monitor_ram_threshold_percent: float = Field(default=100.0)
+    telegram_system_monitor_ram_duration_minutes: int = Field(default=3)
 
     # Системные настройки
     wireguard_folder: str = Field(default="")

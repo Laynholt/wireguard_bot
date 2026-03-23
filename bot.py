@@ -28,6 +28,7 @@ from libs.telegram.types import *
 from libs.telegram.database import UserDatabase
 from libs.telegram import wrappers, keyboards
 from libs.telegram.commands import BotCommand, BotCommandHandler, ContextDataKeys
+from libs.telegram.server_monitor import ServerHealthMonitor
 
 
 
@@ -746,6 +747,40 @@ async def update_wireguard_stats_schedule():
     except Exception as e:
         logger.error(f"Ошибка при обновлении статистики: {str(e)}")
 
+
+def __setup_system_monitor(application) -> None:
+    if not config.telegram_system_monitor_enabled:
+        logger.info("Системный мониторинг Telegram-уведомлений отключен в конфиге.")
+        return
+
+    if application.job_queue is None:
+        logger.error("JobQueue недоступен, системный мониторинг не будет запущен.")
+        return
+
+    monitor = ServerHealthMonitor(
+        admin_ids=config.telegram_admin_ids,
+        interval_seconds=config.telegram_system_monitor_interval_seconds,
+        cpu_threshold_percent=config.telegram_system_monitor_cpu_threshold_percent,
+        cpu_duration_minutes=config.telegram_system_monitor_cpu_duration_minutes,
+        ram_threshold_percent=config.telegram_system_monitor_ram_threshold_percent,
+        ram_duration_minutes=config.telegram_system_monitor_ram_duration_minutes,
+    )
+    application.bot_data["server_health_monitor"] = monitor
+    application.job_queue.run_repeating(
+        monitor.check,
+        interval=config.telegram_system_monitor_interval_seconds,
+        first=config.telegram_system_monitor_interval_seconds,
+        name="server_health_monitor",
+    )
+    logger.info(
+        "Системный мониторинг запущен: interval=%s сек, CPU>=%.1f%% %s мин, RAM>=%.1f%% %s мин.",
+        config.telegram_system_monitor_interval_seconds,
+        config.telegram_system_monitor_cpu_threshold_percent,
+        config.telegram_system_monitor_cpu_duration_minutes,
+        config.telegram_system_monitor_ram_threshold_percent,
+        config.telegram_system_monitor_ram_duration_minutes,
+    )
+
 # ---------------------- Точка входа в приложение ----------------------
 
 
@@ -784,6 +819,7 @@ def main() -> None:
         .get_updates_read_timeout(30)    # Время ожидания при использовании Long Polling
         .build()
     )
+    __setup_system_monitor(application)
     
     global text_command_handlers
     text_command_handlers = {
