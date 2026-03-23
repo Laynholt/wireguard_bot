@@ -11,6 +11,13 @@ class _MemoryUsage:
     total_mb: int
     used_mb: int
     percent: float
+    available_mb: int | None = None
+
+
+@dataclass
+class _ServerMemoryStatus:
+    ram: _MemoryUsage
+    swap: _MemoryUsage
 
 
 class ServerStatusCommand(BaseCommand):
@@ -44,8 +51,17 @@ class ServerStatusCommand(BaseCommand):
 
         if memory is not None:
             message_lines.append(
-                f"💾 RAM: {memory.used_mb} / {memory.total_mb} MiB ({memory.percent:.0f}%)"
+                f"💾 RAM: {memory.ram.used_mb} / {memory.ram.total_mb} MiB ({memory.ram.percent:.0f}%)"
             )
+            if memory.ram.available_mb is not None:
+                message_lines.append(f"🧹 Доступно RAM: {memory.ram.available_mb} MiB")
+
+            if memory.swap.total_mb > 0:
+                message_lines.append(
+                    f"💽 Swap: {memory.swap.used_mb} / {memory.swap.total_mb} MiB ({memory.swap.percent:.0f}%)"
+                )
+            else:
+                message_lines.append("💽 Swap: не настроен")
         else:
             message_lines.append("💾 RAM: не удалось получить данные.")
 
@@ -95,7 +111,7 @@ class ServerStatusCommand(BaseCommand):
             return None
         return None
 
-    def __collect_memory(self) -> Optional[_MemoryUsage]:
+    def __collect_memory(self) -> Optional[_ServerMemoryStatus]:
         meminfo_path = "/proc/meminfo"
         try:
             info: dict[str, int] = {}
@@ -105,15 +121,42 @@ class ServerStatusCommand(BaseCommand):
                     info[key.rstrip(":")] = int(value)
 
             total_kb = info.get("MemTotal")
-            available_kb = info.get("MemAvailable")
-            if total_kb is None or available_kb is None:
+            if total_kb is None:
                 return None
 
-            used_kb = total_kb - available_kb
-            total_mb = int(total_kb / 1024)
-            used_mb = int(used_kb / 1024)
-            percent = (used_kb / total_kb) * 100 if total_kb else 0
-            return _MemoryUsage(total_mb=total_mb, used_mb=used_mb, percent=percent)
+            free_kb = info.get("MemFree")
+            buffers_kb = info.get("Buffers", 0)
+            cached_kb = info.get("Cached", 0)
+            reclaimable_kb = info.get("SReclaimable", 0)
+            shmem_kb = info.get("Shmem", 0)
+            available_kb = info.get("MemAvailable")
+
+            # Формула ближе к htop: used = total - free - buffers - cache,
+            # где cache считаем как Cached + SReclaimable - Shmem.
+            cache_kb = max(cached_kb + reclaimable_kb - shmem_kb, 0)
+            if free_kb is not None:
+                used_kb = max(total_kb - free_kb - buffers_kb - cache_kb, 0)
+            elif available_kb is not None:
+                used_kb = max(total_kb - available_kb, 0)
+            else:
+                return None
+
+            swap_total_kb = info.get("SwapTotal", 0)
+            swap_free_kb = info.get("SwapFree", 0)
+            swap_used_kb = max(swap_total_kb - swap_free_kb, 0)
+
+            ram = _MemoryUsage(
+                total_mb=int(total_kb / 1024),
+                used_mb=int(used_kb / 1024),
+                percent=(used_kb / total_kb) * 100 if total_kb else 0,
+                available_mb=int(available_kb / 1024) if available_kb is not None else None,
+            )
+            swap = _MemoryUsage(
+                total_mb=int(swap_total_kb / 1024),
+                used_mb=int(swap_used_kb / 1024),
+                percent=(swap_used_kb / swap_total_kb) * 100 if swap_total_kb else 0,
+            )
+            return _ServerMemoryStatus(ram=ram, swap=swap)
         except (FileNotFoundError, PermissionError, ValueError):
             return None
 
