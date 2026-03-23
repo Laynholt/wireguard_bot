@@ -63,6 +63,7 @@ class BotCommand(str, Enum):
     GET_MY_STATS = ("get_my_stats", "📊 Моя статистика")
     GET_USER_STATS = ("get_user_stats", "📈 Статистика пользователя")
     GET_ALL_STATS = ("get_all_stats", "📉 Вся статистика")
+    GET_STATS_EXPORT = ("get_stats_export", "🗂 Файл статистики")
 
     # Дополнительные команды
     RELOAD_WG_SERVER = ("reload_wg_server", "🔄 Перезагрузить Wireguard сервер")
@@ -163,6 +164,7 @@ class BotCommandHandler:
 
         from .get_stats_user    import GetWireguardUserStatsCommand
         from .get_stats_all     import GetAllWireguardUsersStatsCommand
+        from .get_stats_export  import GetWireguardStatsExportCommand
 
         from .reload_wg         import ReloadWireguardServerCommand
         from .server_status     import ServerStatusCommand
@@ -301,6 +303,10 @@ class BotCommandHandler:
             database,
             semaphore,
             config.wireguard_config_filepath
+        )
+        self.__command_wrapper[BotCommand.GET_STATS_EXPORT] = GetWireguardStatsExportCommand(
+            database,
+            semaphore
         )
         
         # Команда перезапуска сервера WireGuard

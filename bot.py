@@ -377,6 +377,18 @@ async def get_all_stats_command(update: Update, context: CallbackContext) -> Non
 
 
 @wrappers.admin_required
+@wrappers.command_lock
+async def get_stats_export_command(update: Update, context: CallbackContext) -> None:
+    """
+    Команда для администраторов.
+    Формирует CSV-файл статистики по выбранным пользователям и диапазону дат.
+    """
+    await bot_command_handler.command(
+        BotCommand.GET_STATS_EXPORT
+    ).request_input(update, context)
+
+
+@wrappers.admin_required
 async def reload_wireguard_server_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик команды перезагрузки сервера Wireguard.
@@ -809,6 +821,7 @@ def main() -> None:
         BotCommand.GET_MY_STATS.pretty_text: get_my_stats_command,
         BotCommand.GET_USER_STATS.pretty_text: get_user_stats_command,
         BotCommand.GET_ALL_STATS.pretty_text: get_all_stats_command,
+        BotCommand.GET_STATS_EXPORT.pretty_text: get_stats_export_command,
 
         BotCommand.RELOAD_WG_SERVER.pretty_text: reload_wireguard_server_command,
         BotCommand.SERVER_STATUS.pretty_text: server_status_command,

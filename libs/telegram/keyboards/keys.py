@@ -41,6 +41,7 @@ class ButtonText(Enum):
     TURN_BACK = KeyText(text="◀️ Назад")
 
     OWN = KeyText(text="👤 Свой(-и)")
+    ALL_USERS = KeyText(text="👥 Все пользователи")
     WIREGUARD_USER = KeyText(text="🛡 Пользователя Wireguard")
     TELEGRAM_USER = KeyText(text="📩 Пользователя Telegram")
 

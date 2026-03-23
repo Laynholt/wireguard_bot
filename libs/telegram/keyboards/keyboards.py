@@ -74,10 +74,11 @@ WIREGUARD_CONFIG_KEYBOARD = Keyboard(
 WIREGUARD_STATS_KEYBOARD = Keyboard(
     title="📊 Статистика WireGuard",
     reply_keyboard=ReplyKeyboardMarkup(
-    (        
+        (
             (BotCommand.GET_MY_STATS.pretty_text,),
             (BotCommand.GET_USER_STATS.pretty_text,),
             (BotCommand.GET_ALL_STATS.pretty_text,),
+            (BotCommand.GET_STATS_EXPORT.pretty_text,),
             (keys.ButtonText.TURN_BACK.value.text,)
         ),
         resize_keyboard=True,
