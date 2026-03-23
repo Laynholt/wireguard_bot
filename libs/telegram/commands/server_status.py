@@ -53,8 +53,6 @@ class ServerStatusCommand(BaseCommand):
             message_lines.append(
                 f"💾 RAM: {memory.ram.used_mb} / {memory.ram.total_mb} MiB ({memory.ram.percent:.0f}%)"
             )
-            if memory.ram.available_mb is not None:
-                message_lines.append(f"🧹 Доступно RAM: {memory.ram.available_mb} MiB")
 
             if memory.swap.total_mb > 0:
                 message_lines.append(
