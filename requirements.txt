@@ -1,7 +1,7 @@
 aiosqlite==0.20.0
 annotated-types==0.7.0
 anyio==4.6.2.post1
-APScheduler==3.11.0
+APScheduler==3.10.4
 certifi==2024.8.30
 exceptiongroup==1.2.2
 h11==0.14.0
