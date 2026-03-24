@@ -23,6 +23,20 @@ class CpuSnapshot:
     total: int
 
 
+@dataclass
+class ProcessCpuSample:
+    total_jiffies: int
+    name: str
+
+
+@dataclass
+class ProcessUsage:
+    pid: int
+    name: str
+    percent: float
+    used_mb: int | None = None
+
+
 def collect_loadavg() -> Optional[tuple[float, float, float, float, float, float]]:
     getter = getattr(os, "getloadavg", None)
     one = five = fifteen = None
@@ -162,3 +176,173 @@ def calculate_cpu_percent(
 
     busy_delta = max(total_delta - idle_delta, 0)
     return (busy_delta / total_delta) * 100
+
+
+def read_process_cpu_samples() -> dict[int, ProcessCpuSample]:
+    proc_path = "/proc"
+    samples: dict[int, ProcessCpuSample] = {}
+
+    try:
+        entries = os.scandir(proc_path)
+    except (FileNotFoundError, PermissionError, OSError):
+        return samples
+
+    with entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+
+            pid = int(entry.name)
+            sample = _read_process_cpu_sample(pid)
+            if sample is not None:
+                samples[pid] = sample
+
+    return samples
+
+
+def calculate_top_cpu_processes(
+    previous_snapshot: Optional[CpuSnapshot],
+    current_snapshot: Optional[CpuSnapshot],
+    previous_samples: Optional[dict[int, ProcessCpuSample]],
+    current_samples: Optional[dict[int, ProcessCpuSample]],
+    limit: int = 5,
+) -> list[ProcessUsage]:
+    if (
+        previous_snapshot is None
+        or current_snapshot is None
+        or previous_samples is None
+        or current_samples is None
+    ):
+        return []
+
+    total_delta = current_snapshot.total - previous_snapshot.total
+    if total_delta <= 0:
+        return []
+
+    usages: list[ProcessUsage] = []
+    for pid, current_sample in current_samples.items():
+        previous_sample = previous_samples.get(pid)
+        if previous_sample is None:
+            continue
+
+        process_delta = current_sample.total_jiffies - previous_sample.total_jiffies
+        if process_delta <= 0:
+            continue
+
+        usages.append(
+            ProcessUsage(
+                pid=pid,
+                name=current_sample.name,
+                percent=(process_delta / total_delta) * 100,
+            )
+        )
+
+    usages.sort(key=lambda item: item.percent, reverse=True)
+    return usages[: max(limit, 1)]
+
+
+def collect_top_memory_processes(
+    total_memory_mb: int,
+    limit: int = 5,
+) -> list[ProcessUsage]:
+    if total_memory_mb <= 0:
+        return []
+
+    total_memory_bytes = total_memory_mb * 1024 * 1024
+    page_size = _get_page_size()
+    usages: list[ProcessUsage] = []
+
+    try:
+        entries = os.scandir("/proc")
+    except (FileNotFoundError, PermissionError, OSError):
+        return []
+
+    with entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+
+            usage = _read_process_memory_usage(
+                pid=int(entry.name),
+                page_size=page_size,
+                total_memory_bytes=total_memory_bytes,
+            )
+            if usage is not None:
+                usages.append(usage)
+
+    usages.sort(key=lambda item: item.percent, reverse=True)
+    return usages[: max(limit, 1)]
+
+
+def _read_process_cpu_sample(pid: int) -> Optional[ProcessCpuSample]:
+    try:
+        with open(f"/proc/{pid}/stat", "r", encoding="utf-8", errors="replace") as stat_file:
+            stat_line = stat_file.readline().strip()
+    except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
+        return None
+
+    comm_start = stat_line.find("(")
+    comm_end = stat_line.rfind(")")
+    if comm_start == -1 or comm_end == -1 or comm_end <= comm_start:
+        return None
+
+    name = stat_line[comm_start + 1 : comm_end].strip() or str(pid)
+    suffix_fields = stat_line[comm_end + 1 :].strip().split()
+    if len(suffix_fields) <= 12:
+        return None
+
+    try:
+        utime = int(suffix_fields[11])
+        stime = int(suffix_fields[12])
+    except ValueError:
+        return None
+
+    return ProcessCpuSample(total_jiffies=utime + stime, name=name)
+
+
+def _read_process_memory_usage(
+    pid: int,
+    page_size: int,
+    total_memory_bytes: int,
+) -> Optional[ProcessUsage]:
+    try:
+        with open(f"/proc/{pid}/statm", "r", encoding="utf-8", errors="replace") as statm_file:
+            fields = statm_file.readline().split()
+    except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
+        return None
+
+    if len(fields) < 2:
+        return None
+
+    try:
+        rss_pages = int(fields[1])
+    except ValueError:
+        return None
+
+    if rss_pages <= 0:
+        return None
+
+    rss_bytes = rss_pages * page_size
+    return ProcessUsage(
+        pid=pid,
+        name=_read_process_name(pid),
+        percent=(rss_bytes / total_memory_bytes) * 100 if total_memory_bytes else 0.0,
+        used_mb=int(rss_bytes / (1024 * 1024)),
+    )
+
+
+def _read_process_name(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/comm", "r", encoding="utf-8", errors="replace") as comm_file:
+            name = comm_file.readline().strip()
+    except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
+        return str(pid)
+
+    return name or str(pid)
+
+
+def _get_page_size() -> int:
+    try:
+        return os.sysconf("SC_PAGE_SIZE")
+    except (AttributeError, ValueError, OSError):
+        return 4096
