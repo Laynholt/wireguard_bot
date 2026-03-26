@@ -130,6 +130,7 @@ class SendMessageCommand(BaseCommand):
         await update.message.reply_text(
             (
                 "<b>Выберите получателей рассылки</b>\n\n"
+                "Обозначения: 🔗 привязан, ⭕ не привязан.\n\n"
                 "Введите:\n"
                 "• <code>*</code> или <code>-1</code> для всех привязанных пользователей\n"
                 "• <code>*+</code> для всех незаблокированных пользователей\n"
@@ -141,8 +142,16 @@ class SendMessageCommand(BaseCommand):
             parse_mode="HTML",
         )
 
+        linked_recipient_ids = set(
+            self.__get_linked_recipient_ids(
+                [recipient.telegram_id for recipient in recipients]
+            )
+        )
         lines = [
-            f"{index}. {recipient.label}"
+            (
+                f"{index}. {recipient.label} "
+                f"{'🔗' if recipient.telegram_id in linked_recipient_ids else '⭕'}"
+            )
             for index, recipient in enumerate(recipients, start=1)
         ]
         batched_lines = telegram_utils.build_batched_lines(
