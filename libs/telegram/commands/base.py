@@ -28,6 +28,7 @@ class ContextDataKeys(str, Enum):
     WIREGUARD_USERS = 'wireguard_users'
     CURRENT_MENU = 'current_menu'
     STATS_EXPORT_PREFIX = 'stats_export_'
+    SEND_MESSAGE_PREFIX = 'send_message_'
 
 
 class BaseCommand(ABC):

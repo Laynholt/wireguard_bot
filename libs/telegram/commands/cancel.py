@@ -31,7 +31,13 @@ class CancelCommand(BaseCommand):
             )
         if context.user_data is not None:
             for key in list(context.user_data.keys()):
-                if isinstance(key, str) and key.startswith(ContextDataKeys.STATS_EXPORT_PREFIX.value):
+                if (
+                    isinstance(key, str)
+                    and (
+                        key.startswith(ContextDataKeys.STATS_EXPORT_PREFIX.value)
+                        or key.startswith(ContextDataKeys.SEND_MESSAGE_PREFIX.value)
+                    )
+                ):
                     context.user_data.pop(key, None)
             context.user_data[ContextDataKeys.COMMAND] = None
             context.user_data[ContextDataKeys.WIREGUARD_USERS] = []

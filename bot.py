@@ -579,6 +579,20 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
     await __init_main_menu(update, context)
     await handle_update(update, context, delete_msg=True)
 
+
+async def handle_media_message(update: Update, context: CallbackContext) -> None:
+    """
+    Обработчик изображений и файлов, которые нужны активным многошаговым командам.
+    """
+    if context.user_data is None:
+        return
+
+    if context.user_data.get(ContextDataKeys.COMMAND) != BotCommand.SEND_MESSAGE:
+        return
+
+    await __init_main_menu(update, context)
+    await handle_update(update, context)
+
 # ---------------------- Вспомогательные функции ----------------------
 
 async def __init_main_menu(update: Update, context: CallbackContext) -> None:
@@ -874,6 +888,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.COMMAND, handle_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.StatusUpdate.USER_SHARED, handle_user_request))
+    application.add_handler(MessageHandler((filters.PHOTO | filters.Document.ALL), handle_media_message))
 
     # Обработчик ошибок
     application.add_error_handler(error_handler)

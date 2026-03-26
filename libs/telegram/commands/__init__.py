@@ -285,7 +285,8 @@ class BotCommandHandler:
         self.__command_wrapper[BotCommand.SEND_MESSAGE] = SendMessageCommand(
             database,
             config.telegram_admin_ids,
-            telegram_user_ids_cache
+            telegram_user_ids_cache,
+            semaphore
         )
         
         # Команды получения статистики WireGuard
