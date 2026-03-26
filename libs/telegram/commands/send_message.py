@@ -16,6 +16,8 @@ class SendMessageCommand(BaseCommand):
     CTX_RECIPIENT_IDS = f"{_CTX_PREFIX}recipient_ids"
     CTX_RECIPIENT_LABELS = f"{_CTX_PREFIX}recipient_labels"
     CTX_TARGET_IDS = f"{_CTX_PREFIX}target_ids"
+    SELECT_ALL_LINKED_TOKENS = {"*", "-1"}
+    SELECT_ALL_AVAILABLE_TOKENS = {"*+"}
 
     RANGE_TOKEN_PATTERN = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 
@@ -63,7 +65,9 @@ class SendMessageCommand(BaseCommand):
 
         context.user_data[ContextDataKeys.COMMAND] = self.command_name
         context.user_data[self.CTX_STAGE] = "await_targets"
-        context.user_data[self.CTX_RECIPIENT_IDS] = [recipient.telegram_id for recipient in recipients]
+        context.user_data[self.CTX_RECIPIENT_IDS] = [
+            recipient.telegram_id for recipient in recipients
+        ]
         context.user_data[self.CTX_RECIPIENT_LABELS] = {
             recipient.telegram_id: recipient.label for recipient in recipients
         }
@@ -127,7 +131,8 @@ class SendMessageCommand(BaseCommand):
             (
                 "<b>Выберите получателей рассылки</b>\n\n"
                 "Введите:\n"
-                "• <code>*</code> или <code>-1</code> для всех пользователей\n"
+                "• <code>*</code> или <code>-1</code> для всех привязанных пользователей\n"
+                "• <code>*+</code> для всех незаблокированных пользователей\n"
                 "• номера через пробел или запятую: <code>1 2 5</code>, <code>1,2,5</code>\n"
                 "• диапазоны через тире: <code>1-5</code>\n"
                 "• смешанный вариант: <code>1, 3-5 9</code>\n\n"
@@ -163,20 +168,38 @@ class SendMessageCommand(BaseCommand):
 
         if update.message.text is None:
             await update.message.reply_text(
-                "Введите номера пользователей текстом. Например: 1, 2-4 или *."
+                "Введите номера пользователей текстом. Например: 1, 2-4, * или *+."
             )
             return
 
         recipient_ids: list[TelegramId] = context.user_data.get(self.CTX_RECIPIENT_IDS, [])
-        parsed_indexes, error_text = self.__parse_selection(
-            update.message.text,
-            len(recipient_ids),
-        )
-        if error_text is not None:
-            await update.message.reply_text(f"{error_text}\nПовторите ввод.")
+        tokens = self.__tokenize_selection(update.message.text)
+        if not tokens:
+            await update.message.reply_text(
+                "Не удалось распознать ни одного элемента выбора.\nПовторите ввод."
+            )
             return
 
-        target_ids = [recipient_ids[index - 1] for index in parsed_indexes]
+        if any(token in self.SELECT_ALL_AVAILABLE_TOKENS for token in tokens):
+            target_ids = recipient_ids
+        elif any(token in self.SELECT_ALL_LINKED_TOKENS for token in tokens):
+            target_ids = self.__get_linked_recipient_ids(recipient_ids)
+            if not target_ids:
+                await update.message.reply_text(
+                    "Среди доступных получателей нет ни одного привязанного пользователя.\nПовторите ввод."
+                )
+                return
+        else:
+            parsed_indexes, error_text = self.__parse_selection(
+                update.message.text,
+                len(recipient_ids),
+            )
+            if error_text is not None:
+                await update.message.reply_text(f"{error_text}\nПовторите ввод.")
+                return
+
+            target_ids = [recipient_ids[index - 1] for index in parsed_indexes]
+
         context.user_data[self.CTX_TARGET_IDS] = target_ids
         context.user_data[self.CTX_STAGE] = "await_content"
 
@@ -197,14 +220,10 @@ class SendMessageCommand(BaseCommand):
         raw_text: str,
         recipients_count: int,
     ) -> tuple[list[int], Optional[str]]:
-        normalized = re.sub(r"(?<=\d)\s*-\s*(?=\d)", "-", raw_text.strip())
-        tokens = [token for token in re.split(r"[\s,]+", normalized) if token]
+        tokens = self.__tokenize_selection(raw_text)
 
         if not tokens:
             return [], "Не удалось распознать ни одного элемента выбора."
-
-        if "*" in tokens or "-1" in tokens:
-            return list(range(1, recipients_count + 1)), None
 
         selected_indexes: set[int] = set()
         for token in tokens:
@@ -230,6 +249,24 @@ class SendMessageCommand(BaseCommand):
 
         return sorted(selected_indexes), None
 
+    def __tokenize_selection(self, raw_text: str) -> list[str]:
+        normalized = re.sub(r"(?<=\d)\s*-\s*(?=\d)", "-", raw_text.strip())
+        return [token for token in re.split(r"[\s,]+", normalized) if token]
+
+    def __get_linked_recipient_ids(
+        self,
+        recipient_ids: list[TelegramId],
+    ) -> list[TelegramId]:
+        linked_users = self.database.get_all_linked_data()
+        linked_recipient_ids = set(
+            telegram_utils.create_linked_dict(linked_users).keys()
+        )
+        return [
+            telegram_id
+            for telegram_id in recipient_ids
+            if telegram_id in linked_recipient_ids
+        ]
+
     async def __send_selected_recipients(
         self,
         update: Update,
@@ -239,7 +276,9 @@ class SendMessageCommand(BaseCommand):
         if update.message is None or context.user_data is None:
             return
 
-        recipient_labels: dict[TelegramId, str] = context.user_data.get(self.CTX_RECIPIENT_LABELS, {})
+        recipient_labels: dict[TelegramId, str] = context.user_data.get(
+            self.CTX_RECIPIENT_LABELS, {}
+        )
         lines = [
             recipient_labels.get(telegram_id, f"<code>{telegram_id}</code>")
             for telegram_id in target_ids
@@ -306,7 +345,9 @@ class SendMessageCommand(BaseCommand):
         if update.message.photo:
             caption = (update.message.caption or "").strip() or None
             if caption is not None and len(caption) > 1024:
-                raise ValueError("Подпись к изображению слишком длинная. Максимум 1024 символа.")
+                raise ValueError(
+                    "Подпись к изображению слишком длинная. Максимум 1024 символа."
+                )
 
             photo = update.message.photo[-1]
             telegram_file = await context.bot.get_file(photo.file_id)
@@ -319,7 +360,9 @@ class SendMessageCommand(BaseCommand):
         if update.message.video is not None:
             caption = (update.message.caption or "").strip() or None
             if caption is not None and len(caption) > 1024:
-                raise ValueError("Подпись к видео слишком длинная. Максимум 1024 символа.")
+                raise ValueError(
+                    "Подпись к видео слишком длинная. Максимум 1024 символа."
+                )
 
             telegram_file = await context.bot.get_file(update.message.video.file_id)
             suffix = os.path.splitext(update.message.video.file_name or "")[1] or ".mp4"
@@ -338,7 +381,9 @@ class SendMessageCommand(BaseCommand):
         if update.message.audio is not None:
             caption = (update.message.caption or "").strip() or None
             if caption is not None and len(caption) > 1024:
-                raise ValueError("Подпись к аудио слишком длинная. Максимум 1024 символа.")
+                raise ValueError(
+                    "Подпись к аудио слишком длинная. Максимум 1024 символа."
+                )
 
             telegram_file = await context.bot.get_file(update.message.audio.file_id)
             suffix = os.path.splitext(update.message.audio.file_name or "")[1] or ".mp3"
@@ -359,7 +404,9 @@ class SendMessageCommand(BaseCommand):
         if update.message.document is not None:
             caption = (update.message.caption or "").strip() or None
             if caption is not None and len(caption) > 1024:
-                raise ValueError("Подпись к файлу слишком длинная. Максимум 1024 символа.")
+                raise ValueError(
+                    "Подпись к файлу слишком длинная. Максимум 1024 символа."
+                )
 
             telegram_file = await context.bot.get_file(update.message.document.file_id)
             suffix = os.path.splitext(update.message.document.file_name or "")[1] or ".bin"
@@ -453,9 +500,14 @@ class SendMessageCommand(BaseCommand):
                             reply_markup=keyboard.reply_keyboard,
                         )
                 else:
-                    raise ValueError(f"Неизвестный тип полезной нагрузки [{payload.kind}].")
+                    raise ValueError(
+                        f"Неизвестный тип полезной нагрузки [{payload.kind}]."
+                    )
 
-                logger.info("Рассылка успешно отправлена пользователю %s.", telegram_id)
+                logger.info(
+                    "Рассылка успешно отправлена пользователю %s.",
+                    telegram_id,
+                )
             except TelegramError as error:
                 logger.error(
                     "Не удалось отправить рассылку пользователю %s: %s",
@@ -476,7 +528,9 @@ class SendMessageCommand(BaseCommand):
         if update.message is None or context.user_data is None:
             return
 
-        recipient_labels: dict[TelegramId, str] = context.user_data.get(self.CTX_RECIPIENT_LABELS, {})
+        recipient_labels: dict[TelegramId, str] = context.user_data.get(
+            self.CTX_RECIPIENT_LABELS, {}
+        )
         success_count = len(target_ids) - len(failed_ids)
 
         if not failed_ids:
@@ -501,7 +555,10 @@ class SendMessageCommand(BaseCommand):
         try:
             os.remove(file_path)
         except OSError:
-            logger.warning("Не удалось удалить временный файл рассылки [%s].", file_path)
+            logger.warning(
+                "Не удалось удалить временный файл рассылки [%s].",
+                file_path,
+            )
 
     def __reset_state(self, context: CallbackContext) -> None:
         if context.user_data is None:
