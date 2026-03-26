@@ -4,3 +4,4 @@ stuff/
 __pycache__/
 .vscode/
 bot_env/
+uv.lock
