@@ -30,6 +30,9 @@ class SendMessageCommand(BaseCommand):
         text: Optional[str] = None
         file_path: Optional[str] = None
         filename: Optional[str] = None
+        duration: Optional[int] = None
+        performer: Optional[str] = None
+        title: Optional[str] = None
 
     def __init__(
         self,
@@ -183,8 +186,8 @@ class SendMessageCommand(BaseCommand):
         await self.__send_selected_recipients(update, context, target_ids)
         await update.message.reply_text(
             (
-                "Теперь отправьте текст сообщения, изображение или файл.\n"
-                "Для изображения и файла можно добавить подпись.\n\n"
+                "Теперь отправьте текст сообщения, изображение, видео, аудио или файл.\n"
+                "Для вложений можно добавить подпись.\n\n"
                 f"Чтобы отменить рассылку, используйте /{BotCommand.CANCEL}."
             )
         )
@@ -313,6 +316,46 @@ class SendMessageCommand(BaseCommand):
             )
             return self.BroadcastPayload(kind="photo", text=caption, file_path=file_path)
 
+        if update.message.video is not None:
+            caption = (update.message.caption or "").strip() or None
+            if caption is not None and len(caption) > 1024:
+                raise ValueError("Подпись к видео слишком длинная. Максимум 1024 символа.")
+
+            telegram_file = await context.bot.get_file(update.message.video.file_id)
+            suffix = os.path.splitext(update.message.video.file_name or "")[1] or ".mp4"
+            file_path = await self.__download_temp_file(
+                telegram_file=telegram_file,
+                fallback_suffix=suffix,
+            )
+            return self.BroadcastPayload(
+                kind="video",
+                text=caption,
+                file_path=file_path,
+                filename=update.message.video.file_name,
+                duration=update.message.video.duration,
+            )
+
+        if update.message.audio is not None:
+            caption = (update.message.caption or "").strip() or None
+            if caption is not None and len(caption) > 1024:
+                raise ValueError("Подпись к аудио слишком длинная. Максимум 1024 символа.")
+
+            telegram_file = await context.bot.get_file(update.message.audio.file_id)
+            suffix = os.path.splitext(update.message.audio.file_name or "")[1] or ".mp3"
+            file_path = await self.__download_temp_file(
+                telegram_file=telegram_file,
+                fallback_suffix=suffix,
+            )
+            return self.BroadcastPayload(
+                kind="audio",
+                text=caption,
+                file_path=file_path,
+                filename=update.message.audio.file_name,
+                duration=update.message.audio.duration,
+                performer=update.message.audio.performer,
+                title=update.message.audio.title,
+            )
+
         if update.message.document is not None:
             caption = (update.message.caption or "").strip() or None
             if caption is not None and len(caption) > 1024:
@@ -376,6 +419,28 @@ class SendMessageCommand(BaseCommand):
                             chat_id=telegram_id,
                             photo=photo_file,
                             caption=payload.text,
+                            reply_markup=keyboard.reply_keyboard,
+                        )
+                elif payload.kind == "video" and payload.file_path is not None:
+                    with open(payload.file_path, "rb") as video_file:
+                        await context.bot.send_video(
+                            chat_id=telegram_id,
+                            video=video_file,
+                            caption=payload.text,
+                            duration=payload.duration,
+                            filename=payload.filename,
+                            reply_markup=keyboard.reply_keyboard,
+                        )
+                elif payload.kind == "audio" and payload.file_path is not None:
+                    with open(payload.file_path, "rb") as audio_file:
+                        await context.bot.send_audio(
+                            chat_id=telegram_id,
+                            audio=audio_file,
+                            caption=payload.text,
+                            duration=payload.duration,
+                            performer=payload.performer,
+                            title=payload.title,
+                            filename=payload.filename,
                             reply_markup=keyboard.reply_keyboard,
                         )
                 elif payload.kind == "document" and payload.file_path is not None:

@@ -888,7 +888,12 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.COMMAND, handle_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.StatusUpdate.USER_SHARED, handle_user_request))
-    application.add_handler(MessageHandler((filters.PHOTO | filters.Document.ALL), handle_media_message))
+    application.add_handler(
+        MessageHandler(
+            (filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.Document.ALL),
+            handle_media_message,
+        )
+    )
 
     # Обработчик ошибок
     application.add_error_handler(error_handler)
