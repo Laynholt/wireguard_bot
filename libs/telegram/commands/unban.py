@@ -131,10 +131,10 @@ class UnbanTelegramUserCommand(BaseCommand):
             await update.message.reply_text(f'Данную команду нельзя применять на администраторов!')
             return
         
-        if not self.database.unban_telegram_user(tid):
-            logger.error(f'Не удалось разблокировать пользователя {telegram_username} ({tid}).')
+        if not self.database.is_telegram_user_exists(tid):
+            logger.error(f'Пользователь {telegram_username} ({tid}) не найден в базе данных.')
             await update.message.reply_text(
-                f'Не удалось разблокировать пользователя {telegram_username} (<code>{tid}</code>).',
+                f'Пользователь {telegram_username} (<code>{tid}</code>) не найден в базе данных.',
                 parse_mode='HTML'
             )
             return
@@ -142,6 +142,8 @@ class UnbanTelegramUserCommand(BaseCommand):
         user_configs = self.database.get_users_by_telegram_id(tid)
         
         need_restart_wireguard = False
+        changed_users: list[str] = []
+        has_wireguard_errors = False
         for user in user_configs:
             if await asyncio.to_thread(wireguard.is_username_commented, user):
                 ret_val = await asyncio.to_thread(wireguard.comment_or_uncomment_user, user)
@@ -153,10 +155,35 @@ class UnbanTelegramUserCommand(BaseCommand):
                     
                     await update.message.reply_text(pretty_msg, parse_mode='HTML')
                     if ret_val.status:
+                        changed_users.append(user)
                         need_restart_wireguard = True
                         logger.info(msg)
                     else:
+                        has_wireguard_errors = True
                         logger.error(msg)
+
+        if has_wireguard_errors:
+            await self.__rollback_wireguard_changes(update, changed_users)
+            await update.message.reply_text(
+                (
+                    f"Разблокировка пользователя {telegram_username} (<code>{tid}</code>) отменена: "
+                    "не удалось синхронно обновить конфиги WireGuard."
+                ),
+                parse_mode='HTML'
+            )
+            return False
+
+        if not self.database.set_telegram_user_ban_status(tid, False):
+            await self.__rollback_wireguard_changes(update, changed_users)
+            logger.error(f'Не удалось сохранить статус разблокировки пользователя {telegram_username} ({tid}) в базе данных.')
+            await update.message.reply_text(
+                (
+                    f"Не удалось завершить разблокировку пользователя {telegram_username} "
+                    f"(<code>{tid}</code>): ошибка обновления базы данных."
+                ),
+                parse_mode='HTML'
+            )
+            return False
 
         self.telegram_user_ids_cache.add(tid)
         
@@ -167,6 +194,23 @@ class UnbanTelegramUserCommand(BaseCommand):
         )
 
         return need_restart_wireguard
+
+
+    async def __rollback_wireguard_changes(self, update: Update, changed_users: list[str]) -> None:
+        if update.message is None or not changed_users:
+            return
+
+        for user in reversed(changed_users):
+            rollback_result = await asyncio.to_thread(wireguard.comment_or_uncomment_user, user)
+            if rollback_result is not None and rollback_result.status:
+                logger.info('Откат изменения статуса WireGuard для [%s] выполнен.', user)
+            else:
+                description = rollback_result.description if rollback_result is not None else 'unknown error'
+                logger.error('Не удалось откатить изменение статуса WireGuard для [%s]: %s', user, description)
+                await update.message.reply_text(
+                    f'⚠️ Не удалось откатить изменение WireGuard для <code>{user}</code>.',
+                    parse_mode='HTML'
+                )
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:

@@ -138,6 +138,8 @@ class RemoveTelegramUserCommand(BaseCommand):
         user_configs = self.database.get_users_by_telegram_id(tid)
         
         need_restart_wireguard = False
+        removed_users: list[str] = []
+        failed_users: list[str] = []
         for user in user_configs:
             # Удаляем конфиг пользователя
             ret_val = await asyncio.to_thread(wireguard.remove_user, user)
@@ -149,65 +151,80 @@ class RemoveTelegramUserCommand(BaseCommand):
                 
                 await update.message.reply_text(pretty_msg, parse_mode='HTML')
                 if ret_val.status:
+                    removed_users.append(user)
                     need_restart_wireguard = True
                     logger.info(msg)
                 else:
+                    failed_users.append(user)
                     logger.error(msg)
 
+        if failed_users:
+            await self.__cleanup_partial_links(update, tid, telegram_username, removed_users)
+            failed_configs = ", ".join(f"<code>{user}</code>" for user in failed_users)
+            await update.message.reply_text(
+                (
+                    f"Пользователь {telegram_username} (<code>{tid}</code>) удалён не полностью.\n"
+                    f"Не удалось удалить конфиги: {failed_configs}.\n"
+                    "Telegram-пользователь оставлен в базе, чтобы не потерять оставшиеся связи."
+                ),
+                parse_mode='HTML'
+            )
+            return need_restart_wireguard
 
-        # Отвязываем от него все конфиги
-        if self.database.is_telegram_user_linked(tid):
-            if self.database.delete_users_by_telegram_id(tid):
-                logger.info(
-                    f"Для {telegram_username} ({tid}): Пользователи Wireguard успешно отвязаны."
-                )
-                if update.message is not None:
-                    await update.message.reply_text(
-                        f"Для {telegram_username} (<code>{tid}</code>):"
-                        " Пользователи Wireguard успешно отвязаны.",
-                        parse_mode='HTML'
-                    )
-            else:
-                logger.info(
-                    f"Для {telegram_username} ({tid}): Не удалось отвязать пользователей Wireguard."
-                )
-                if update.message is not None:
-                    await update.message.reply_text(
-                        f"Для {telegram_username} (<code>{tid}</code>):"
-                        f" Не удалось отвязать пользователей Wireguard.",
-                        parse_mode='HTML'
-                    )
-        else:
-            logger.info(
-                    f"Для {telegram_username} ({tid}): Ни один из пользователей Wireguard не прикреплен."
-                )
-            if update.message is not None:
-                await update.message.reply_text(
-                    f"Для {telegram_username} (<code>{tid}</code>):"
-                    " Ни один из пользователей Wireguard не прикреплен.",
-                    parse_mode='HTML'
-                )
-        
-        # Удаляем пользователя из бд
-        if self.database.is_telegram_user_exists(tid):
-            if self.database.delete_telegram_user(tid):
-                logger.info(f"Для {telegram_username} ({tid}): Пользователь успешно удален из бд.")
-                await update.message.reply_text(
-                    f"Для {telegram_username} (<code>{tid}</code>): Пользователь успешно удален из бд.",
-                    parse_mode='HTML'
-                )
-            else:
-                logger.error(f"Для {telegram_username} ({tid}): Не удалось удалить пользователя из бд.")
-                await update.message.reply_text(
-                    f"Для {telegram_username} (<code>{tid}</code>): Не удалось удалить пользователя из бд.",
-                    parse_mode='HTML'
-                )
+        if not self.database.delete_telegram_user_with_links(tid):
+            logger.error(f"Для {telegram_username} ({tid}): Не удалось удалить пользователя и его привязки из базы данных.")
+            await update.message.reply_text(
+                (
+                    f"Для {telegram_username} (<code>{tid}</code>): не удалось удалить "
+                    "пользователя и его привязки из базы данных. WireGuard-конфиги уже удалены."
+                ),
+                parse_mode='HTML'
+            )
+            return need_restart_wireguard
+
+        logger.info(f"Для {telegram_username} ({tid}): Пользователь и его привязки успешно удалены из базы данных.")
+        await update.message.reply_text(
+            f"Для {telegram_username} (<code>{tid}</code>): пользователь и его привязки успешно удалены из базы данных.",
+            parse_mode='HTML'
+        )
         
         # Удаляем его id из кэша
         if tid in self.telegram_user_ids_cache:
             self.telegram_user_ids_cache.remove(tid)
 
         return need_restart_wireguard
+
+
+    async def __cleanup_partial_links(
+        self,
+        update: Update,
+        telegram_id: TelegramId,
+        telegram_username: Optional[TelegramUserName],
+        removed_users: list[str],
+    ) -> None:
+        if update.message is None or not removed_users:
+            return
+
+        failed_unlinks: list[str] = []
+        for user_name in removed_users:
+            if not self.database.delete_user(user_name):
+                failed_unlinks.append(user_name)
+
+        if failed_unlinks:
+            logger.error(
+                "Не удалось очистить привязки для частично удалённых конфигов пользователя %s (%s): %s",
+                telegram_username,
+                telegram_id,
+                failed_unlinks,
+            )
+            failed_text = ", ".join(f"<code>{name}</code>" for name in failed_unlinks)
+            await update.message.reply_text(
+                (
+                    "⚠️ Часть связей в базе не удалось очистить автоматически для уже удалённых конфигов: "
+                    f"{failed_text}."
+                ),
+                parse_mode='HTML'
+            )
 
 
     async def _buttons_handler(self, update: Update, context: CallbackContext) -> bool:

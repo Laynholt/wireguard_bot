@@ -8,6 +8,7 @@ import json
 import shutil
 import tempfile
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from . import wg_db
 
@@ -28,6 +29,36 @@ class UserState(Enum):
 class ActionType(Enum):
     COMMENT = 2
     UNCOMMENT = 3
+
+
+def _create_temp_path(prefix: str, suffix: str) -> str:
+    """
+    Создаёт уникальный временный путь и сразу закрывает файловый дескриптор.
+    """
+    fd, path = tempfile.mkstemp(prefix=prefix, suffix=suffix)
+    os.close(fd)
+    return path
+
+
+def _remove_temp_path(path: Optional[str]) -> None:
+    """
+    Удаляет временный файл, если он существует.
+    """
+    if not path:
+        return
+
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _build_remote_temp_path(user_name: str, suffix: str) -> str:
+    """
+    Создаёт уникальный временный путь внутри контейнера wireguard.
+    """
+    safe_name = __strip_bad_symbols(user_name) or "wireguard_user"
+    return f"/tmp/{safe_name}_{uuid4().hex}{suffix}"
 
 
 def __get_key(filename: str) -> str:
@@ -596,41 +627,21 @@ def print_user_qrcode(user_name: str) -> utils.FunctionResult:
     if not conf_res.status:
         return conf_res.return_with_print(add_to_print=f'[{50 * "-"}]\n')
 
-    tmp_remote = f"/tmp/{user_name}.conf"
-    copy_to = utils.run_command(["docker", "cp", conf_res.description, f"wireguard:{tmp_remote}"])
-    if not copy_to.status:
-        return copy_to.return_with_print(add_to_print=f'[{50 * "-"}]\n')
-
-    command = ["docker", "exec", "wireguard", "sh", "-c", f"qrencode -t ansiutf8 < {tmp_remote}"]
-    utils.run_command(command).return_with_print()
-
-    utils.run_command(["docker", "exec", "wireguard", "rm", "-f", tmp_remote])
-
+    tmp_remote = _build_remote_temp_path(user_name, ".conf")
     try:
-        os.remove(conf_res.description)
-    except Exception:
-        pass
+        copy_to = utils.run_command(["docker", "cp", conf_res.description, f"wireguard:{tmp_remote}"])
+        if not copy_to.status:
+            return copy_to.return_with_print(add_to_print=f'[{50 * "-"}]\n')
+
+        command = ["docker", "exec", "wireguard", "sh", "-c", f"qrencode -t ansiutf8 < {tmp_remote}"]
+        utils.run_command(command).return_with_print()
+    finally:
+        utils.run_command(["docker", "exec", "wireguard", "rm", "-f", tmp_remote])
+        _remove_temp_path(conf_res.description)
 
     return utils.FunctionResult(status=True, description=f"\nQrCode для [{user_name}] успешно отрисован.").return_with_print(
             add_to_print=f'[{50 * "-"}]\n'
     )
-
-def check_user_qr_code_exists(user_name: str) -> utils.FunctionResult:
-    """
-    Проверяет существование QR-кода для пользователя WireGuard.
-
-    Args:
-        user_name (str): Имя пользователя для проверки.
-
-    Returns:
-        utils.FunctionResult: Объект, содержащий статус выполнения и описание результата.
-    """
-    ret_val = check_user_exists(user_name)
-    if ret_val.status is False:
-        return ret_val
-
-    # QR теперь генерируется на лету, поэтому наличие файла не проверяем
-    return utils.FunctionResult(status=True, description=f"QR-код для пользователя с именем [{user_name}] может быть сгенерирован.")
 
 
 def check_user_exists(user_name: str) -> utils.FunctionResult:
@@ -698,11 +709,7 @@ def generate_temp_conf(user_name: str) -> utils.FunctionResult:
         f"AllowedIPs = 0.0.0.0/0\n"
     )
 
-    path = os.path.join(tempfile.gettempdir(), f"{user_name}.conf")
-    try:
-        os.remove(path)
-    except Exception:
-        pass
+    path = _create_temp_path(prefix=f"wireguard_{__strip_bad_symbols(user_name) or 'user'}_", suffix=".conf")
     with open(path, "w", encoding="utf-8") as f:
         f.write(conf_content)
     return utils.FunctionResult(status=True, description=path)
@@ -712,35 +719,35 @@ def generate_temp_qr(user_name: str, conf_path: str) -> utils.FunctionResult:
     """
     Генерирует временный png с QR, используя docker exec qrencode.
     """
-    tmp_remote = f"/tmp/{user_name}.conf"
-    tmp_png_remote = f"/tmp/{user_name}.png"
+    tmp_remote = _build_remote_temp_path(user_name, ".conf")
+    tmp_png_remote = _build_remote_temp_path(user_name, ".png")
+    png_local = _create_temp_path(
+        prefix=f"wireguard_{__strip_bad_symbols(user_name) or 'user'}_",
+        suffix=".png",
+    )
 
-    # Копируем конфиг в контейнер
-    copy_to = utils.run_command(["docker", "cp", conf_path, f"wireguard:{tmp_remote}"])
-    if not copy_to.status:
-        return copy_to
-
-    qr_cmd = [
-        "docker", "exec", "wireguard", "sh", "-c",
-        f"qrencode -t png -o {tmp_png_remote} -r {tmp_remote}"
-    ]
-    qr_ret = utils.run_command(qr_cmd)
-    if not qr_ret.status:
-        return qr_ret
-
-    png_local = os.path.join(tempfile.gettempdir(), f"{user_name}.png")
     try:
-        os.remove(png_local)
-    except Exception:
-        pass
-    copy_back = utils.run_command(["docker", "cp", f"wireguard:{tmp_png_remote}", png_local])
-    if not copy_back.status:
-        return copy_back
+        copy_to = utils.run_command(["docker", "cp", conf_path, f"wireguard:{tmp_remote}"])
+        if not copy_to.status:
+            return copy_to
 
-    # Чистим в контейнере
-    utils.run_command(["docker", "exec", "wireguard", "rm", "-f", tmp_remote, tmp_png_remote])
+        qr_cmd = [
+            "docker", "exec", "wireguard", "sh", "-c",
+            f"qrencode -t png -o {tmp_png_remote} -r {tmp_remote}"
+        ]
+        qr_ret = utils.run_command(qr_cmd)
+        if not qr_ret.status:
+            return qr_ret
 
-    return utils.FunctionResult(status=True, description=png_local)
+        copy_back = utils.run_command(["docker", "cp", f"wireguard:{tmp_png_remote}", png_local])
+        if not copy_back.status:
+            return copy_back
+
+        return utils.FunctionResult(status=True, description=png_local)
+    finally:
+        utils.run_command(["docker", "exec", "wireguard", "rm", "-f", tmp_remote, tmp_png_remote])
+        if not os.path.exists(png_local) or os.path.getsize(png_local) == 0:
+            _remove_temp_path(png_local)
 
 
 def create_zipfile(user_name: str) -> utils.FunctionResult:
@@ -753,48 +760,58 @@ def create_zipfile(user_name: str) -> utils.FunctionResult:
     Returns:
         utils.FunctionResult: Объект, содержащий статус выполнения и путь к созданному Zip файлу в описание результата.
     """
+    conf_path: Optional[str] = None
+    qr_path: Optional[str] = None
+    zip_path: Optional[str] = None
+    created_successfully = False
     try:
         conf_result = generate_temp_conf(user_name)
         if conf_result.status is False:
             return conf_result
+        conf_path = conf_result.description
         qr_result = generate_temp_qr(user_name, conf_result.description)
         if qr_result.status is False:
-            try:
-                os.remove(conf_result.description)
-            except Exception:
-                pass
             return qr_result
+        qr_path = qr_result.description
 
-        zip_path = os.path.join(tempfile.gettempdir(), f"{user_name}.zip")
-        try:
-            os.remove(zip_path)
-        except Exception:
-            pass
+        zip_path = _create_temp_path(
+            prefix=f"wireguard_{__strip_bad_symbols(user_name) or 'user'}_",
+            suffix=".zip",
+        )
         with zipfile.ZipFile(zip_path, 'w') as zipf:
             zipf.write(conf_result.description, arcname=f'{user_name}.conf')
             zipf.write(qr_result.description, arcname=f'{user_name}.png')
 
-        # очистка временных файлов
-        for tmp in (conf_result.description, qr_result.description):
-            try:
-                os.remove(tmp)
-            except Exception:
-                pass
-
+        created_successfully = True
         return utils.FunctionResult(status=True, description=zip_path)
     except Exception as e:
         return utils.FunctionResult(status=False, description=f'Не удалось создать Zip файл для [{user_name}]: {e}')
+    finally:
+        _remove_temp_path(conf_path)
+        _remove_temp_path(qr_path)
+        if zip_path is not None and not created_successfully:
+            _remove_temp_path(zip_path)
 
 
-def remove_zipfile(user_name: str) -> None:
+def remove_zipfile(path_or_user_name: str) -> None:
     """
-    Удаляет временный zip для пользователя из системного temp.
+    Удаляет временный zip-файл.
+
+    Поддерживает как прямой путь, так и старый формат с user_name.
     """
-    zip_path = os.path.join(tempfile.gettempdir(), f"{user_name}.zip")
-    try:
-        os.remove(zip_path)
-    except Exception:
-        pass
+    if os.path.isabs(path_or_user_name) or os.path.exists(path_or_user_name):
+        _remove_temp_path(path_or_user_name)
+        return
+
+    zip_path = os.path.join(tempfile.gettempdir(), f"{path_or_user_name}.zip")
+    _remove_temp_path(zip_path)
+
+
+def remove_temp_artifact(path: str) -> None:
+    """
+    Удаляет временный артефакт по прямому пути.
+    """
+    _remove_temp_path(path)
 
 
 def get_qrcode_path(user_name: str) -> utils.FunctionResult:
@@ -811,10 +828,7 @@ def get_qrcode_path(user_name: str) -> utils.FunctionResult:
     if conf_result.status is False:
         return conf_result
     qr_result = generate_temp_qr(user_name, conf_result.description)
-    try:
-        os.remove(conf_result.description)
-    except Exception:
-        pass
+    _remove_temp_path(conf_result.description)
     return qr_result
 
 

@@ -5,6 +5,7 @@ from .base import *
 from libs.telegram import messages
 
 from telegram import (
+    InputFile,
     KeyboardButton,
     KeyboardButtonRequestUsers,
     ReplyKeyboardMarkup
@@ -239,10 +240,11 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                 with open(zip_result.description, "rb") as zip_file:
                     await update.message.reply_document(
                         document=zip_file,
+                        filename=f"{user_name}.zip",
                         caption=caption,
                         parse_mode="HTML"
                     )
-                await asyncio.to_thread(wireguard.remove_zipfile, user_name)
+                await asyncio.to_thread(wireguard.remove_temp_artifact, zip_result.description)
             else:
                 logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{zip_result.description}]')
                 await update.message.reply_text(
@@ -270,12 +272,15 @@ class GetWireguardConfigOrQrcodeCommand(BaseCommand):
                     "╚━━━━━━━━━━━━━━━"
                 )
                 
-                with open(png_path.description, "rb") as png_file:
-                    await update.message.reply_photo(
-                        photo=png_file,
-                        caption=caption,
-                        parse_mode="HTML"
-                    )
+                try:
+                    with open(png_path.description, "rb") as png_file:
+                        await update.message.reply_photo(
+                            photo=InputFile(png_file, filename=f"{user_name}.png"),
+                            caption=caption,
+                            parse_mode="HTML"
+                        )
+                finally:
+                    await asyncio.to_thread(wireguard.remove_temp_artifact, png_path.description)
             else:
                 logger.error(f'Не удалось создать архив для {user_name}. Ошибка: [{png_path.description}]')
                 await update.message.reply_text(

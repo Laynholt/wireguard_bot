@@ -82,8 +82,11 @@ class AddWireguardUserCommand(BaseCommand):
             
             if zip_result.status and update.message is not None:
                 with open(zip_result.description, "rb") as file_to_send:
-                    await update.message.reply_document(document=file_to_send)
-                await asyncio.to_thread(wireguard.remove_zipfile, user_name)
+                    await update.message.reply_document(
+                        document=file_to_send,
+                        filename=f"{user_name}.zip",
+                    )
+                await asyncio.to_thread(wireguard.remove_temp_artifact, zip_result.description)
                 
                 if context.user_data is not None:
                     context.user_data[ContextDataKeys.WIREGUARD_USERS].append(user_name)

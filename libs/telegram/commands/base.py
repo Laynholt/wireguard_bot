@@ -13,7 +13,7 @@ from telegram.error import TelegramError
 from libs.telegram.keyboards.menu_keyboard import Keyboard
 from libs.telegram import keyboards
 from libs.telegram.commands import BotCommand
-from libs.telegram.types import TelegramId, WireguardUserName
+from libs.telegram.types import TelegramId, TelegramUserName, WireguardUserName
 from libs.telegram.database import UserDatabase
 
 import libs.telegram.utils as telegram_utils

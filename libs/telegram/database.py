@@ -267,34 +267,56 @@ class UserDatabase:
         """
         Банит пользователя Telegram, устанавливая is_user_banned в True.
         """
-        try:
-            if not self.is_telegram_user_exists(telegram_id):
-                return False
-            with self._conn() as conn:
-                conn.execute(
-                    '''UPDATE telegram_users SET is_user_banned = 1 WHERE telegram_id = ?''',
-                    (telegram_id,)
-                )
-            return True
-        except sqlite3.Error as e:
-            logger.error(f'Ошибка при бане пользователя Telegram с Id {telegram_id}: {e}')
-            return False
+        return self.set_telegram_user_ban_status(telegram_id, True)
 
     def unban_telegram_user(self, telegram_id: TelegramId) -> bool:
         """
         Снимает бан с пользователя Telegram, устанавливая is_user_banned в False.
         """
+        return self.set_telegram_user_ban_status(telegram_id, False)
+
+    def set_telegram_user_ban_status(self, telegram_id: TelegramId, is_banned: bool) -> bool:
+        """
+        Обновляет флаг блокировки пользователя Telegram.
+        """
         try:
             if not self.is_telegram_user_exists(telegram_id):
                 return False
             with self._conn() as conn:
                 conn.execute(
-                    '''UPDATE telegram_users SET is_user_banned = 0 WHERE telegram_id = ?''',
+                    '''UPDATE telegram_users SET is_user_banned = ? WHERE telegram_id = ?''',
+                    (1 if is_banned else 0, telegram_id)
+                )
+            return True
+        except sqlite3.Error as e:
+            logger.error(
+                'Ошибка при изменении статуса блокировки пользователя Telegram с Id %s: %s',
+                telegram_id,
+                e,
+            )
+            return False
+
+    def delete_telegram_user_with_links(self, telegram_id: TelegramId) -> bool:
+        """
+        Удаляет пользователя Telegram и все его привязки одним соединением.
+        """
+        try:
+            with self._conn() as conn:
+                conn.execute(
+                    'DELETE FROM linked_users WHERE telegram_id = ?',
+                    (telegram_id,)
+                )
+                conn.execute(
+                    'DELETE FROM telegram_users WHERE telegram_id = ?',
                     (telegram_id,)
                 )
             return True
         except sqlite3.Error as e:
-            logger.error(f'Ошибка при разбане пользователя Telegram с Id {telegram_id}: {e}')
+            logger.error(
+                'Ошибка при удалении пользователя Telegram с Id %s вместе с привязками: %s',
+                telegram_id,
+                e,
+            )
             return False
 
     def get_all_linked_data(self) -> List[Tuple[TelegramId, WireguardUserName]]:

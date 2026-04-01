@@ -41,13 +41,24 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# Добавляем кастомный обработчик
-file_handler = RotatingCharFileHandler(
-    base_filename=os.path.join(config.logs_dir, config.base_log_filename),
-    max_chars=config.max_log_length
+root_logger = logging.getLogger()
+file_handler_base = os.path.join(config.logs_dir, config.base_log_filename)
+existing_file_handler = next(
+    (
+        handler
+        for handler in root_logger.handlers
+        if isinstance(handler, RotatingCharFileHandler)
+        and getattr(handler, "base_filename", None) == file_handler_base
+    ),
+    None,
 )
-file_handler.setFormatter(logging.Formatter(logger_fmt))
-logger.addHandler(file_handler)
+if existing_file_handler is None:
+    file_handler = RotatingCharFileHandler(
+        base_filename=file_handler_base,
+        max_chars=config.max_log_length
+    )
+    file_handler.setFormatter(logging.Formatter(logger_fmt))
+    root_logger.addHandler(file_handler)
 
 
 user_database = UserDatabase(config.users_database_path)

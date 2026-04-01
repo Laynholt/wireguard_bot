@@ -1263,33 +1263,43 @@ def display_merged_data(merged_data: Dict[str, WgPeerData]) -> None:
     RED = '\033[31m'
     RESET = '\033[0m'
 
-    commented_users = user_control.get_inactive_usernames()
+    try:
+        commented_users = set(user_control.get_inactive_usernames())
+    except Exception:
+        commented_users = set()
 
     for i, (user_name, user_data) in enumerate(merged_data.items(), start=1):
+        data_for_display = user_data.model_copy(deep=True)
+        __finalize_endpoint_history_state(data_for_display)
+
         username_colored = f"{ORANGE}{user_name}{RESET}"
         not_available = f'{RED}[Временно недоступен]{RESET}'
         print(f"{i:2}] User: {username_colored} {not_available if user_name in commented_users else ''}")
 
-        day_stat = get_period_usage(user_data, Period.DAILY)
-        week_stat = get_period_usage(user_data, Period.WEEKLY)
-        month_stat = get_period_usage(user_data, Period.MONTHLY)
-        handshake_str = format_handshake_age(user_data)
+        day_stat = get_period_usage(data_for_display, Period.DAILY)
+        week_stat = get_period_usage(data_for_display, Period.WEEKLY)
+        month_stat = get_period_usage(data_for_display, Period.MONTHLY)
+        handshake_str = format_handshake_age(data_for_display)
 
-        if user_data.allowed_ips:
-            print(f"  allowed ips: {user_data.allowed_ips}")
-        if user_data.endpoint:
-            print(f"  latest endpoint: {user_data.endpoint} (last seen: {get_current_endpoint_last_seen_text(user_data)})")
-        other_endpoint_ips = get_other_endpoint_ips_with_last_seen(user_data)
+        if data_for_display.allowed_ips:
+            print(f"  allowed ips: {data_for_display.allowed_ips}")
+        if data_for_display.endpoint:
+            print(
+                "  latest endpoint: "
+                f"{data_for_display.endpoint} "
+                f"(last seen: {get_current_endpoint_last_seen_text(data_for_display)})"
+            )
+        other_endpoint_ips = get_other_endpoint_ips_with_last_seen(data_for_display)
         if other_endpoint_ips:
             other_pretty = ", ".join([f"{ip} ({seen_at})" for ip, seen_at in other_endpoint_ips])
             print(f"  other endpoint ips: {other_pretty}")
-        if user_data.latest_handshake:
+        if handshake_str != "N/A":
             print(f"  latest handshake: {handshake_str}")
-        if user_data.transfer_received and user_data.transfer_sent:
-            print(f"  transfer: {user_data.transfer_received} received, {user_data.transfer_sent} sent")
+        if data_for_display.transfer_received and data_for_display.transfer_sent:
+            print(f"  transfer: {data_for_display.transfer_received} received, {data_for_display.transfer_sent} sent")
         print(f"  daily:   {bytes_to_human(day_stat.sent_bytes)} sent, {bytes_to_human(day_stat.received_bytes)} received")
         print(f"  weekly:  {bytes_to_human(week_stat.sent_bytes)} sent, {bytes_to_human(week_stat.received_bytes)} received")
         print(f"  monthly: {bytes_to_human(month_stat.sent_bytes)} sent, {bytes_to_human(month_stat.received_bytes)} received")
-        print(f"  total:   {user_data.transfer_sent or '0 B'} sent, {user_data.transfer_received or '0 B'} received")
+        print(f"  total:   {data_for_display.transfer_sent or '0 B'} sent, {data_for_display.transfer_received or '0 B'} received")
 
         print()

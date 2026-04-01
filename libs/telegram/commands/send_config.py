@@ -165,11 +165,12 @@ class SendConfigCommand(BaseCommand):
                         await context.bot.send_document(
                             chat_id=telegram_id,
                             document=zip_file,
+                            filename=f"{user_name}.zip",
                             caption=caption,
                             parse_mode="HTML"
                         )
 
-                    await asyncio.to_thread(wireguard.remove_zipfile, user_name)
+                    await asyncio.to_thread(wireguard.remove_temp_artifact, zip_result.description)
 
                     current_admin_id = -1
                     current_admin_name = "NoUsername"
