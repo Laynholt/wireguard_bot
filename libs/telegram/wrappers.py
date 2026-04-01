@@ -1,14 +1,11 @@
 import logging
 from functools import wraps
-from typing import Callable, Iterable
 
 from telegram import Update
 from telegram.ext import CallbackContext
 
 from libs.core import config
 from libs.telegram.commands import BotCommand
-from .types import TelegramId
-from .utils import get_username_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -91,46 +88,3 @@ def command_lock(func):
 
     return wrapper
 
-
-def check_user_not_blocked(allowed_ids: Callable[[], Iterable[TelegramId]]):
-    """
-    Декоратор для проверки, разрешено ли использование команды пользователю.
-    
-    Если Telegram id пользователя отсутствует в множестве allowed_ids,
-    считается, что пользователь заблокирован и ему не разрешается выполнение команды.
-    
-    Args:
-        allowed_ids (Iterable[TelegramId]): Множество Telegram id, которые не заблокированы.
-        
-    Returns:
-        Обёрнутую функцию, которая либо вызывает исходную функцию, либо отправляет сообщение о блокировке.
-    """
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
-            if update.effective_user is None:
-                return None
-
-            user_id = update.effective_user.id
-            if user_id not in allowed_ids():
-                text = (
-                    update.message.text
-                    if update.message is not None and update.message.text is not None
-                    else ''
-                )
-                
-                telegram_username = await get_username_by_id(user_id, context)
-                logger.info(
-                    f'Обращение от заблокированного пользователя: {telegram_username} ({user_id}) '
-                    f'с текстом: [{text}].'
-                )
-                
-                # if update.message is not None:
-                #     await update.message.reply_text(
-                #         "Извините, вы заблокированы и не можете использовать эту команду."
-                #     )
-                return None
-
-            return await func(update, context, *args, **kwargs)
-        return wrapper
-    return decorator

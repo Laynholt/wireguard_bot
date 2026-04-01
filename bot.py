@@ -76,7 +76,6 @@ text_command_handlers: Dict[str, HandlerFunc] = {}
 
 # ---------------------- Команды бота ----------------------
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def unknown_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик неизвестных команд.
@@ -95,7 +94,6 @@ async def start_command(update: Update, context: CallbackContext) -> None:
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def help_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /help: показывает помощь по доступным командам.
@@ -105,7 +103,6 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def menu_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /menu: выводит меню в зависимости от прав пользователя.
@@ -115,7 +112,6 @@ async def menu_command(update: Update, context: CallbackContext) -> None:
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def get_telegram_id_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /get_telegram_id: выводит телеграм-ID пользователя.
@@ -125,7 +121,6 @@ async def get_telegram_id_command(update: Update, context: CallbackContext) -> N
     ).request_input(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def request_new_config_command(update: Update, context: CallbackContext) -> None:
     """
     Команда /request_new_config: пользователь запрашивает у админов новый конфиг.
@@ -135,7 +130,6 @@ async def request_new_config_command(update: Update, context: CallbackContext) -
     ).execute(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 @wrappers.command_lock
 async def get_config_command(update: Update, context: CallbackContext) -> None:
     """
@@ -147,7 +141,6 @@ async def get_config_command(update: Update, context: CallbackContext) -> None:
     ).request_input(update, context)
 
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 @wrappers.command_lock
 async def get_qrcode_command(update: Update, context: CallbackContext) -> None:
     """
@@ -350,7 +343,6 @@ async def remove_telegram_user_command(update: Update, context: CallbackContext)
     ).request_input(update, context)
         
 
-@wrappers.check_user_not_blocked(lambda: telegram_user_ids_cache)
 async def get_my_stats_command(update: Update, context: CallbackContext) -> None:
     """
     Команда для пользователей (доступна всем).
@@ -519,10 +511,51 @@ async def handle_update(update: Update, context: CallbackContext, delete_msg: bo
             )
 
 
+def __is_banned_user(telegram_id: TelegramId) -> bool:
+    """
+    Возвращает True только для пользователей, которые есть в БД и отсутствуют
+    в кеше разрешённых пользователей.
+    """
+    if telegram_id in config.telegram_admin_ids:
+        return False
+
+    if telegram_id in telegram_user_ids_cache:
+        return False
+
+    if not user_database.db_loaded:
+        return False
+
+    return user_database.is_telegram_user_exists(telegram_id)
+
+
+async def __ignore_banned_user(update: Update, log_attempt: bool = True) -> bool:
+    """
+    Полностью игнорирует апдейты от забаненных пользователей.
+    """
+    if update.effective_user is None:
+        return False
+
+    telegram_id = update.effective_user.id
+    if not __is_banned_user(telegram_id):
+        return False
+
+    if log_attempt and update.message is not None and update.message.text is not None:
+        text = update.message.text
+        logger.info(
+            'Забаненный пользователь (%s) отправил: [%s].',
+            telegram_id,
+            text,
+        )
+    return True
+
+
 async def handle_command(update: Update, context: CallbackContext) -> None:
     """
     Обработчик команд, отправленных пользователем.
     """
+    if await __ignore_banned_user(update, log_attempt=True):
+        return
+
     await __init_main_menu(update, context)
     if update.message is not None and update.message.text is not None:
         await text_command_handlers[
@@ -543,6 +576,9 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
         return
     
     if update.message.text is None:
+        return
+
+    if await __ignore_banned_user(update, log_attempt=True):
         return
     
     await __init_main_menu(update, context)
@@ -588,6 +624,9 @@ async def handle_user_request(update: Update, context: CallbackContext) -> None:
     Обработчик, который срабатывает, когда пользователь шлёт запрос
     с кнопкой выбора Telegram-пользователя (filters.StatusUpdate.USER_SHARED).
     """
+    if await __ignore_banned_user(update, log_attempt=False):
+        return
+
     await __init_main_menu(update, context)
     await handle_update(update, context, delete_msg=True)
 
@@ -596,6 +635,9 @@ async def handle_media_message(update: Update, context: CallbackContext) -> None
     """
     Обработчик изображений и файлов, которые нужны активным многошаговым командам.
     """
+    if await __ignore_banned_user(update, log_attempt=False):
+        return
+
     if context.user_data is None:
         await __forward_non_admin_message_to_admins(update, context)
         return
