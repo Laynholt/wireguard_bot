@@ -567,7 +567,8 @@ async def handle_text(update: Update, context: CallbackContext) -> None:
         if update.message.text in text_command_handlers:
             await text_command_handlers[update.message.text](update, context)
             return
-    
+
+    await __forward_non_admin_message_to_admins(update, context)
     await handle_update(update, context)
 
 
@@ -585,15 +586,49 @@ async def handle_media_message(update: Update, context: CallbackContext) -> None
     Обработчик изображений и файлов, которые нужны активным многошаговым командам.
     """
     if context.user_data is None:
+        await __forward_non_admin_message_to_admins(update, context)
         return
 
     if context.user_data.get(ContextDataKeys.COMMAND) != BotCommand.SEND_MESSAGE:
+        await __forward_non_admin_message_to_admins(update, context)
         return
 
     await __init_main_menu(update, context)
     await handle_update(update, context)
 
 # ---------------------- Вспомогательные функции ----------------------
+
+async def __forward_non_admin_message_to_admins(
+    update: Update,
+    context: CallbackContext,
+) -> None:
+    if update.effective_user is None or update.effective_user.id in config.telegram_admin_ids:
+        return
+
+    forward_to_admins = getattr(
+        bot_command_handler.command(BotCommand.SEND_MESSAGE),
+        "forward_user_message_to_admins",
+        None,
+    )
+    if forward_to_admins is None:
+        logger.error("Не найден обработчик пересылки сообщений пользователей администраторам.")
+        return
+
+    try:
+        await forward_to_admins(update, context)
+    except ValueError as error:
+        logger.warning(
+            "Сообщение пользователя %s не удалось переслать администраторам: %s",
+            update.effective_user.id,
+            error,
+        )
+    except TelegramError as error:
+        logger.error(
+            "Ошибка Telegram при пересылке сообщения пользователя %s администраторам: %s",
+            update.effective_user.id,
+            error,
+        )
+
 
 async def __init_main_menu(update: Update, context: CallbackContext) -> None:
     """

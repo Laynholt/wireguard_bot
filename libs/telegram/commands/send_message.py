@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import os
 import re
 import tempfile
@@ -48,6 +49,34 @@ class SendMessageCommand(BaseCommand):
         self.telegram_admin_ids = set(telegram_admin_ids)
         self.telegram_user_ids_cache = telegram_user_ids_cache
         self.semaphore = semaphore
+
+    async def forward_user_message_to_admins(
+        self,
+        update: Update,
+        context: CallbackContext,
+    ) -> None:
+        if update.message is None or update.effective_user is None:
+            return
+
+        admin_ids = sorted(self.telegram_admin_ids)
+        if not admin_ids:
+            return
+
+        notification_text = self.__build_admin_notification(update)
+        failed_ids = await self.__copy_message_with_notification(
+            update=update,
+            context=context,
+            target_ids=admin_ids,
+            notification_text=notification_text,
+            notification_parse_mode="HTML",
+        )
+
+        if failed_ids:
+            logger.warning(
+                "Не удалось переслать входящее сообщение пользователя %s администраторам: %s",
+                update.effective_user.id,
+                failed_ids,
+            )
 
     async def request_input(self, update: Update, context: CallbackContext):
         """
@@ -130,7 +159,7 @@ class SendMessageCommand(BaseCommand):
         await update.message.reply_text(
             (
                 "<b>Выберите получателей рассылки</b>\n\n"
-                "Обозначения: 🔗 привязан, ⭕ не привязан.\n\n"
+                "Обозначения: 🔗 привязан, ⚪ не привязан.\n\n"
                 "Введите:\n"
                 "• <code>*</code> или <code>-1</code> для всех привязанных пользователей\n"
                 "• <code>*+</code> для всех незаблокированных пользователей\n"
@@ -150,7 +179,7 @@ class SendMessageCommand(BaseCommand):
         lines = [
             (
                 f"{index}. {recipient.label} "
-                f"{'🔗' if recipient.telegram_id in linked_recipient_ids else '⭕'}"
+                f"{'🔗' if recipient.telegram_id in linked_recipient_ids else '⚪'}"
             )
             for index, recipient in enumerate(recipients, start=1)
         ]
@@ -434,7 +463,7 @@ class SendMessageCommand(BaseCommand):
             return self.BroadcastPayload(kind="text", text=update.message.text)
 
         raise ValueError(
-            "Поддерживаются только текст, изображение и файл. Отправьте сообщение заново."
+            "Поддерживаются только текст, изображение, видео, аудио и файл. Отправьте сообщение заново."
         )
 
     async def __download_temp_file(
@@ -457,11 +486,7 @@ class SendMessageCommand(BaseCommand):
         failed_ids: list[TelegramId] = []
 
         for telegram_id in target_ids:
-            keyboard = (
-                keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard()
-                if telegram_id in self.telegram_admin_ids
-                else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard()
-            )
+            keyboard = self.__get_reply_keyboard_for_recipient(telegram_id)
             try:
                 if payload.kind == "text":
                     await context.bot.send_message(
@@ -568,6 +593,95 @@ class SendMessageCommand(BaseCommand):
                 "Не удалось удалить временный файл рассылки [%s].",
                 file_path,
             )
+
+    async def __copy_message_with_notification(
+        self,
+        update: Update,
+        context: CallbackContext,
+        target_ids: list[TelegramId],
+        notification_text: Optional[str] = None,
+        notification_parse_mode: Optional[str] = None,
+    ) -> list[TelegramId]:
+        if update.message is None:
+            return target_ids
+
+        failed_ids: list[TelegramId] = []
+        for telegram_id in target_ids:
+            keyboard = self.__get_reply_keyboard_for_recipient(telegram_id)
+            try:
+                if notification_text is not None:
+                    await context.bot.send_message(
+                        chat_id=telegram_id,
+                        text=notification_text,
+                        parse_mode=notification_parse_mode,
+                        reply_markup=keyboard.reply_keyboard,
+                    )
+
+                await update.message.copy(
+                    chat_id=telegram_id,
+                    reply_markup=keyboard.reply_keyboard,
+                )
+            except TelegramError as error:
+                logger.error(
+                    "Не удалось переслать сообщение пользователя администратору %s: %s",
+                    telegram_id,
+                    error,
+                )
+                failed_ids.append(telegram_id)
+
+        return failed_ids
+
+    def __get_reply_keyboard_for_recipient(self, telegram_id: TelegramId) -> Keyboard:
+        return (
+            keyboards.KEYBOARD_MANAGER.get_admin_main_keyboard()
+            if telegram_id in self.telegram_admin_ids
+            else keyboards.KEYBOARD_MANAGER.get_user_main_keyboard()
+        )
+
+    def __build_admin_notification(
+        self,
+        update: Update,
+    ) -> str:
+        return (
+            f"Пользователь {self.__format_sender(update)} "
+            f"отправил {self.__describe_update(update)}."
+        )
+
+    def __format_sender(self, update: Update) -> str:
+        user = update.effective_user
+        if user is None:
+            return "неизвестный пользователь"
+
+        full_name = " ".join(
+            part for part in [user.first_name, user.last_name] if part
+        ).strip()
+        if user.username:
+            display_name = f"@{html.escape(user.username)}"
+            if full_name:
+                display_name = f"{display_name} ({html.escape(full_name)})"
+        elif full_name:
+            display_name = html.escape(full_name)
+        else:
+            display_name = "без имени"
+
+        return f"{display_name} (<code>{user.id}</code>)"
+
+    def __describe_update(self, update: Update) -> str:
+        if update.message is None:
+            return "сообщение"
+
+        if update.message.text is not None and update.message.text.strip():
+            return "текстовое сообщение"
+        if update.message.photo:
+            return "фото"
+        if update.message.video is not None:
+            return "видео"
+        if update.message.audio is not None:
+            return "аудио"
+        if update.message.document is not None:
+            return "документ"
+
+        return "сообщение"
 
     def __reset_state(self, context: CallbackContext) -> None:
         if context.user_data is None:
