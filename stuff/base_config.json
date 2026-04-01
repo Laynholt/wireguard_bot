@@ -19,7 +19,7 @@
     "telegram_system_monitor_interval_seconds": 60,
     "telegram_system_monitor_cpu_threshold_percent": 90.0,
     "telegram_system_monitor_cpu_duration_minutes": 3,
-    "telegram_system_monitor_ram_threshold_percent": 100.0,
+    "telegram_system_monitor_ram_threshold_percent": 90.0,
     "telegram_system_monitor_ram_duration_minutes": 3,
 
     "wireguard_folder": "/home/user/wireguard",
